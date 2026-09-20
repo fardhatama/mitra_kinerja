@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a3a5c"/>
+      <stop offset="40%" stop-color="#c77b3f"/>
+      <stop offset="60%" stop-color="#e8a94e"/>
+      <stop offset="100%" stop-color="#f5c76b"/>
+    </linearGradient>
+    <linearGradient id="sun" cx="50%" cy="50%" r="50%">
+      <radialGradient id="sunG" cx="70%" cy="65%">
+        <stop offset="0%" stop-color="#ffe066"/>
+        <stop offset="100%" stop-color="#e8a94e" stop-opacity="0"/>
+      </radialGradient>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="200" fill="url(#sky)"/>
+  <circle cx="560" cy="110" r="50" fill="url(#sunG)"/>
+  <circle cx="560" cy="110" r="28" fill="#ffe066" opacity=".9"/>
+  <!-- Bridge towers -->
+  <rect x="260" y="40" width="6" height="100" fill="#0e1e30" opacity=".7"/>
+  <rect x="370" y="30" width="7" height="110" fill="#0e1e30" opacity=".7"/>
+  <rect x="480" y="40" width="6" height="100" fill="#0e1e30" opacity=".7"/>
+  <!-- Bridge cables left -->
+  <line x1="263" y1="42" x2="170" y2="115" stroke="#0e1e30" stroke-width="1.5" opacity=".5"/>
+  <line x1="263" y1="42" x2="370" y2="115" stroke="#0e1e30" stroke-width="1.5" opacity=".5"/>
+  <!-- Bridge cables center -->
+  <line x1="373" y1="32" x2="263" y2="115" stroke="#0e1e30" stroke-width="1.5" opacity=".5"/>
+  <line x1="373" y1="32" x2="483" y2="115" stroke="#0e1e30" stroke-width="1.5" opacity=".5"/>
+  <!-- Bridge cables right -->
+  <line x1="483" y1="42" x2="373" y2="115" stroke="#0e1e30" stroke-width="1.5" opacity=".5"/>
+  <line x1="483" y1="42" x2="570" y2="115" stroke="#0e1e30" stroke-width="1.5" opacity=".5"/>
+  <!-- Bridge deck -->
+  <rect x="140" y="115" width="460" height="4" fill="#0e1e30" opacity=".6" rx="1"/>
+  <!-- Water -->
+  <rect x="0" y="130" width="800" height="70" fill="#0c2340" opacity=".6"/>
+  <path d="M0 140 Q100 135 200 140 Q300 145 400 140 Q500 135 600 140 Q700 145 800 140 V200 H0Z" fill="#0a1e38" opacity=".4"/>
+  <!-- Islands silhouette -->
+  <ellipse cx="100" cy="135" rx="60" ry="12" fill="#0e1e30" opacity=".5"/>
+  <ellipse cx="680" cy="132" rx="80" ry="15" fill="#0e1e30" opacity=".4"/>
+</svg>

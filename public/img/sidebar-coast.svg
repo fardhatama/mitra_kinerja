@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 800" preserveAspectRatio="xMidYMax slice">
+  <defs>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0a1f33" stop-opacity="0"/>
+      <stop offset="35%" stop-color="#12395e" stop-opacity=".55"/>
+      <stop offset="70%" stop-color="#1c6ba0" stop-opacity=".75"/>
+      <stop offset="100%" stop-color="#2e86ab"/>
+    </linearGradient>
+  </defs>
+  <rect width="300" height="800" fill="url(#sea)"/>
+  <!-- Islands silhouettes -->
+  <ellipse cx="60" cy="640" rx="55" ry="16" fill="#0a1e33" opacity=".55"/>
+  <ellipse cx="240" cy="655" rx="70" ry="18" fill="#0a1e33" opacity=".45"/>
+  <ellipse cx="130" cy="620" rx="30" ry="10" fill="#0a1e33" opacity=".6"/>
+  <!-- Foreground island with palm -->
+  <path d="M-20 740 Q60 700 140 735 Q220 760 320 730 L320 800 L-20 800 Z" fill="#081826" opacity=".8"/>
+  <path d="M-20 760 Q80 730 180 758 Q260 775 320 755 L320 800 L-20 800 Z" fill="#061220" opacity=".85"/>
+  <!-- Palm tree -->
+  <path d="M70 745 Q72 715 68 690" stroke="#061220" stroke-width="4" fill="none"/>
+  <path d="M68 690 Q45 682 30 690 M68 690 Q55 670 40 668 M68 690 Q72 668 85 662 M68 690 Q90 675 100 680 M68 690 Q88 688 98 700" stroke="#061220" stroke-width="3.5" fill="none"/>
+  <!-- Water highlights -->
+  <path d="M20 700 Q40 696 60 700 M120 690 Q140 686 160 690 M220 700 Q240 696 260 700" stroke="#5eb2d9" stroke-width="1.5" opacity=".35" fill="none"/>
+</svg>
