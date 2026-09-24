@@ -43,8 +43,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <input type="password" id="password" name="password" required>
             <button type="submit">Masuk</button>
         </form>
-        <div class="login-hint">Hubungi admin jika lupa kata sandi.</div>
+        
+        <div style="margin-top:16px;padding:10px 12px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:6px;font-size:12px;color:#475569;">
+            <div style="font-weight:600;margin-bottom:6px;color:#1e293b;">Akun Demo (Klik untuk isi):</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                <button type="button" onclick="fillLogin('admin','admin123')" style="cursor:pointer;padding:5px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;font-size:11px;">Admin</button>
+                <button type="button" onclick="fillLogin('pemeriksa','pemeriksa123')" style="cursor:pointer;padding:5px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;font-size:11px;">Pemeriksa</button>
+                <button type="button" onclick="fillLogin('validator','validator123')" style="cursor:pointer;padding:5px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;font-size:11px;">Validator</button>
+                <button type="button" onclick="fillLogin('pimpinan','pimpinan123')" style="cursor:pointer;padding:5px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;font-size:11px;">Pimpinan</button>
+            </div>
+        </div>
+
+        <div class="login-hint" style="margin-top:10px;">Hubungi admin jika lupa kata sandi.</div>
     </div>
 </div>
+<script>
+function fillLogin(u, p) {
+    document.getElementById('username').value = u;
+    document.getElementById('password').value = p;
+}
+</script>
 </body>
 </html>

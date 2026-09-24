@@ -24,9 +24,9 @@ if (file_exists(__DIR__ . '/database.local.php')) {
 
 // 2. Environment variable, lalu default dev lokal (hanya dipakai jika belum di-define di atas).
 if (!defined('DB_HOST')) define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
-if (!defined('DB_NAME')) define('DB_NAME', getenv('DB_NAME') ?: 'sergapbintankab_hukum');
-if (!defined('DB_USER')) define('DB_USER', getenv('DB_USER') ?: 'sergapbintankab_hukum_user');
-if (!defined('DB_PASS')) define('DB_PASS', getenv('DB_PASS') ?: 'XEl6vFg%G65t');
+if (!defined('DB_NAME')) define('DB_NAME', getenv('DB_NAME') ?: 'mitra_kinerja');
+if (!defined('DB_USER')) define('DB_USER', getenv('DB_USER') ?: 'root');
+if (!defined('DB_PASS')) define('DB_PASS', getenv('DB_PASS') ?: '');
 define('DB_CHARSET', 'utf8mb4');
 
 function getDB(): PDO {

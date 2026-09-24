@@ -2,30 +2,25 @@
 /**
  * Konfigurasi AI Analysis — Triple Fallback: Gemini → OpenRouter → Groq
  * 
- * URUTAN PRIORITAS:
- * 1. Gemini       (gratis, 15 RPM)
- * 2. OpenRouter   (gratis $0, model free)
- * 3. Groq         (bayar, free credit $5)
- * 
- * DAFTAR:
- * - Gemini:     https://aistudio.google.com/apikey
- * - OpenRouter: https://openrouter.ai/keys
- * - Groq:       https://console.groq.com/keys
+ * Status: Dinonaktifkan sementara (AI_ENABLED = false).
+ * Kunci API hardcoded telah disanitasi.
  */
 
+define('AI_ENABLED', false);
+
 /* ── 1. Google Gemini (PRIMARY) ─────────────────────────── */
-define('GEMINI_API_KEY', 'AQ.Ab8RN6LAW3zCBUWnsln_OHyNyl_-lrFJVTsG7x1Deocrr6jnzw');
-define('GEMINI_MODEL', 'gemini-3.5-flash');
+define('GEMINI_API_KEY', getenv('GEMINI_API_KEY') ?: '');
+define('GEMINI_MODEL', getenv('GEMINI_MODEL') ?: 'gemini-1.5-flash');
 define('GEMINI_API_URL', 'https://generativelanguage.googleapis.com/v1/models/');
 
-/* ── 2. OpenRouter (FALLBACK #1 — GRATIS) ───────────────── */
-define('OPENROUTER_API_KEY', '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'); // Daftar: https://openrouter.ai/keys
-define('OPENROUTER_MODEL', 'nex-agi/nex-n2.5-mini:free'); // $0/M token
+/* ── 2. OpenRouter (FALLBACK #1) ───────────────────────── */
+define('OPENROUTER_API_KEY', getenv('OPENROUTER_API_KEY') ?: '');
+define('OPENROUTER_MODEL', getenv('OPENROUTER_MODEL') ?: 'google/gemini-2.0-flash-exp:free');
 define('OPENROUTER_API_URL', 'https://openrouter.ai/api/v1/chat/completions');
 
-/* ── 3. Groq (FALLBACK #2 — bayar, free credit $5) ─────── */
-define('GROQ_API_KEY', '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');
-define('GROQ_MODEL', 'openai/gpt-oss-120b'); 
+/* ── 3. Groq (FALLBACK #2) ─────────────────────────────── */
+define('GROQ_API_KEY', getenv('GROQ_API_KEY') ?: '');
+define('GROQ_MODEL', getenv('GROQ_MODEL') ?: 'llama-3.3-70b-versatile');
 define('GROQ_API_URL', 'https://api.groq.com/openai/v1/chat/completions');
 
 // Cache settings

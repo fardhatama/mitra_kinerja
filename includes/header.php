@@ -6,6 +6,7 @@ $currentPage = basename($_SERVER['PHP_SELF'], '.php');
 /* ── Ikon SVG line-art (putih, 20×20 viewBox) ─────────────── */
 $icons = [
     'dashboard' => '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v7H3zM12 3h5v4H12zM3 13h5v4H3zM12 10h5v7H12z"/></svg>',
+    'gate0' => '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 10h6M10 7v6"/></svg>',
     'portofolio' => '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="14" height="16" rx="2"/><path d="M7 2V0M7 6h6M7 9h4"/></svg>',
     'baseline' => '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="14" height="16" rx="2"/><path d="M6 6h8M6 9h8M6 12h5"/></svg>',
     'mitra_manage' => '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="14" height="16" rx="2"/><path d="M7 6h6M7 10h4"/><circle cx="10" cy="14" r="1.5" fill="currentColor"/><path d="M10 4v-1"/></svg>',
@@ -13,19 +14,26 @@ $icons = [
     'early_warning' => '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2a5 5 0 0 1 5 5c0 3.5 1.5 4.5 2 5H3c.5-.5 2-1.5 2-5a5 5 0 0 1 5-5z"/><path d="M8 16h4"/></svg>',
     'tindak_lanjut' => '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="14" height="16" rx="2"/><path d="M7 10l2 2 4-4"/></svg>',
     'laporan' => '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="12" width="3.5" height="5" rx=".5"/><rect x="8.25" y="8" width="3.5" height="9" rx=".5"/><rect x="14.5" y="4" width="3.5" height="13" rx=".5"/></svg>',
+    'mitra_validasi' => '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10l2 2 4-4"/><circle cx="10" cy="10" r="8"/></svg>',
     'users_list' => '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="6" r="3"/><path d="M1 16c0-3 2.5-5 6-5s6 2 6 5"/><circle cx="14" cy="6" r="2.5"/><path d="M15 11c2 0 4 1.5 4 4"/></svg>',
 ];
 
-$navItems = [
-    ['page' => 'dashboard',      'label' => 'Dashboard'],
-    ['page' => 'portofolio',     'label' => 'Portofolio'],
-    ['page' => 'mitra_manage',   'label' => 'Manajemen Naskah'],
-    ['page' => 'baseline',       'label' => 'Baseline'],
-    ['page' => 'scorecard',      'label' => 'Scorecard'],
-    ['page' => 'early_warning',  'label' => 'Early Warning'],
-    ['page' => 'tindak_lanjut',  'label' => 'Tindak Lanjut'],
-    ['page' => 'laporan',        'label' => 'Laporan'],
+$role = $user['role'] ?? 'pemeriksa';
+
+$allNavItems = [
+    ['page' => 'dashboard',      'label' => 'Dashboard',         'roles' => ['admin','pemeriksa','validator','pimpinan']],
+    ['page' => 'gate0',          'label' => 'Gate 0 (Pra-PKS)',  'roles' => ['admin','pemeriksa','pimpinan']],
+    ['page' => 'portofolio',     'label' => 'Portofolio',        'roles' => ['admin','pemeriksa','validator','pimpinan']],
+    ['page' => 'mitra_manage',   'label' => 'Manajemen Naskah',  'roles' => ['admin','pemeriksa']],
+    ['page' => 'baseline',       'label' => 'Baseline',          'roles' => ['admin','pemeriksa','validator','pimpinan']],
+    ['page' => 'scorecard',      'label' => 'Scorecard',         'roles' => ['admin','pemeriksa','validator','pimpinan']],
+    ['page' => 'mitra_validasi', 'label' => 'Validasi Naskah',   'roles' => ['admin','validator']],
+    ['page' => 'early_warning',  'label' => 'Early Warning',     'roles' => ['admin','pemeriksa','validator','pimpinan']],
+    ['page' => 'tindak_lanjut',  'label' => 'Tindak Lanjut',     'roles' => ['admin','pemeriksa','validator','pimpinan']],
+    ['page' => 'laporan',        'label' => 'Laporan',           'roles' => ['admin','pemeriksa','validator','pimpinan']],
 ];
+
+$navItems = array_filter($allNavItems, fn($n) => in_array($role, $n['roles'], true));
 
 $initials = '';
 if ($user) {
@@ -61,7 +69,7 @@ if ($user) {
             </a>
             <?php endif; ?>
         </nav>
-        <div class="sidebar-motto">Kepri<br>Bersinergi<br>untuk Negeri</div>
+        <div class="sidebar-motto">Kanwil Kemenkumham<br>Kepulauan Riau</div>
     </aside>
     <div class="app-content">
         <header class="app-hero">
@@ -72,18 +80,15 @@ if ($user) {
                     </div>
                     <div class="hero-instansi">
                         <strong>KEMENTERIAN HUKUM</strong>
-                        <span>KANTOR WILAYAH</span>
-                        <span>KEPULAUAN RIAU</span>
+                        <span>KANTOR WILAYAH KEPULAUAN RIAU</span>
                     </div>
                 </div>
                 <div class="hero-titles">
                     <div class="hero-title">MITRA KINERJA</div>
-                    <div class="hero-subtitle">Monitoring dan Evaluasi Kerja Sama</div>
-                    <div class="hero-tagline">Dari Naskah Menuju Dampak Nyata</div>
+                    <div class="hero-subtitle">Monitoring &amp; Evaluasi Kerja Sama</div>
                 </div>
             </div>
             <div class="hero-right">
-                <div class="hero-motto">Kolaborasi<br>Menguatkan<br>Pelayanan Hukum</div>
                 <div class="header-user">
                     <div class="user-avatar"><?= h($initials) ?></div>
                     <div class="user-info">

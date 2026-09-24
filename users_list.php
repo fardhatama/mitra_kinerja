@@ -26,9 +26,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'toggle') {
-    $uid = (int)$_POST['user_id'];
-    $stmt = $pdo->prepare('UPDATE users SET aktif = 1 - aktif WHERE id = ?');
-    $stmt->execute([$uid]);
+    $uid = (int)($_POST['user_id'] ?? 0);
+    $currUser = currentUser();
+    if ($uid === (int)($currUser['id'] ?? 0)) {
+        $errors[] = 'Anda tidak dapat menonaktifkan akun Anda sendiri saat sedang login.';
+    } else {
+        $stmt = $pdo->prepare('UPDATE users SET aktif = 1 - aktif WHERE id = ?');
+        $stmt->execute([$uid]);
+        $success = 'Status pengguna berhasil diperbarui.';
+    }
 }
 
 $users = $pdo->query('SELECT * FROM users ORDER BY role, nama')->fetchAll();

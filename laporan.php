@@ -12,12 +12,28 @@ $pageTitle = 'Laporan';
 require __DIR__ . '/includes/header.php';
 ?>
 
-<div class="flex-between" style="margin-bottom:18px;">
+<div class="flex-between no-print" style="margin-bottom:18px;">
     <div>
-        <h1 style="margin:0;font-size:20px;">Laporan — Ringkasan Eksekutif</h1>
-        <div class="muted" style="font-size:13px;">Rekap seluruh data mitra kerja sama</div>
+        <h1 style="margin:0;font-size:20px;">Laporan Eksekutif</h1>
+        <div class="muted" style="font-size:13px;">Rekapitulasi evaluasi kinerja dan tindak lanjut kerja sama</div>
     </div>
-    <a href="dashboard.php" class="btn btn-outline btn-sm">&larr; Dashboard</a>
+    <div style="display:flex;gap:8px;">
+        <button onclick="window.print()" class="btn btn-primary btn-sm">🖨️ Cetak / Simpan PDF</button>
+        <a href="dashboard.php" class="btn btn-outline btn-sm">&larr; Dashboard</a>
+    </div>
+</div>
+
+<!-- Kop Surat Resmi (Tampil saat Cetak) -->
+<div class="print-header" style="display:none;margin-bottom:20px;border-bottom:3px double #000;padding-bottom:12px;">
+    <div style="display:flex;align-items:center;gap:16px;">
+        <img src="public/img/logo-hukum.png" alt="Logo" style="height:65px;">
+        <div style="text-align:center;flex:1;">
+            <div style="font-size:15px;font-weight:700;letter-spacing:0.5px;">KEMENTERIAN HUKUM REPUBLIK INDONESIA</div>
+            <div style="font-size:17px;font-weight:800;letter-spacing:1px;">KANTOR WILAYAH KEPULAUAN RIAU</div>
+            <div style="font-size:12px;color:#333;">Jalan Daeng Celak, Senggarang, Tanjungpinang, Kepulauan Riau</div>
+            <div style="font-size:13px;font-weight:700;margin-top:4px;">REKAPITULASI EFEKTIVITAS MITRA KINERJA</div>
+        </div>
+    </div>
 </div>
 
 <!-- Ringkasan Statistik -->
@@ -34,7 +50,7 @@ require __DIR__ . '/includes/header.php';
     <div class="table-wrap">
     <table>
         <thead>
-            <tr><th>Kode</th><th>Portofolio</th><th>Mitra</th><th>Jenis</th><th>Berakhir</th><th>Nilai</th><th>Kategori</th><th>Warning</th><th>Status</th></tr>
+            <tr><th>Kode</th><th>Portofolio</th><th>Mitra</th><th>Jenis</th><th>Berakhir</th><th>Nilai</th><th>Kategori</th><th>Posisi</th><th>Rekomendasi</th><th>Warning</th><th>Status</th></tr>
         </thead>
         <tbody>
         <?php foreach ($all as $s): $m = $s['mitra']; ?>
@@ -46,6 +62,8 @@ require __DIR__ . '/includes/header.php';
                 <td><?= formatTanggal($m['tanggal_berakhir']) ?></td>
                 <td><?= $s['nilai_berjalan'] > 0 ? number_format($s['nilai_berjalan'], 2) : '-' ?></td>
                 <td><span class="badge badge-<?= warnaKategori($s['kategori']) ?>"><?= h($s['kategori']) ?></span></td>
+                <td><span class="badge badge-secondary" style="font-size:11px;"><?= h($s['posisi_portofolio']) ?></span></td>
+                <td><span class="badge badge-warning" style="font-size:11px;"><?= h($s['rekomendasi']) ?></span></td>
                 <td><span class="badge badge-<?= warnaWarning($s['warning']['status']) ?>"><?= h($s['warning']['label']) ?></span></td>
                 <td><?= h($s['status_scorecard']) ?></td>
             </tr>
@@ -105,6 +123,28 @@ require __DIR__ . '/includes/header.php';
         </tbody>
     </table>
     </div>
+</div>
+
+<!-- Lembar Tanda Tangan Resmi (Cetak) -->
+<div class="signature-block" style="display:none;margin-top:40px;page-break-inside:avoid;">
+    <table style="width:100%;border:none;background:none;">
+        <tr style="border:none;">
+            <td style="border:none;width:50%;text-align:center;font-size:12pt;vertical-align:top;">
+                <div>Mengetahui,</div>
+                <div style="font-weight:700;">Koordinator Tim Efektif</div>
+                <div style="height:70px;"></div>
+                <div style="font-weight:700;text-decoration:underline;">Kepala Bagian Tata Usaha &amp; Umum</div>
+                <div style="font-size:10pt;">Kanwil Kementerian Hukum Kepulauan Riau</div>
+            </td>
+            <td style="border:none;width:50%;text-align:center;font-size:12pt;vertical-align:top;">
+                <div>Tanjungpinang, <?= date('d F Y') ?></div>
+                <div style="font-weight:700;">Kepala Kantor Wilayah</div>
+                <div style="height:70px;"></div>
+                <div style="font-weight:700;text-decoration:underline;">EDISON MANIK, S.H., M.Si.</div>
+                <div style="font-size:10pt;">NIP. 19780217 200112 1 002</div>
+            </td>
+        </tr>
+    </table>
 </div>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

@@ -1,0 +1,58 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [2.1.0] - 2026-09-23
+
+### Added
+- Gate 0 (Pra-Kerja Sama / Pre-PKS) module (`gate0.php`) for pre-signing feasibility screening across 5 criteria.
+- Complete 12-Element Baseline FIX verification and locking module (`baseline.php`) based on Bab IV of the Technical Guidelines and Excel `SUMBER_BASELINE` sheet, capturing factual starting conditions across 10 groups (`IDENTITAS`, `MASA BERLAKU`, `SUBSTANSI`, `TATA KELOLA`, `PENGAMPU`, `PIC`, `TINDAK LANJUT`, `PELAKSANAAN`, `EVIDEN`, `HAMBATAN`) with freeze/lock protections.
+- Official printable Baseline FIX certificate (`baseline.php?view=print&id=X`) with ministry letterhead, 12-element audit grid, and trilateral endorsement block (Unit Pengampu, Arsiparis/Verifikator, Kakanwil).
+- Implemented full 18-question evaluation battery ($Q_1$ to $Q_{18}$) with supporting evidence recording under criteria $K_1$ through $K_5$ per LAN PKN I standard form.
+- Implemented Section E "Trigger Karakteristik Khusus" covering all 7 special triggers (Foreign partners, Financial commitments, Personal data & databases, Intellectual Property/KI, Technology/APIs, High legal/reputational risk, Joint branding/communication) with automated routing to specialized reviews.
+- Official printable Form Gate 0 layout (`?view=detail` and `?view=print`) complete with official ministry letterhead, Section A–K breakdown, and trilateral signing block.
+- Native Microsoft Excel (`.xlsx`) binary templates generator (`scripts/build_xlsx_templates.py`) and PHP OpenXML zip parser to resolve Indonesian Windows regional delimiter issues.
+- One-click auto-promotion workflow converting approved Gate 0 proposals into active PKS records with linked operational work plans (`rencana_kerja`).
+- Multi-cycle quarterly monitoring & evaluation schedule engine (`siklus_monev`) calculating periodic review milestones based on contract duration ($N = \text{duration in months} / 3$).
+- Automated 1-Month Monev Deadline Radar in Dashboard and Early Warning modules alerting when a milestone is within 30 days.
+- Operational & Pipeline Status cards on the Dashboard summarizing Gate 0 proposals, validation ledger readiness, document distribution, and validity horizons.
+- Windows WLAN launcher (`start_server_wlan.bat`) featuring automatic Wi-Fi IP discovery, XAMPP MySQL daemon checking, and LAN server hosting on port 8080.
+- Pre-seeded role demo accounts (`admin`, `pemeriksa`, `validator`, `pimpinan`) with quick-fill login buttons on the authentication screen.
+- Multi-dimensional filters on `portofolio.php` (Portfolio category, Result ladder, Action recommendation, and Validation status).
+- Ministerial printable executive summary in `laporan.php` with official letterhead (Kop Surat) and signing block.
+- Integrated authentic field stakeholder intelligence from 19 partner folders into the live database, establishing 16 operational work plans (`rencana_kerja`), 40 quarterly monitoring milestones (`siklus_monev`), and locked verified baselines for key institutions (Polibatam, BNN Kepri, STAI Natuna, STAIN SAR, Poltek Bintan Cakrawala, UIS, Dekranasda, Pemko Tanjungpinang).
+
+### Changed
+- Upgraded scorecard architecture from V1.1 (6 indicators) to V2.1 (7 indicators: $I_1$ to $I_7$ with weights 10%, 15%, 15%, 20%, 20%, 10%, 10%).
+- Standardized entity branding strictly under Kantor Wilayah Kementerian Hukum Kepulauan Riau across all headers, footers, and reports.
+- Streamlined interface copy across all application views (Dashboard, Gate 0, Portfolio, Mitra Edit, Laporan) by removing parenthetical disclaimers, academic buzzwords, and redundant labels.
+- Refactored `mitra_validasi.php` to provide dual view: portfolio-wide validation ledger and individual scorecard review gated by 100% completion requirement.
+- Linked technical PKS agreements to parent umbrella MoUs via `pks_induk_id` in `mitra_manage.php`.
+
+### Removed
+- Redundant quick action buttons (`.actions-row`) from the Dashboard that duplicated left sidebar navigation items.
+- Outdated hardcoded external server and agency branding references.
+
+### Fixed
+- Fixed null-safety warning in `hitungMasaBerlaku()` when dates or verification statuses are unverified or missing.
+- Fixed self-disable edge case in `users_list.php` preventing active admin users from accidentally disabling their current account.
+- Fixed back-link navigation targets in `mitra_edit.php` and `mitra_validasi.php`.
+- Fixed CSV regional delimiter distortion in Microsoft Excel (Indonesian semicolon vs. comma) by introducing native OpenXML `.xlsx` templates.
+
+### Security
+- Sanitized exposed cloud AI API keys (Google Gemini, OpenRouter, Groq) and switched external AI integration to disabled mode (`AI_ENABLED = false`).
+- Purged live third-party hosting database credentials (`sergapbintankab`), defaulting to local database configuration.
+- Configured `.gitignore` rules preventing local credentials, development databases, and uploaded media from leaking into version control.
+
+## [1.0.0] - 2026-09-22
+
+### Added
+- Initial baseline repository import with database schema and seed data for 15 partnership agreements.
+- Core 6-indicator scorecard assessment engine based on PKN I 2026 guidelines.
+- Authentication system with role-based access control (Admin, Pemeriksa, Validator, Pimpinan).
+- Audit trail logging and initial early warning calculation model.

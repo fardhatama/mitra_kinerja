@@ -11,6 +11,6 @@
  * TAPI JANGAN dipakai apa adanya di production.
  */
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'mitra_kinerja');   // contoh: cPanel biasa prefix nama DB dengan cpanel-username_
+define('DB_NAME', 'mitra_kinerja');
 define('DB_USER', 'root');
 define('DB_PASS', '');
