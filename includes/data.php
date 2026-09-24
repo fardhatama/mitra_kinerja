@@ -39,15 +39,18 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
     $usulan = $stmt->fetch() ?: ['upaya_dilakukan' => null, 'keputusan_diminta' => null];
 
     // --- Baseline FIX 12 Elemen ---
-    $stmtB = $pdo->prepare('SELECT * FROM baseline_elemen WHERE mitra_id = ? ORDER BY nomor_elemen ASC');
-    $stmtB->execute([$mitra['id']]);
-    $baselineRows = $stmtB->fetchAll();
+    $baselineRows = [];
+    try {
+        $stmtB = $pdo->prepare('SELECT * FROM baseline_elemen WHERE mitra_id = ? ORDER BY nomor_elemen ASC');
+        $stmtB->execute([$mitra['id']]);
+        $baselineRows = $stmtB->fetchAll();
+    } catch (Throwable $e) {}
 
     $bVerified = 0;
     $bFilled = 0;
     foreach ($baselineRows as $b) {
-        if ($b['status'] === 'TERVERIFIKASI') $bVerified++;
-        if ($b['status'] !== 'BELUM DIISI') $bFilled++;
+        if (($b['status'] ?? '') === 'TERVERIFIKASI') $bVerified++;
+        if (($b['status'] ?? '') !== 'BELUM DIISI') $bFilled++;
     }
     $bTotal = count($baselineRows) ?: 12;
     $baselineSummary = [
@@ -97,7 +100,7 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
         ? $mitra['rekomendasi']
         : hitungRekomendasi($ringkasan['nilai_berjalan'], $warning['status'], $posisiPortofolio, $sisaHari);
 
-    $monev = hitungKebutuhanScorecard($mitra['tanggal_mulai'], $mitra['tanggal_berakhir']);
+    $monev = hitungKebutuhanScorecard($mitra['tanggal_mulai'] ?? null, $mitra['tanggal_berakhir'] ?? null);
 
     return [
         'mitra'             => $mitra,
@@ -233,9 +236,14 @@ function getDashboardStats(array $all): array {
 
 /** Ringkasan operasional tambahan untuk dashboard (Gate 0, Validasi, Rencana Kerja, Masa Berlaku). */
 function getOperationalStats(PDO $pdo, array $all): array {
-    $g0Total = (int)$pdo->query('SELECT COUNT(*) FROM pra_pks')->fetchColumn();
-    $g0Pending = (int)$pdo->query("SELECT COUNT(*) FROM pra_pks WHERE status_persetujuan = 'Menunggu Persetujuan Pimpinan'")->fetchColumn();
-    $g0Approved = (int)$pdo->query("SELECT COUNT(*) FROM pra_pks WHERE status_persetujuan = 'Disetujui Pimpinan'")->fetchColumn();
+    $g0Total = 0;
+    $g0Pending = 0;
+    $g0Approved = 0;
+    try {
+        $g0Total = (int)$pdo->query('SELECT COUNT(*) FROM pra_pks')->fetchColumn();
+        $g0Pending = (int)$pdo->query("SELECT COUNT(*) FROM pra_pks WHERE status_persetujuan = 'Menunggu Persetujuan Pimpinan'")->fetchColumn();
+        $g0Approved = (int)$pdo->query("SELECT COUNT(*) FROM pra_pks WHERE status_persetujuan = 'Disetujui Pimpinan'")->fetchColumn();
+    } catch (Throwable $e) {}
 
     $siapValidasi = 0;
     $disetujuiValidasi = 0;
@@ -244,15 +252,19 @@ function getOperationalStats(PDO $pdo, array $all): array {
         $vStatus = $s['validasi']['status'] ?? '';
         if ($vStatus === 'DISETUJUI') {
             $disetujuiValidasi++;
-        } elseif ($s['kelengkapan'] >= 100) {
+        } elseif (($s['kelengkapan'] ?? 0) >= 100) {
             $siapValidasi++;
         } else {
             $belumLengkapValidasi++;
         }
     }
 
-    $rkCount = (int)$pdo->query('SELECT COUNT(*) FROM rencana_kerja')->fetchColumn();
-    $smCount = (int)$pdo->query('SELECT COUNT(*) FROM siklus_monev')->fetchColumn();
+    $rkCount = 0;
+    $smCount = 0;
+    try {
+        $rkCount = (int)$pdo->query('SELECT COUNT(*) FROM rencana_kerja')->fetchColumn();
+        $smCount = (int)$pdo->query('SELECT COUNT(*) FROM siklus_monev')->fetchColumn();
+    } catch (Throwable $e) {}
 
     $mouCount = 0;
     $pksCount = 0;
@@ -261,7 +273,7 @@ function getOperationalStats(PDO $pdo, array $all): array {
     $validKritis = 0;
 
     foreach ($all as $s) {
-        $m = $s['mitra'];
+        $m = $s['mitra'] ?? [];
         if (($m['jenis'] ?? '') === 'MoU') {
             $mouCount++;
         } else {
@@ -269,7 +281,7 @@ function getOperationalStats(PDO $pdo, array $all): array {
         }
 
         $mb = hitungMasaBerlaku($m['tanggal_berakhir'] ?? null, $m['cutoff_date'] ?? null, $m['status_tanggal'] ?? null);
-        $sisa = $mb['sisa_hari'];
+        $sisa = $mb['sisa_hari'] ?? null;
         if ($sisa === null || $sisa < 30) {
             $validKritis++;
         } elseif ($sisa <= 180) {

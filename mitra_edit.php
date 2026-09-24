@@ -225,13 +225,17 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <?php
-$stmtRK = $pdo->prepare('SELECT * FROM rencana_kerja WHERE mitra_id = ? ORDER BY tanggal_mulai DESC');
-$stmtRK->execute([$id]);
-$rencanaKerja = $stmtRK->fetchAll();
+$rencanaKerja = [];
+$siklusMonev = [];
+try {
+    $stmtRK = $pdo->prepare('SELECT * FROM rencana_kerja WHERE mitra_id = ? ORDER BY tanggal_mulai DESC');
+    $stmtRK->execute([$id]);
+    $rencanaKerja = $stmtRK->fetchAll();
 
-$stmtSM = $pdo->prepare('SELECT * FROM siklus_monev WHERE mitra_id = ? ORDER BY siklus_ke ASC');
-$stmtSM->execute([$id]);
-$siklusMonev = $stmtSM->fetchAll();
+    $stmtSM = $pdo->prepare('SELECT * FROM siklus_monev WHERE mitra_id = ? ORDER BY siklus_ke ASC');
+    $stmtSM->execute([$id]);
+    $siklusMonev = $stmtSM->fetchAll();
+} catch (Throwable $e) {}
 $monev = $summary['monev'];
 ?>
 

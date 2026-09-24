@@ -39,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Outdated hardcoded external server and agency branding references.
 
 ### Fixed
+- Fixed HTTP 500 error on fresh git pulls by introducing self-healing auto-migration (`includes/auto_migrate.php`) and query resilience fallbacks that automatically create missing V2.1 tables and columns on the fly.
+- Auto-detect local development environments in `config/env.php` to display clear diagnostic messages rather than silent HTTP 500 blank screens.
 - Fixed null-safety warning in `hitungMasaBerlaku()` when dates or verification statuses are unverified or missing.
 - Fixed self-disable edge case in `users_list.php` preventing active admin users from accidentally disabling their current account.
 - Fixed back-link navigation targets in `mitra_edit.php` and `mitra_validasi.php`.
