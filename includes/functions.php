@@ -11,64 +11,72 @@
  */
 
 const BOBOT_INDIKATOR = [
-    'I1' => 15, 'I2' => 20, 'I3' => 20, 'I4' => 15, 'I5' => 20, 'I6' => 10,
+    'I1' => 10, 'I2' => 15, 'I3' => 15, 'I4' => 20, 'I5' => 20, 'I6' => 10, 'I7' => 10,
 ];
 
 /**
- * Hitung status "Cek" untuk satu baris indikator.
- * Persis rumus J13: =IF(G13="","BELUM DIISI",IF(E13="BELUM DIPERIKSA","PERIKSA BUKTI",
- *   IF(OR(E13="BUKTI BELUM CUKUP",E13="BELUM DAPAT DINILAI"),"HAPUS SKOR",
- *      IF(F13="","TULIS TEMUAN/BUKTI",IF(H13="","TULIS ALASAN","OK")))))
- * Urutan asli: skor kosong dicek PALING DULU, baru status/temuan/alasan.
+ * Hitung status "Cek" untuk satu baris indikator V2.1.
+ * Mendukung: DAPAT DINILAI / BUKTI MEMADAI, BUKTI BELUM MEMADAI, BELUM DAPAT DINILAI, BELUM DITELAAH.
  */
 function hitungCekIndikator(array $row): string {
-    $status  = $row['status_pemeriksaan'] ?? 'BELUM DIPERIKSA';
+    $status  = $row['status_pemeriksaan'] ?? 'BELUM DITELAAH';
     $temuan  = trim((string)($row['temuan_bukti'] ?? ''));
     $skor    = $row['skor'];
     $alasan  = trim((string)($row['alasan_skor'] ?? ''));
 
-    if ($skor === null) {
-        return 'BELUM DIISI';
+    $isDapatDinilai = in_array($status, ['DAPAT DINILAI', 'BUKTI CUKUP', 'BUKTI MEMADAI'], true);
+    $isBdnOrKurang  = in_array($status, ['BUKTI BELUM CUKUP', 'BUKTI BELUM MEMADAI', 'BELUM DAPAT DINILAI'], true);
+    $isBelumTelaah  = in_array($status, ['BELUM DIPERIKSA', 'BELUM DITELAAH'], true);
+
+    if ($isDapatDinilai) {
+        if ($skor === null) return 'BELUM DIISI';
+        if ($temuan === '') return 'TULIS TEMUAN/BUKTI';
+        if ($alasan === '') return 'TULIS ALASAN';
+        return 'OK';
     }
-    if ($status === 'BELUM DIPERIKSA') {
+
+    if ($isBdnOrKurang) {
+        if ($skor !== null) return 'HAPUS SKOR';
+        return 'OK';
+    }
+
+    if ($isBelumTelaah) {
+        if ($skor !== null) return 'HAPUS SKOR';
         return 'PERIKSA BUKTI';
     }
-    if ($status === 'BUKTI BELUM CUKUP' || $status === 'BELUM DAPAT DINILAI') {
-        return 'HAPUS SKOR';
-    }
-    if ($temuan === '') {
-        return 'TULIS TEMUAN/BUKTI';
-    }
-    if ($alasan === '') {
-        return 'TULIS ALASAN';
-    }
+
     return 'OK';
 }
 
-/** Nilai indikator = skor/4 * bobot (null jika skor belum ada). Persis rumus I13. */
+/** Nilai indikator = skor/4 * bobot (null jika skor belum ada). */
 function hitungNilaiIndikator(?int $skor, int $bobot): ?float {
     if ($skor === null) return null;
     return round(($skor / 4) * $bobot, 2);
 }
 
 /**
- * Ringkasan 6 indikator suatu naskah.
- * Persis rumus:
- *   B21 (Nilai berjalan)  = jika tak ada skor sama sekali -> kosong, else SUM(nilai)
- *   D21 (Kelengkapan)     = COUNT(skor terisi) / 6   <-- BUKAN berdasar Cek=OK
- *   F21 (Kategori)        = jika skor<6 terisi -> BELUM LENGKAP
- *                            jika Cek OK <6 -> BELUM FINAL
- *                            else kategori dari nilai
- *   H21 (Status Scorecard)= jika skor<6 terisi -> BELUM LENGKAP
- *                            jika Cek OK <6 -> PERLU DILENGKAPI
- *                            else FINAL/TERVALIDASI | PERLU PERBAIKAN | SIAP DIVALIDASI
+ * Ringkasan 7 indikator suatu naskah V2.1.
  */
 function ringkasanIndikator(array $indikatorRows): array {
     $skorTerisi = 0;
     $cekOkCount = 0;
     $nilaiBerjalan = 0.0;
+    $bobotDinilai = 0;
+    $dapatDinilaiCount = 0;
+    $bdnCount = 0;
+    $buktiKurangCount = 0;
 
     foreach ($indikatorRows as $row) {
+        $st = $row['status_pemeriksaan'] ?? 'BELUM DITELAAH';
+        if (in_array($st, ['DAPAT DINILAI', 'BUKTI CUKUP', 'BUKTI MEMADAI'], true)) {
+            $dapatDinilaiCount++;
+            $bobotDinilai += (int)($row['bobot'] ?? BOBOT_INDIKATOR[$row['kode_indikator']] ?? 0);
+        } elseif ($st === 'BELUM DAPAT DINILAI') {
+            $bdnCount++;
+        } elseif (in_array($st, ['BUKTI BELUM CUKUP', 'BUKTI BELUM MEMADAI'], true)) {
+            $buktiKurangCount++;
+        }
+
         if ($row['skor'] !== null) {
             $skorTerisi++;
             $nilaiBerjalan += (float)($row['nilai'] ?? 0);
@@ -78,26 +86,70 @@ function ringkasanIndikator(array $indikatorRows): array {
         }
     }
 
-    $n = count($indikatorRows) ?: 6;
-    $kelengkapan = round(($skorTerisi / $n) * 100);
-    $skorLengkap = ($skorTerisi === $n);
+    $n = count($indikatorRows) ?: 7;
+    $kelengkapan = round(($cekOkCount / $n) * 100);
+    $skorLengkap = ($cekOkCount === $n);
     $cekLengkapOk = ($cekOkCount === $n);
 
-    if (!$skorLengkap) {
+    if ($kelengkapan < 100) {
         $kategori = 'BELUM LENGKAP';
-    } elseif (!$cekLengkapOk) {
-        $kategori = 'BELUM FINAL';
     } else {
         $kategori = kategoriDariNilai($nilaiBerjalan);
     }
 
     return [
-        'nilai_berjalan' => round($nilaiBerjalan, 2),
-        'kelengkapan'    => $kelengkapan,
-        'skor_lengkap'   => $skorLengkap,
-        'cek_lengkap_ok' => $cekLengkapOk,
-        'kategori'       => $kategori,
+        'nilai_berjalan'    => round($nilaiBerjalan, 2),
+        'bobot_dinilai'     => $bobotDinilai,
+        'kelengkapan'       => $kelengkapan,
+        'skor_lengkap'      => $skorLengkap,
+        'cek_lengkap_ok'    => $cekLengkapOk,
+        'kategori'          => $kategori,
+        'dapat_dinilai_n'   => $dapatDinilaiCount,
+        'bdn_n'             => $bdnCount,
+        'bukti_kurang_n'    => $buktiKurangCount,
     ];
+}
+
+/** Menentukan posisi portofolio kerja sama dalam tangga hasil V2.1. */
+function hitungPosisiPortofolio(array $indikatorRows): string {
+    $scores = [];
+    foreach ($indikatorRows as $r) {
+        $scores[$r['kode_indikator']] = $r['skor'];
+    }
+
+    if (($scores['I5'] ?? null) !== null && $scores['I5'] >= 3) {
+        return 'BERDAMPAK';
+    }
+    if (($scores['I4'] ?? null) !== null && $scores['I4'] >= 3) {
+        return 'OUTCOME TERBENTUK';
+    }
+    if (($scores['I3'] ?? null) !== null && $scores['I3'] >= 3) {
+        return 'OUTPUT TERSEDIA';
+    }
+    if (($scores['I2'] ?? null) !== null && $scores['I2'] >= 2) {
+        return 'AKTIF';
+    }
+    return 'BELUM DAPAT DITENTUKAN';
+}
+
+/** Menentukan rekomendasi tindak lanjut berdasarkan skor, risiko, dan sisa hari. */
+function hitungRekomendasi(float $nilai, string $warningStatus, string $posisiPortofolio, ?int $sisaHari = null): string {
+    if ($warningStatus === 'E3') {
+        return 'HENTIKAN';
+    }
+    if ($warningStatus === 'E2' || $nilai < 50 || $posisiPortofolio === 'BELUM DAPAT DITENTUKAN') {
+        return 'PERBAIKI';
+    }
+    if ($sisaHari !== null && $sisaHari <= 90 && $nilai >= 75) {
+        return 'PERPANJANG';
+    }
+    if ($nilai >= 85 && $posisiPortofolio === 'BERDAMPAK') {
+        return 'REPLIKASI';
+    }
+    if ($nilai >= 50) {
+        return 'LANJUT';
+    }
+    return 'PERBAIKI';
 }
 
 /** Kategori nilai: 75-100 PRODUKTIF, 50-<75 BERJALAN, 25-<50 PERLU AKTIVASI, <25 KRITIS. */
@@ -110,11 +162,11 @@ function kategoriDariNilai(float $nilai): string {
 
 /**
  * Status Scorecard. Persis rumus H21.
- *   - skor belum 6/6 terisi          -> BELUM LENGKAP
- *   - skor 6/6 tapi Cek belum semua OK -> PERLU DILENGKAPI
- *   - Cek 6/6 OK, validasi DISETUJUI  -> FINAL/TERVALIDASI
- *   - Cek 6/6 OK, validasi PERLU PERBAIKAN -> PERLU PERBAIKAN
- *   - Cek 6/6 OK, validasi lainnya    -> SIAP DIVALIDASI
+ *   - skor belum 7/7 terisi            -> BELUM LENGKAP
+ *   - skor 7/7 tapi Cek belum semua OK -> PERLU DILENGKAPI
+ *   - Cek 7/7 OK, validasi DISETUJUI   -> FINAL/TERVALIDASI
+ *   - Cek 7/7 OK, validasi PERLU PERBAIKAN -> PERLU PERBAIKAN
+ *   - Cek 7/7 OK, validasi lainnya     -> SIAP DIVALIDASI
  */
 function hitungStatusScorecard(bool $skorLengkap, bool $cekLengkapOk, string $statusValidasi): string {
     if (!$skorLengkap) return 'BELUM LENGKAP';
@@ -172,11 +224,16 @@ function statusDariKondisi(string $dimensi, ?string $kondisi): string {
  *                     else -> > H-180
  *   D27 (Status)   = BELUM DAPAT DIPASTIKAN->V0 ; SUDAH BERAKHIR/H-30->E3 ; H-90->E2 ; H-180->E1 ; else E0
  */
-function hitungMasaBerlaku(?string $tanggalBerakhir, ?string $cutoffDate, string $statusTanggal): array {
-    if ($statusTanggal !== 'TERVERIFIKASI' || !$tanggalBerakhir || !$cutoffDate) {
+function hitungMasaBerlaku(?string $tanggalBerakhir, ?string $cutoffDate, ?string $statusTanggal = null): array {
+    if (($statusTanggal ?? '') !== 'TERVERIFIKASI' || !$tanggalBerakhir || !$cutoffDate || $tanggalBerakhir === '0000-00-00' || $cutoffDate === '0000-00-00') {
         return ['sisa_hari' => null, 'kondisi' => 'BELUM DAPAT DIPASTIKAN', 'status' => 'V0'];
     }
-    $sisaHari = (int) round((strtotime($tanggalBerakhir) - strtotime($cutoffDate)) / 86400);
+    $timeBerakhir = strtotime($tanggalBerakhir);
+    $timeCutoff = strtotime($cutoffDate);
+    if ($timeBerakhir === false || $timeCutoff === false) {
+        return ['sisa_hari' => null, 'kondisi' => 'BELUM DAPAT DIPASTIKAN', 'status' => 'V0'];
+    }
+    $sisaHari = (int) round(($timeBerakhir - $timeCutoff) / 86400);
 
     if ($sisaHari < 0) {
         $kondisi = 'SUDAH BERAKHIR'; $status = 'E3';
@@ -190,6 +247,88 @@ function hitungMasaBerlaku(?string $tanggalBerakhir, ?string $cutoffDate, string
         $kondisi = '> H-180'; $status = 'E0';
     }
     return ['sisa_hari' => $sisaHari, 'kondisi' => $kondisi, 'status' => $status];
+}
+
+/**
+ * Menghitung kebutuhan siklus scorecard selama masa berlaku kerja sama (flow.pdf & SOP 5).
+ * Cadence default: 4 kali per tahun (setiap 3 bulan).
+ */
+function hitungKebutuhanScorecard(?string $tanggalMulai, ?string $tanggalBerakhir, int $cadenceBulan = 3): array {
+    $fallback = [
+        'total_siklus'             => 0,
+        'durasi_bulan'             => 0,
+        'warning_1_bulan'          => false,
+        'hari_menuju_evaluasi'     => null,
+        'target_evaluasi_terdekat' => null,
+        'milestones'               => [],
+    ];
+
+    if (!$tanggalMulai || !$tanggalBerakhir || $tanggalMulai === '0000-00-00' || $tanggalBerakhir === '0000-00-00') {
+        return $fallback;
+    }
+
+    try {
+        $start = new DateTime($tanggalMulai);
+        $end   = new DateTime($tanggalBerakhir);
+    } catch (Throwable $e) {
+        return $fallback;
+    }
+
+    if ($start >= $end) {
+        return [
+            'total_siklus'             => 1,
+            'durasi_bulan'             => 0,
+            'warning_1_bulan'          => false,
+            'hari_menuju_evaluasi'     => null,
+            'target_evaluasi_terdekat' => null,
+            'milestones'               => [],
+        ];
+    }
+
+    $diff = $start->diff($end);
+    $durasiBulan = ($diff->y * 12) + $diff->m + ($diff->d > 15 ? 1 : 0);
+    $totalSiklus = max(1, (int)ceil($durasiBulan / $cadenceBulan));
+
+    $today = new DateTime('now');
+    $milestones = [];
+    $warning1Bulan = false;
+    $hariMenujuEvaluasi = null;
+    $targetEvaluasiTerdekat = null;
+
+    for ($i = 1; $i <= $totalSiklus; $i++) {
+        $targetDate = clone $start;
+        $targetDate->modify('+' . ($i * $cadenceBulan) . ' months');
+        if ($targetDate > $end) $targetDate = clone $end;
+
+        $targetStr = $targetDate->format('Y-m-d');
+        $diffDays = (int)round((strtotime($targetStr) - $today->getTimestamp()) / 86400);
+
+        $milestones[] = [
+            'siklus_ke'   => $i,
+            'nama'        => $i === 1 ? 'SC-1: Baseline / Awal' : 'SC-' . $i . ': Evaluasi Triwulan ' . ($i - 1),
+            'target_tgl'  => $targetStr,
+            'sisa_hari'   => $diffDays,
+            'is_due_soon' => ($diffDays >= 0 && $diffDays <= 30),
+            'is_past'     => ($diffDays < 0),
+        ];
+
+        if ($targetEvaluasiTerdekat === null && $diffDays >= -15) {
+            $targetEvaluasiTerdekat = $targetStr;
+            $hariMenujuEvaluasi = $diffDays;
+            if ($diffDays >= 0 && $diffDays <= 30) {
+                $warning1Bulan = true;
+            }
+        }
+    }
+
+    return [
+        'total_siklus'             => $totalSiklus,
+        'durasi_bulan'             => $durasiBulan,
+        'warning_1_bulan'          => $warning1Bulan,
+        'hari_menuju_evaluasi'     => $hariMenujuEvaluasi,
+        'target_evaluasi_terdekat' => $targetEvaluasiTerdekat,
+        'milestones'               => $milestones,
+    ];
 }
 
 /** Urutan keparahan warning untuk mencari yang tertinggi. Persis rumus B32: E3 > E2 > E1 > V0 > E0. */
@@ -328,14 +467,15 @@ function singkat(?string $teks, int $panjang, string $akhiran = '…'): string {
  * DASHBOARD HELPERS
  * ============================================================ */
 
-/** Label display name untuk keenam aspek indikator (dipakai di chart dashboard). */
+/** Label display name untuk ketujuh aspek indikator V2.1 (dipakai di chart dashboard). */
 const ASPEK_LABELS = [
-    'I1' => 'Relevansi',
-    'I2' => 'Mitra',
-    'I3' => 'Pelaksanaan',
-    'I4' => 'Data & Eviden',
+    'I1' => 'Tata Kelola',
+    'I2' => 'Implementasi',
+    'I3' => 'Output',
+    'I4' => 'Outcome',
     'I5' => 'Dampak',
-    'I6' => 'Keberlanjutan',
+    'I6' => 'Eviden',
+    'I7' => 'Risiko',
 ];
 
 /** Map kategori scorecard ke status efektivitas untuk dashboard. */

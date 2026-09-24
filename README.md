@@ -1,13 +1,28 @@
 # Aplikasi Scorecard Efektivitas Mitra Kinerja
 
 Aplikasi web (PHP + MySQL) untuk pengisian form penilaian dan dashboard eksekutif
-Scorecard Efektivitas Mitra Kinerja V1.1 — Diskominfo Kabupaten Bintan.
+Scorecard Efektivitas Mitra Kinerja — Kantor Wilayah Kementerian Hukum Kepulauan Riau.
 
 Dibangun berdasarkan:
 - `Format_Scorecard_Efektivitas_MITRA_KINERJA_V1_1_29_Agustus_2026.xlsx`
 - `Panduan_Pengisian_Scorecard_MITRA_KINERJA_V1_1.docx`
 
-## 1. Instalasi
+## 1. Menjalankan Aplikasi
+
+### Cara Cepat (Windows / Jaringan WLAN / Wi-Fi)
+Cukup **klik dua kali** (double click) file:
+```
+start_server_wlan.bat
+```
+Script ini akan:
+1. Memeriksa PHP dan memastikan database MySQL (XAMPP) menyala.
+2. Mendeteksi IP Address Wi-Fi / WLAN komputer Anda secara otomatis.
+3. Menjalankan web server pada port `8080`.
+4. Membuka browser secara otomatis dan menampilkan tautan yang bisa dibuka dari HP atau laptop lain yang terhubung di Wi-Fi yang sama (contoh: `http://172.16.x.x:8080/login.php`).
+
+---
+
+## 2. Instalasi & Basis Data Manual
 
 Aplikasi ini **aman dijalankan di domain root atau di subfolder mana pun** (contoh:
 `/home/USER/public_html/`) tanpa mengubah kode — semua link internal pakai

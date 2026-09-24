@@ -1,11 +1,13 @@
 <?php
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/data.php';
+require_once __DIR__ . '/includes/ai_config.php';
 requireLogin();
 
 $pdo = getDB();
 $all = getAllMitraSummary($pdo);
 $stats = getDashboardStats($all);
+$opStats = getOperationalStats($pdo, $all);
 $tindakLanjut = getTindakLanjut($pdo, null, 5);
 
 $pageTitle = 'Dashboard';
@@ -15,6 +17,70 @@ $pilotOnly = array_filter($all, function ($s) {
     return isset($s['mitra']['portofolio']) && $s['mitra']['portofolio'] === 'Pilot Utama';
 });
 ?>
+
+<?php
+$dueSoonMonev = [];
+foreach ($all as $s) {
+    if (!empty($s['monev']['warning_1_bulan'])) {
+        $dueSoonMonev[] = $s;
+    }
+}
+?>
+
+<?php if (!empty($dueSoonMonev)): ?>
+<div class="alert alert-warning" style="margin-bottom:20px;border-left:4px solid #ea580c;background:#fff7ed;color:#9a3412;">
+    <div style="font-weight:700;font-size:14px;margin-bottom:4px;">
+        ⚠️ Jadwal Evaluasi Mendatang (&lt; 30 Hari)
+    </div>
+    <div style="font-size:13px;">
+        Terdapat <strong><?= count($dueSoonMonev) ?> kerja sama</strong> yang mendekati jadwal evaluasi:
+        <ul style="margin:6px 0 0 18px;padding:0;">
+            <?php foreach ($dueSoonMonev as $ds): ?>
+            <li style="margin-bottom:4px;">
+                <strong><?= h($ds['mitra']['kode']) ?></strong> &mdash; <?= h($ds['mitra']['nama_mitra']) ?> &bull; 
+                Target: <strong><?= formatTanggal($ds['monev']['target_evaluasi_terdekat']) ?></strong> 
+                (<?= $ds['monev']['hari_menuju_evaluasi'] ?> hari lagi) &bull;
+                <a href="mitra_edit.php?id=<?= $ds['mitra']['id'] ?>" style="color:#2563eb;text-decoration:underline;">Buka Penilaian &rarr;</a>
+            </li>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- Indikator Kinerja -->
+<div class="card" style="margin-bottom:20px;background:linear-gradient(135deg,#f8fafc,#eff6ff);border:1px solid #dbeafe;">
+    <div class="flex-between">
+        <div>
+            <h3 style="margin:0;font-size:15px;color:#1e40af;">Indikator Kinerja</h3>
+            <div class="muted" style="font-size:12px;">Ringkasan efektivitas, capaian hasil, dan tindak lanjut portofolio</div>
+        </div>
+    </div>
+    <div class="kpi-grid" style="margin-top:14px;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));">
+        <div class="kpi-card" style="background:#fff;">
+            <div class="kpi-value" style="color:#2563eb;"><?= $stats['aktifCount'] ?> / <?= $stats['total'] ?></div>
+            <div class="kpi-label">Kerja Sama Aktif</div>
+            <div class="kpi-sub" style="font-size:11px;color:#64748b;">Implementasi berjalan</div>
+        </div>
+        <div class="kpi-card" style="background:#fff;">
+            <div class="kpi-value" style="color:#0891b2;"><?= $stats['outputOutcomeCount'] ?></div>
+            <div class="kpi-label">Output &amp; Outcome</div>
+            <div class="kpi-sub" style="font-size:11px;color:#64748b;">Menghasilkan produk/manfaat</div>
+        </div>
+        <div class="kpi-card" style="background:#fff;">
+            <div class="kpi-value" style="color:#16a34a;"><?= $stats['berdampakCount'] ?></div>
+            <div class="kpi-label">Berdampak</div>
+            <div class="kpi-sub" style="font-size:11px;color:#64748b;">Mendukung pelayanan hukum</div>
+        </div>
+        <div class="kpi-card" style="background:#fff;">
+            <div class="kpi-value" style="font-size:15px;color:#ca8a04;">
+                <?= $stats['rekomendasiCount']['LANJUT'] + $stats['rekomendasiCount']['PERPANJANG'] + $stats['rekomendasiCount']['REPLIKASI'] ?> Lanjut / <?= $stats['rekomendasiCount']['HENTIKAN'] ?> Henti
+            </div>
+            <div class="kpi-label">Rekomendasi</div>
+            <div class="kpi-sub" style="font-size:11px;color:#64748b;"><?= $stats['rekomendasiCount']['PERBAIKI'] ?> perlu perbaikan</div>
+        </div>
+    </div>
+</div>
 
 <!-- KPI Row -->
 <div class="kpi-row">
@@ -147,39 +213,112 @@ $pilotOnly = array_filter($all, function ($s) {
     </div>
 </div>
 
-<!-- Quick Actions -->
-<?php
-$arrowSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
-$acIcons = [
-    'baseline' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>',
-    'scorecard' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="13" width="3.5" height="7" rx=".5"/><rect x="10" y="9" width="3.5" height="11" rx=".5"/><rect x="16" y="5" width="3.5" height="15" rx=".5"/></svg>',
-    'early_warning' => '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2a6 6 0 0 1 6 6c0 4 1.8 5.4 2.4 6H3.6C4.2 13.4 6 12 6 8a6 6 0 0 1 6-6z"/><path d="M9.8 17a2.2 2.2 0 0 0 4.4 0z"/></svg>',
-    'tindak_lanjut' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.5l3 3 5-6"/></svg>',
-];
-?>
-<div class="actions-row">
-    <a href="baseline.php" class="action-card ac-blue">
-        <div class="ac-icon"><?= $acIcons['baseline'] ?></div>
-        <div class="ac-text"><h4>Input / Update Baseline</h4><p>Data naskah, PIC, rencana, dan eviden</p></div>
-        <div class="ac-arrow"><?= $arrowSvg ?></div>
-    </a>
-    <a href="scorecard.php" class="action-card ac-gold">
-        <div class="ac-icon"><?= $acIcons['scorecard'] ?></div>
-        <div class="ac-text"><h4>Lihat Scorecard</h4><p>Penilaian efektivitas berbasis bukti</p></div>
-        <div class="ac-arrow"><?= $arrowSvg ?></div>
-    </a>
-    <a href="early_warning.php" class="action-card ac-navy">
-        <div class="ac-icon"><?= $acIcons['early_warning'] ?></div>
-        <div class="ac-text"><h4>Cek Early Warning</h4><p>Naskah yang perlu perhatian</p></div>
-        <div class="ac-arrow"><?= $arrowSvg ?></div>
-    </a>
-    <a href="tindak_lanjut.php" class="action-card ac-gold">
-        <div class="ac-icon"><?= $acIcons['tindak_lanjut'] ?></div>
-        <div class="ac-text"><h4>Kelola Tindak Lanjut</h4><p>Pantau progres perbaikan</p></div>
-        <div class="ac-arrow"><?= $arrowSvg ?></div>
-    </a>
+<!-- Operational Status & Pipeline Summary -->
+<div class="dash-tables" style="grid-template-columns: 1fr 1fr; margin-bottom: 24px;">
+    <!-- Card 1: Pipeline Pra-Kerja Sama & Validasi -->
+    <div class="dash-table-card">
+        <div class="dtc-head">
+            <h3>Pipeline Usulan &amp; Antrean Validasi</h3>
+            <a href="gate0.php">Ke Gate 0 &rarr;</a>
+        </div>
+        <div style="padding: 16px 20px;">
+            <div style="margin-bottom: 14px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
+                    Usulan Pra-Kerja Sama (Gate 0)
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 90px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 10px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: var(--navy);"><?= $opStats['g0Total'] ?></div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Total Usulan</div>
+                    </div>
+                    <div style="flex: 1; min-width: 90px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 10px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: #b45309;"><?= $opStats['g0Pending'] ?></div>
+                        <div style="font-size: 11px; color: #92400e;">Menunggu Putusan</div>
+                    </div>
+                    <div style="flex: 1; min-width: 90px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: #15803d;"><?= $opStats['g0Approved'] ?></div>
+                        <div style="font-size: 11px; color: #166534;">Disetujui / PKS</div>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
+                    Antrean Validasi Scorecard
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 90px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: #15803d;"><?= $opStats['disetujuiValidasi'] ?></div>
+                        <div style="font-size: 11px; color: #166534;">Tervalidasi Final</div>
+                    </div>
+                    <div style="flex: 1; min-width: 90px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: #1d4ed8;"><?= $opStats['siapValidasi'] ?></div>
+                        <div style="font-size: 11px; color: #1e40af;">Siap Divalidasi</div>
+                    </div>
+                    <div style="flex: 1; min-width: 90px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 10px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: #475569;"><?= $opStats['belumLengkapValidasi'] ?></div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Dalam Telaah</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 2: Profil Portofolio & Masa Berlaku -->
+    <div class="dash-table-card">
+        <div class="dtc-head">
+            <h3>Profil Dokumen &amp; Pelaksanaan</h3>
+            <a href="portofolio.php">Ke Portofolio &rarr;</a>
+        </div>
+        <div style="padding: 16px 20px;">
+            <div style="margin-bottom: 14px;">
+                <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
+                    Komposisi &amp; Rencana Kerja
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 80px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 10px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: var(--navy);"><?= $opStats['mouCount'] ?></div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Payung MoU</div>
+                    </div>
+                    <div style="flex: 1; min-width: 80px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 10px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: #2563eb;"><?= $opStats['pksCount'] ?></div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Perjanjian PKS</div>
+                    </div>
+                    <div style="flex: 1; min-width: 80px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 10px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: #0891b2;"><?= $opStats['rkCount'] ?></div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Rencana Kerja</div>
+                    </div>
+                    <div style="flex: 1; min-width: 80px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 10px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: #7c3aed;"><?= $opStats['smCount'] ?></div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Siklus Monev</div>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
+                    Ketahanan Masa Berlaku Kerja Sama
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 90px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: #15803d;"><?= $opStats['validAman'] ?></div>
+                        <div style="font-size: 11px; color: #166534;">Aman (&gt; 6 Bln)</div>
+                    </div>
+                    <div style="flex: 1; min-width: 90px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 10px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: #b45309;"><?= $opStats['validPerhatian'] ?></div>
+                        <div style="font-size: 11px; color: #92400e;">1 s.d. 6 Bulan</div>
+                    </div>
+                    <div style="flex: 1; min-width: 90px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: #b91c1c;"><?= $opStats['validKritis'] ?></div>
+                        <div style="font-size: 11px; color: #991b1b;">Perlu Verifikasi / Habis</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
+<?php if (defined('AI_ENABLED') && AI_ENABLED): ?>
 <!-- AI Floating Toast -->
 <div id="aiToast" class="ai-toast" style="display:none">
     <div class="ai-toast-header">
@@ -210,8 +349,9 @@ $acIcons = [
 </div>
 
 <button id="aiTriggerBtn" class="ai-trigger-btn" onclick="showAIToast()" title="Analisis AI">
-    <img src="/public/img/logo.png" alt="Kementerian Hukum">
+    <img src="public/img/logo.png" alt="Kementerian Hukum">
 </button>
+<?php endif; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
@@ -225,6 +365,7 @@ $acIcons = [
     new Chart(ctx2, { type:'doughnut', data:{ labels:['Skor',''], datasets:[{ data:[val, 100-val], backgroundColor:[clr,'#e9ecef'], borderWidth:0 }] }, options:{ rotation:-90, circumference:180, cutout:'72%', plugins:{ legend:{display:false}, tooltip:{enabled:false} }, responsive:false } });
 })();
 
+<?php if (defined('AI_ENABLED') && AI_ENABLED): ?>
 /* ── AI Insight Floating Toast ─────────────────────────── */
 var aiToastEl   = document.getElementById('aiToast');
 var aiLoadingEl = document.getElementById('aiLoading');
@@ -306,6 +447,7 @@ document.addEventListener('DOMContentLoaded', function(){
         document.getElementById('aiTriggerBtn').style.display='flex';
     }
 });
+<?php endif; ?>
 </script>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

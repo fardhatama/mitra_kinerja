@@ -7,6 +7,74 @@ $pdo = getDB();
 $user = currentUser();
 $id = (int)($_GET['id'] ?? 0);
 
+/* ── LIST VIEW (Jika tidak ada ?id=) ──────────────────────── */
+if ($id <= 0) {
+    $all = getAllMitraSummary($pdo);
+    $pageTitle = 'Validasi Naskah';
+    require __DIR__ . '/includes/header.php';
+    ?>
+    <div class="flex-between" style="margin-bottom:18px;">
+        <div>
+            <h1 style="margin:0;font-size:20px;">Validasi Naskah</h1>
+            <div class="muted" style="font-size:13px;">Daftar naskah untuk review dan keputusan validasi</div>
+        </div>
+        <a href="dashboard.php" class="btn btn-outline btn-sm">&larr; Dashboard</a>
+    </div>
+
+    <div class="card">
+        <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Kode</th>
+                    <th>Mitra</th>
+                    <th>Jenis</th>
+                    <th>Kelengkapan</th>
+                    <th>Status Scorecard</th>
+                    <th>Status Validasi</th>
+                    <th>Catatan Validator</th>
+                    <th>Aksi</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($all as $s): $m = $s['mitra']; ?>
+                <tr>
+                    <td><strong><?= h($m['kode']) ?></strong><br><span class="muted" style="font-size:11px;"><?= h($m['portofolio']) ?></span></td>
+                    <td><?= h($m['nama_mitra']) ?></td>
+                    <td><?= h($m['jenis']) ?></td>
+                    <td>
+                        <div style="font-weight:600;font-size:12px;"><?= $s['kelengkapan'] ?>%</div>
+                        <div class="hbar-track" style="width:70px;height:6px;display:inline-block;">
+                            <div class="hbar-fill" style="width:<?= $s['kelengkapan'] ?>%;background:<?= $s['kelengkapan'] >= 100 ? '#16a34a' : '#ca8a04' ?>;"></div>
+                        </div>
+                    </td>
+                    <td><?= h($s['status_scorecard']) ?></td>
+                    <td>
+                        <?php
+                        $vBadge = match($s['validasi']['status']) {
+                            'DISETUJUI' => 'success',
+                            'PERLU PERBAIKAN' => 'danger',
+                            default => 'secondary'
+                        };
+                        ?>
+                        <span class="badge badge-<?= $vBadge ?>"><?= h($s['validasi']['status']) ?></span>
+                    </td>
+                    <td class="muted" style="font-size:12px;max-width:180px;"><?= h(singkat($s['validasi']['catatan'] ?? '-', 45)) ?></td>
+                    <td>
+                        <a href="mitra_validasi.php?id=<?= $m['id'] ?>" class="btn btn-primary btn-sm">Buka Validasi &rarr;</a>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        </div>
+    </div>
+    <?php
+    require __DIR__ . '/includes/footer.php';
+    exit;
+}
+
+/* ── DETAIL & FORM VALIDASI (Jika ada ?id=) ───────────────── */
 $stmt = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
 $stmt->execute([$id]);
 $mitra = $stmt->fetch();
@@ -23,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!in_array($status, ['BELUM','DISETUJUI','PERLU PERBAIKAN'], true)) {
         $errors[] = 'Status validasi tidak valid.';
     } elseif ($status === 'DISETUJUI' && $summary['kelengkapan'] < 100) {
-        $errors[] = 'Tidak dapat menyetujui: kelengkapan enam indikator belum 100%.';
+        $errors[] = 'Tidak dapat menyetujui: kelengkapan indikator belum 100%.';
     } elseif ($status === 'PERLU PERBAIKAN' && $catatan === '') {
         $errors[] = 'Tulis catatan bagian yang harus diperbaiki.';
     } else {
@@ -46,7 +114,7 @@ require __DIR__ . '/includes/header.php';
     <div>
         <h1 style="margin:0;font-size:20px;">Validasi — <?= h($mitra['kode']) ?> <?= h($mitra['nama_mitra']) ?></h1>
     </div>
-    <a href="mitra_list.php" class="btn btn-outline btn-sm">&larr; Kembali</a>
+    <a href="mitra_validasi.php" class="btn btn-outline btn-sm">&larr; Daftar Validasi</a>
 </div>
 
 <?php if ($saved): ?><div class="alert alert-info">Status validasi tersimpan.</div><?php endif; ?>
@@ -54,10 +122,12 @@ require __DIR__ . '/includes/header.php';
 
 <div class="card">
     <h2>Ringkasan</h2>
-    <div class="kpi-grid">
-        <div class="kpi-card"><div class="kpi-value"><?= number_format($summary['nilai_berjalan'],2) ?></div><div class="kpi-label">Nilai Berjalan</div></div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));">
+        <div class="kpi-card"><div class="kpi-value"><?= number_format($summary['nilai_berjalan'],2) ?></div><div class="kpi-label">Nilai Berjalan (<?= $summary['bobot_dinilai'] ?>%)</div></div>
         <div class="kpi-card"><div class="kpi-value"><?= $summary['kelengkapan'] ?>%</div><div class="kpi-label">Kelengkapan</div></div>
         <div class="kpi-card"><span class="badge badge-<?= warnaKategori($summary['kategori']) ?>"><?= h($summary['kategori']) ?></span><div class="kpi-label">Kategori</div></div>
+        <div class="kpi-card"><span class="badge badge-secondary" style="font-size:11px;"><?= h($summary['posisi_portofolio']) ?></span><div class="kpi-label">Posisi Portofolio</div></div>
+        <div class="kpi-card"><span class="badge badge-warning" style="font-size:11px;"><?= h($summary['rekomendasi']) ?></span><div class="kpi-label">Rekomendasi</div></div>
         <div class="kpi-card"><div style="font-weight:700;font-size:13px;"><?= h($summary['status_scorecard']) ?></div><div class="kpi-label">Status Scorecard</div></div>
     </div>
     <?php if ($summary['kelengkapan'] < 100): ?>

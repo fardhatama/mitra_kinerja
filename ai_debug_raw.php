@@ -6,6 +6,7 @@
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/ai_config.php';
 requireLogin();
+requireRole(['admin']);
 
 header('Content-Type: application/json; charset=utf-8');
 

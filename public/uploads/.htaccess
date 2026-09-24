@@ -1,0 +1,5 @@
+# Protect uploads directory from script execution
+<FilesMatch "\.(php|php[0-9]|phtml|pl|py|cgi|asp|sh)$">
+    Order Deny,Allow
+    Deny from all
+</FilesMatch>

@@ -21,6 +21,15 @@ $all = getAllMitraSummary($pdo);
 $stats = getDashboardStats($all);
 $forceRefresh = ($_SERVER['REQUEST_METHOD'] === 'POST');
 
+if (!defined('AI_ENABLED') || !AI_ENABLED) {
+    echo json_encode([
+        'success' => false,
+        'error' => 'AI_DISABLED',
+        'message' => 'Fitur AI Insight dinonaktifkan sementara.'
+    ]);
+    exit;
+}
+
 // Cek apakah minimal SATU API key sudah dikonfigurasi
 $geminiOk = (GEMINI_API_KEY !== '' && GEMINI_API_KEY !== 'ISI_API_KEY_ANDA_DI_SINI');
 $openrouterOk = (OPENROUTER_API_KEY !== '');

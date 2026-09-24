@@ -32,11 +32,40 @@ require __DIR__ . '/includes/header.php';
 
 <div class="flex-between" style="margin-bottom:18px;">
     <div>
-        <h1 style="margin:0;font-size:20px;">Early Warning — Naskah Perlu Perhatian</h1>
-        <div class="muted" style="font-size:13px;">Naskah dengan status warning selain E0 (Hijau)</div>
+        <h1 style="margin:0;font-size:20px;">Early Warning</h1>
+        <div class="muted" style="font-size:13px;">Pemantauan risiko dan jadwal evaluasi kerja sama</div>
     </div>
     <a href="dashboard.php" class="btn btn-outline btn-sm">&larr; Dashboard</a>
 </div>
+
+<?php
+$dueSoonMonev = [];
+foreach ($all as $s) {
+    if (!empty($s['monev']['warning_1_bulan'])) {
+        $dueSoonMonev[] = $s;
+    }
+}
+?>
+<?php if (!empty($dueSoonMonev)): ?>
+<div class="alert alert-warning" style="margin-bottom:20px;border-left:4px solid #ea580c;background:#fff7ed;color:#9a3412;">
+    <div style="font-weight:700;font-size:14px;margin-bottom:4px;">
+        ⚠️ Jadwal Evaluasi Mendatang (&lt; 30 Hari):
+    </div>
+    <div style="font-size:13px;">
+        Terdapat <strong><?= count($dueSoonMonev) ?> kerja sama</strong> yang mendekati jadwal evaluasi berkala:
+        <ul style="margin:6px 0 0 18px;padding:0;">
+            <?php foreach ($dueSoonMonev as $ds): ?>
+            <li style="margin-bottom:4px;">
+                <strong><?= h($ds['mitra']['kode']) ?></strong> &mdash; <?= h($ds['mitra']['nama_mitra']) ?>: 
+                Target: <strong><?= formatTanggal($ds['monev']['target_evaluasi_terdekat']) ?></strong> 
+                (<?= $ds['monev']['hari_menuju_evaluasi'] ?> hari lagi) &bull;
+                <a href="mitra_edit.php?id=<?= $ds['mitra']['id'] ?>" style="color:#2563eb;text-decoration:underline;">Buka Penilaian &rarr;</a>
+            </li>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php if (empty($warningData)): ?>
 <div class="card" style="text-align:center;padding:40px;">
