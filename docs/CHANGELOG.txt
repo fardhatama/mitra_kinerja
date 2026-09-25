@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-09-25
+
+### Added
+- Added official scanned agreement upload feature (`.pdf`) beside "Tambah Naskah" in `mitra_manage.php` enforcing authentic physical signed documents rather than typed text drafts.
+- Added integrated Annual Work Plan form (`rencana kerja (/tahun)`) in `mitra_manage.php` for both initial partnership creation and dedicated management under each existing partnership.
+- Reclassified partnership category from "Jenis" to "Bidang" with departmental options ("AHU", "KI", "P3H", "PPL", "Keuangan", "Humas", "SDM") aligned with Kanwil Kemenkumham Kepri operational divisions.
+- Introduced dedicated user roles `pengampu` (Unit Pengampu) and `pic` (PIC Operasional Kerja Sama) in `users` table with 1-click demo login buttons on `login.php`.
+- Implemented role-differentiated deadline alerts on `dashboard.php`:
+  - Akun Pengampu: specialized directive alert requiring completion of each evaluation cycle (SC1, SC2, SC3, dst.) before 30 days from the deadline.
+  - Akun PIC: specialized reminder alert prompting PICs to proactively follow up and remind the Unit Pengampu before 30 days of each cycle.
+- Added interactive partnership type dropdown in `gate0.php` to select and download "Dalam Negeri" or "Luar Negeri" Excel templates dynamically.
+- Upgraded Gate 0 Excel templates (`public/templates/template_gate0_dalam_negeri.xlsx` and `template_gate0_luar_negeri.xlsx`) to vertical downward form layout ("data menurun ke bawah") matching Google Drive standards and the official Form Gate 0 document.
+- Upgraded `gate0.php` upload engine to automatically detect and parse both vertical downward forms and tabular horizontal spreadsheets with full tolerance.
+- Added dedicated 7th column `Aksi / Tindakan` in Stage 2 Baseline verification view (`baseline.php?id=X`):
+  1. `IDENTITAS`: PDF file upload for physical signed agreements.
+  2. `SUBSTANSI`: PDF file upload for scope of work / substance documents.
+  3. `PIC internal`: Interactive modal to update and verify internal PIC data.
+  4. `PIC mitra`: Interactive modal to update and verify partner PIC data.
+  5. `TINDAK LANJUT`: High-capacity multiple PDF upload supporting unmerged multi-file action plans.
+  6. `PELAKSANAAN`: Dynamic readout displaying `(angka) Kegiatan` sourced automatically from the Tindak Lanjut ledger.
+  7. `EVIDEN`: Direct contextual shortcut button linking to `tindak_lanjut.php?mitra_id=X`.
+  8. `HAMBATAN`: PDF file upload for operational gap and impediment documentation.
+
 ## [2.1.0] - 2026-09-23
 
 ### Added

@@ -19,6 +19,9 @@ $pilotOnly = array_filter($all, function ($s) {
 ?>
 
 <?php
+$user = currentUser();
+$userRole = $user['role'] ?? 'admin';
+
 $dueSoonMonev = [];
 foreach ($all as $s) {
     if (!empty($s['monev']['warning_1_bulan'])) {
@@ -29,15 +32,45 @@ foreach ($all as $s) {
 
 <?php if (!empty($dueSoonMonev)): ?>
 <div class="alert alert-warning" style="margin-bottom:20px;border-left:4px solid #ea580c;background:#fff7ed;color:#9a3412;">
-    <div style="font-weight:700;font-size:14px;margin-bottom:4px;">
-        ⚠️ Jadwal Evaluasi Mendatang (&lt; 30 Hari)
-    </div>
-    <div style="font-size:13px;">
-        Terdapat <strong><?= count($dueSoonMonev) ?> kerja sama</strong> yang mendekati jadwal evaluasi:
-        <ul style="margin:6px 0 0 18px;padding:0;">
-            <?php foreach ($dueSoonMonev as $ds): ?>
-            <li style="margin-bottom:4px;">
+    <?php if ($userRole === 'pengampu'): ?>
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px;color:#c2410c;">
+            ⚠️ Notifikasi Pengisian Jadwal Evaluasi (Akun Pengampu)
+        </div>
+        <div style="font-size:13px;line-height:1.5;">
+            Sebagai <strong>Akun Pengampu</strong>, Anda perlu untuk melakukan pengisian setiap <strong>SC1 atau SC2 atau SC3</strong> dan siklus evaluasi lainnya, sebelum <strong>30 hari</strong> dari tenggat waktu jadwal evaluasi tersebut.
+        </div>
+    <?php elseif ($userRole === 'pic'): ?>
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px;color:#c2410c;">
+            ⚠️ Pengingat Jadwal Evaluasi Kinerja (Akun PIC)
+        </div>
+        <div style="font-size:13px;line-height:1.5;">
+            Sebagai <strong>Akun PIC</strong>, Anda perlu melakukan pemantauan dan <strong>mengingatkan Akun Pengampu</strong> untuk melakukan pengisian setiap <strong>SC1 atau SC2 atau SC3</strong> dan siklus evaluasi lainnya, sebelum <strong>30 hari</strong> dari tenggat waktu evaluasi tersebut.
+        </div>
+    <?php else: ?>
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px;">
+            ⚠️ Jadwal Evaluasi Mendatang (&lt; 30 Hari)
+        </div>
+        <div style="font-size:13px;line-height:1.5;">
+            Terdapat <strong><?= count($dueSoonMonev) ?> kerja sama</strong> yang mendekati tenggat evaluasi. Akun Pengampu perlu melakukan pengisian dan pemutakhiran setiap siklus (SC1, SC2, SC3, dst.) sebelum 30 hari dari tenggat waktu, dengan koordinasi oleh Akun PIC:
+        </div>
+    <?php endif; ?>
+
+    <div style="font-size:13px;margin-top:8px;">
+        <ul style="margin:4px 0 0 18px;padding:0;">
+            <?php foreach ($dueSoonMonev as $ds): 
+                $msLabel = 'SC-1';
+                if (!empty($ds['monev']['milestones'])) {
+                    foreach ($ds['monev']['milestones'] as $ms) {
+                        if (!empty($ms['is_due_soon'])) {
+                            $msLabel = $ms['nama'];
+                            break;
+                        }
+                    }
+                }
+            ?>
+            <li style="margin-bottom:6px;">
                 <strong><?= h($ds['mitra']['kode']) ?></strong> &mdash; <?= h($ds['mitra']['nama_mitra']) ?> &bull; 
+                Siklus: <span class="badge badge-warning" style="font-size:10.5px;font-weight:600;"><?= h($msLabel) ?></span> &bull;
                 Target: <strong><?= formatTanggal($ds['monev']['target_evaluasi_terdekat']) ?></strong> 
                 (<?= $ds['monev']['hari_menuju_evaluasi'] ?> hari lagi) &bull;
                 <a href="mitra_edit.php?id=<?= $ds['mitra']['id'] ?>" style="color:#2563eb;text-decoration:underline;">Buka Penilaian &rarr;</a>

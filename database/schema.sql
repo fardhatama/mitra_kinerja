@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
     nama            VARCHAR(150) NOT NULL,
     username        VARCHAR(50) NOT NULL UNIQUE,
     password_hash   VARCHAR(255) NOT NULL,
-    role            ENUM('admin','pemeriksa','validator','pimpinan') NOT NULL,
+    role            ENUM('admin','pemeriksa','validator','pimpinan','pengampu','pic') NOT NULL,
     aktif           TINYINT(1) NOT NULL DEFAULT 1,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS mitra_kinerja (
     nama_mitra          VARCHAR(255) NOT NULL,
     judul               TEXT,
     jenis               ENUM('PKS','MoU') NOT NULL,
+    bidang              ENUM('AHU', 'KI', 'P3H', 'PPL', 'Keuangan', 'Humas', 'SDM') NULL DEFAULT 'AHU',
     pks_induk_id        INT NULL,                            -- Payung MoU (P2MA: Kerja Sama Utama)
     tanggal_mulai       DATE,
     tanggal_berakhir    DATE,
@@ -46,6 +47,10 @@ CREATE TABLE IF NOT EXISTS mitra_kinerja (
     baseline_catatan_ringkasan TEXT NULL,
     cutoff_date         DATE,
     sumber_baseline     VARCHAR(255),
+    pic_internal        VARCHAR(255) NULL,
+    pic_mitra           VARCHAR(255) NULL,
+    file_naskah         VARCHAR(255) NULL,
+    foto_kerjasama      VARCHAR(255) NULL,
     pemeriksa_id        INT NULL,
     tanggal_review      DATE NULL,
     status_scorecard    ENUM('BELUM LENGKAP','SIAP DIVALIDASI','FINAL/TERVALIDASI','PERLU PERBAIKAN')

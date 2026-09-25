@@ -49,6 +49,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
                 <button type="button" onclick="fillLogin('admin','admin123')" style="cursor:pointer;padding:5px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;font-size:11px;">Admin</button>
                 <button type="button" onclick="fillLogin('pemeriksa','pemeriksa123')" style="cursor:pointer;padding:5px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;font-size:11px;">Pemeriksa</button>
+                <button type="button" onclick="fillLogin('pengampu','pengampu123')" style="cursor:pointer;padding:5px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;font-size:11px;">Pengampu</button>
+                <button type="button" onclick="fillLogin('pic','pic123')" style="cursor:pointer;padding:5px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;font-size:11px;">PIC Kerja Sama</button>
                 <button type="button" onclick="fillLogin('validator','validator123')" style="cursor:pointer;padding:5px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;font-size:11px;">Validator</button>
                 <button type="button" onclick="fillLogin('pimpinan','pimpinan123')" style="cursor:pointer;padding:5px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;font-size:11px;">Pimpinan</button>
             </div>

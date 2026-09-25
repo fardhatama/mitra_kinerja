@@ -388,35 +388,192 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             $errors[] = 'File kosong atau format tidak dapat dibaca.';
         } else {
             $importedCount = 0;
-            $headerRow = array_map('strtolower', array_map('trim', $rows[0]));
-            $dataRows = array_slice($rows, 1);
 
-            $colMap = [];
-            foreach ($headerRow as $idx => $hName) {
-                $colMap[$hName] = $idx;
+            // Cek apakah file menggunakan format vertikal (data menurun ke bawah / form gdrive)
+            $isVertical = false;
+            foreach ($rows as $r) {
+                $c0 = strtolower(trim($r[0] ?? ''));
+                $c1 = strtolower(trim($r[1] ?? ''));
+                if (str_contains($c0, 'bagian i') || str_contains($c1, 'bagian i') ||
+                    str_contains($c0, 'nomor usulan') || str_contains($c1, 'nomor usulan') ||
+                    str_contains($c0, 'calon mitra') || str_contains($c1, 'calon mitra')) {
+                    $isVertical = true;
+                    break;
+                }
             }
 
-            foreach ($dataRows as $row) {
-                if (empty($row[0])) continue;
+            if ($isVertical) {
+                // Parsing format vertikal (menurun ke bawah)
+                $vMap = [];
+                $pertanyaanUji = [];
+                $triggerKhusus = [];
+                $kSummary = ['K1' => 'YA', 'K2' => 'YA', 'K3' => 'YA', 'K4' => 'YA', 'K5' => 'YA'];
 
-                $getVal = function($keys, $def = '') use ($row, $colMap) {
-                    foreach ((array)$keys as $k) {
-                        if (isset($colMap[$k]) && isset($row[$colMap[$k]])) {
-                            $v = trim($row[$colMap[$k]]);
-                            if ($v !== '') return $v;
+                foreach ($rows as $r) {
+                    $cNo = strtoupper(trim($r[0] ?? ''));
+                    $cParam = trim($r[1] ?? '');
+                    $cVal = trim($r[2] ?? '');
+                    $cNote = trim($r[3] ?? '');
+
+                    $cleanParam = strtolower(preg_replace('/[^a-z0-9]/', '', $cParam));
+                    if ($cleanParam !== '') {
+                        $vMap[$cleanParam] = $cVal;
+                        $vMap[$cleanParam . '_note'] = $cNote;
+                    }
+
+                    // Deteksi Q1..Q18
+                    if (preg_match('/^Q(\d+)$/i', $cNo, $mQ) || preg_match('/^K(\d+)\.(\d+)/i', $cParam)) {
+                        $qIdx = !empty($mQ[1]) ? (int)$mQ[1] : 0;
+                        if ($qIdx === 0 && preg_match('/^K(\d+)\.(\d+)/i', $cParam, $mK)) {
+                            // Hitung indeks pertanyaan dari K
+                            $kMajor = (int)$mK[1];
+                            $kMinor = (int)$mK[2];
+                            $offsets = [1 => 0, 2 => 3, 3 => 7, 4 => 10, 5 => 14];
+                            $qIdx = ($offsets[$kMajor] ?? 0) + $kMinor;
+                        }
+                        if ($qIdx >= 1 && $qIdx <= 18) {
+                            $ans = strtoupper($cVal) === 'TIDAK' ? 'TIDAK' : 'YA';
+                            $pertanyaanUji["q{$qIdx}"] = [
+                                'jawab' => $ans,
+                                'bukti' => $cNote ?: 'Dokumen terverifikasi'
+                            ];
+                            if ($ans === 'TIDAK') {
+                                if ($qIdx <= 3) $kSummary['K1'] = 'TIDAK';
+                                elseif ($qIdx <= 7) $kSummary['K2'] = 'TIDAK';
+                                elseif ($qIdx <= 10) $kSummary['K3'] = 'TIDAK';
+                                elseif ($qIdx <= 14) $kSummary['K4'] = 'TIDAK';
+                                else $kSummary['K5'] = 'TIDAK';
+                            }
                         }
                     }
-                    return $def;
-                };
 
-                $noUsulan = $getVal(['nomor_usulan', 'no_usulan', 0]);
-                if (empty($noUsulan)) continue;
+                    // Deteksi T1..T7 (Trigger)
+                    if (preg_match('/^T(\d+)$/i', $cNo, $mT) || str_contains(strtolower($cParam), 'pemicu ')) {
+                        $tIdx = !empty($mT[1]) ? (int)$mT[1] : 0;
+                        if ($tIdx === 0 && preg_match('/pemicu\s*(\d+)/i', $cParam, $mP)) {
+                            $tIdx = (int)$mP[1];
+                        }
+                        if ($tIdx >= 1 && $tIdx <= 7) {
+                            $tAns = strtoupper($cVal) === 'YA' ? 'YA' : 'TIDAK';
+                            $triggerKhusus["t{$tIdx}"] = [
+                                'jawab' => $tAns,
+                                'catatan' => $cNote
+                            ];
+                        }
+                    }
+                }
 
-                $tipe     = in_array($getVal(['tipe_kerjasama', 1]), ['Dalam Negeri', 'Luar Negeri']) ? $getVal(['tipe_kerjasama', 1]) : 'Dalam Negeri';
-                $jenis    = in_array($getVal(['jenis_naskah', 2]), ['MoU', 'PKS', 'Lainnya']) ? $getVal(['jenis_naskah', 2]) : 'PKS';
-                $unit     = $getVal(['unit_pemrakarsa', 3], 'Divisi Pelayanan Hukum');
-                $pj       = $getVal(['penanggung_jawab_usulan', 4], 'Tim Kerja Sama');
-                $mitra    = $getVal(['calon_mitra', 5], '');
+                // Lengkapi pertanyaan uji jika belum terisi
+                for ($q = 1; $q <= 18; $q++) {
+                    if (!isset($pertanyaanUji["q{$q}"])) {
+                        $pertanyaanUji["q{$q}"] = ['jawab' => 'YA', 'bukti' => 'Dokumen terverifikasi'];
+                    }
+                }
+                for ($t = 1; $t <= 7; $t++) {
+                    if (!isset($triggerKhusus["t{$t}"])) {
+                        $triggerKhusus["t{$t}"] = ['jawab' => 'TIDAK', 'catatan' => ''];
+                    }
+                }
+
+                $getV = fn($keys, $def = '') => array_reduce((array)$keys, fn($carry, $k) => $carry !== $def ? $carry : ($vMap[strtolower(preg_replace('/[^a-z0-9]/', '', $k))] ?? $def), $def);
+
+                $noUsulan = $getV(['Nomor Usulan', 'no_usulan'], 'PRA-DN-' . rand(100, 999));
+                $tipe     = in_array($getV(['Tipe Kerja Sama', 'tipe_kerjasama']), ['Dalam Negeri', 'Luar Negeri']) ? $getV(['Tipe Kerja Sama', 'tipe_kerjasama']) : 'Dalam Negeri';
+                $jenis    = in_array($getV(['Jenis Naskah', 'jenis_naskah']), ['MoU', 'PKS', 'Lainnya']) ? $getV(['Jenis Naskah', 'jenis_naskah']) : 'PKS';
+                $unit     = $getV(['Unit Pemrakarsa', 'unit_pemrakarsa'], 'Divisi Pelayanan Hukum dan HAM');
+                $pj       = $getV(['Penanggung Jawab Usulan', 'penanggung_jawab_usulan'], 'Kabid Pelayanan Hukum');
+                $mitra    = $getV(['Calon Mitra', 'calon_mitra'], 'Mitra Kerja Sama');
+                $judul    = $getV(['Judul Rencana Kerja Sama', 'judul_rencana'], 'Kerja Sama Pelayanan Hukum');
+                $tujuan   = $getV(['Tujuan Singkat', 'tujuan_singkat'], '');
+                $ruang    = $getV(['Ruang Lingkup Utama', 'ruang_lingkup'], '');
+                $manfaat  = $getV(['Penerima Manfaat', 'penerima_manfaat'], '');
+                $mulai    = $getV(['Perkiraan Tanggal Mulai', 'perkiraan_mulai']) ?: null;
+                $selesai  = $getV(['Perkiraan Tanggal Selesai', 'perkiraan_selesai']) ?: null;
+
+                $catatan = $getV(['Catatan Verifikator', 'catatan_verifikasi'], 'Diimpor dari formulir vertikal Gate 0.');
+                $gap = $getV(['Gap yang Harus Ditutup', 'gap_penyempurnaan'], 'Tidak ada gap material.');
+                $unitRev = $getV(['Unit/Fungsi Reviu Tambahan', 'unit_review_tambahan'], 'Subbagian Humas, RB, dan TI');
+
+                $adaTidak = in_array('TIDAK', $kSummary, true);
+                $adaTrigger = false;
+                foreach ($triggerKhusus as $t) {
+                    if ($t['jawab'] === 'YA') { $adaTrigger = true; break; }
+                }
+
+                $rekomendasi = (!$adaTidak && !$adaTrigger) ? 'Layak' : 'Perlu Penyempurnaan';
+
+                $pertanyaanJson = json_encode($pertanyaanUji, JSON_UNESCAPED_UNICODE);
+                $triggerJson = json_encode($triggerKhusus, JSON_UNESCAPED_UNICODE);
+
+                $stmt = $pdo->prepare('
+                    INSERT INTO pra_pks (
+                        nomor_usulan, tipe_kerjasama, jenis_naskah, unit_pemrakarsa, penanggung_jawab_usulan,
+                        calon_mitra, judul_rencana, tujuan_singkat, ruang_lingkup, penerima_manfaat,
+                        perkiraan_mulai, perkiraan_selesai,
+                        k1_kesesuaian_strategis, k2_kebutuhan_daya_ungkit, k3_kelayakan_mitra,
+                        k4_kesiapan_sumber_daya, k5_risiko_keberlanjutan,
+                        pertanyaan_uji, trigger_khusus,
+                        catatan_verifikasi, gap_penyempurnaan, unit_review_tambahan,
+                        status_rekomendasi, status_persetujuan, created_by
+                    ) VALUES (
+                        ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?,
+                        ?, ?,
+                        ?, ?, ?,
+                        ?, ?,
+                        ?, ?,
+                        ?, ?, ?,
+                        ?, \'Menunggu Persetujuan Pimpinan\', ?
+                    )
+                    ON DUPLICATE KEY UPDATE
+                        calon_mitra=VALUES(calon_mitra), judul_rencana=VALUES(judul_rencana),
+                        tujuan_singkat=VALUES(tujuan_singkat), ruang_lingkup=VALUES(ruang_lingkup),
+                        pertanyaan_uji=VALUES(pertanyaan_uji), trigger_khusus=VALUES(trigger_khusus),
+                        status_rekomendasi=VALUES(status_rekomendasi)
+                ');
+                $stmt->execute([
+                    $noUsulan, $tipe, $jenis, $unit, $pj,
+                    $mitra, $judul, $tujuan, $ruang, $manfaat,
+                    $mulai, $selesai,
+                    $kSummary['K1'], $kSummary['K2'], $kSummary['K3'],
+                    $kSummary['K4'], $kSummary['K5'],
+                    $pertanyaanJson, $triggerJson,
+                    $catatan, $gap, $unitRev,
+                    $rekomendasi, $user['id']
+                ]);
+                $importedCount = 1;
+                $success = "Berhasil mengimpor 1 usulan dari formulir vertikal: <strong>{$noUsulan}</strong> ({$mitra}).";
+            } else {
+                // Parsing format horizontal (tabel kolom)
+                $headerRow = array_map('strtolower', array_map('trim', $rows[0]));
+                $dataRows = array_slice($rows, 1);
+
+                $colMap = [];
+                foreach ($headerRow as $idx => $hName) {
+                    $colMap[$hName] = $idx;
+                }
+
+                foreach ($dataRows as $row) {
+                    if (empty($row[0])) continue;
+
+                    $getVal = function($keys, $def = '') use ($row, $colMap) {
+                        foreach ((array)$keys as $k) {
+                            if (isset($colMap[$k]) && isset($row[$colMap[$k]])) {
+                                $v = trim($row[$colMap[$k]]);
+                                if ($v !== '') return $v;
+                            }
+                        }
+                        return $def;
+                    };
+
+                    $noUsulan = $getVal(['nomor_usulan', 'no_usulan', 0]);
+                    if (empty($noUsulan)) continue;
+
+                    $tipe     = in_array($getVal(['tipe_kerjasama', 1]), ['Dalam Negeri', 'Luar Negeri']) ? $getVal(['tipe_kerjasama', 1]) : 'Dalam Negeri';
+                    $jenis    = in_array($getVal(['jenis_naskah', 2]), ['MoU', 'PKS', 'Lainnya']) ? $getVal(['jenis_naskah', 2]) : 'PKS';
+                    $unit     = $getVal(['unit_pemrakarsa', 3], 'Divisi Pelayanan Hukum');
+                    $pj       = $getVal(['penanggung_jawab_usulan', 4], 'Tim Kerja Sama');
+                    $mitra    = $getVal(['calon_mitra', 5], '');
                 $judul    = $getVal(['judul_rencana', 6], '');
                 $tujuan   = $getVal(['tujuan_singkat', 7], '');
                 $ruang    = $getVal(['ruang_lingkup', 8], '');
@@ -492,6 +649,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                 } catch (Throwable $e) {}
             }
             $success = "Berhasil mengimpor $importedCount usulan Pra-PKS dari file $origName.";
+            }
         }
     }
 }
@@ -768,10 +926,29 @@ require __DIR__ . '/includes/header.php';
         <h1 style="margin:0;font-size:20px;">Gate 0 — Pra-Kerja Sama</h1>
         <div class="muted" style="font-size:13px;">Uji kelayakan calon kerja sama sebelum penandatanganan naskah</div>
     </div>
-    <div style="display:flex;gap:8px;">
-        <a href="public/templates/template_gate0_dalam_negeri.xlsx" download class="btn btn-outline btn-sm">📥 Template Dalam Negeri (.xlsx)</a>
-        <a href="public/templates/template_gate0_luar_negeri.xlsx" download class="btn btn-outline btn-sm">📥 Template Luar Negeri (.xlsx)</a>
+    <div style="display:flex;align-items:center;gap:8px;background:#f8fafc;padding:6px 12px;border:1px solid #cbd5e1;border-radius:6px;">
+        <label for="templateSelect" style="font-size:12px;font-weight:600;color:#1e293b;margin:0;">Jenis Kerja Sama:</label>
+        <select id="templateSelect" style="font-size:12px;padding:5px 8px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;">
+            <option value="public/templates/template_gate0_dalam_negeri.xlsx">Dalam Negeri (.xlsx)</option>
+            <option value="public/templates/template_gate0_luar_negeri.xlsx">Luar Negeri (.xlsx)</option>
+        </select>
+        <button type="button" onclick="downloadSelectedTemplate()" class="btn btn-primary btn-sm" style="font-size:12px;display:inline-flex;align-items:center;gap:4px;">
+            📥 Unduh Template Excel
+        </button>
     </div>
+    <script>
+    function downloadSelectedTemplate() {
+        var sel = document.getElementById('templateSelect');
+        if (sel && sel.value) {
+            var a = document.createElement('a');
+            a.href = sel.value;
+            a.download = sel.value.split('/').pop();
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    }
+    </script>
 </div>
 
 <?php if ($success): ?><div class="alert alert-info"><?= h($success) ?></div><?php endif; ?>

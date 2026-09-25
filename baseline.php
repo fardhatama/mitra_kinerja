@@ -209,6 +209,130 @@ if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = 'Kunci Baseline FIX dibuka kembali untuk penyesuaian administratif.';
         }
     }
+
+    // 4. Upload PDF untuk Elemen Baseline (IDENTITAS, SUBSTANSI, TINDAK LANJUT, HAMBATAN)
+    elseif ($action === 'upload_baseline_pdf') {
+        if (!$canEdit) {
+            $errors[] = 'Akses ditolak.';
+        } elseif ($isLocked) {
+            $errors[] = 'Baseline FIX telah dikunci.';
+        } else {
+            $elemenNomor = (int)($_POST['elemen_nomor'] ?? 0);
+            if (!in_array($elemenNomor, [1, 3, 9, 12], true)) {
+                $errors[] = 'Elemen tidak valid untuk upload berkas.';
+            } else {
+                $targetDir = __DIR__ . '/public/uploads/baseline_pdf/';
+                if (!is_dir($targetDir)) mkdir($targetDir, 0777, true);
+
+                if ($elemenNomor === 9 && isset($_FILES['pdf_files']) && is_array($_FILES['pdf_files']['name'])) {
+                    // Multiple files for Tindak Lanjut
+                    $savedPaths = [];
+                    $stmtOld = $pdo->prepare('SELECT link_sumber_bukti FROM baseline_elemen WHERE mitra_id = ? AND nomor_elemen = 9');
+                    $stmtOld->execute([$id]);
+                    $oldLinks = $stmtOld->fetchColumn() ?: '';
+                    if (!empty($oldLinks)) {
+                        $dec = json_decode($oldLinks, true);
+                        if (is_array($dec)) $savedPaths = $dec;
+                        else $savedPaths = array_filter(explode(';', $oldLinks));
+                    }
+
+                    $fileCount = count($_FILES['pdf_files']['name']);
+                    for ($f = 0; $f < $fileCount; $f++) {
+                        if ($_FILES['pdf_files']['error'][$f] === UPLOAD_ERR_OK) {
+                            $ext = strtolower(pathinfo($_FILES['pdf_files']['name'][$f], PATHINFO_EXTENSION));
+                            if ($ext === 'pdf') {
+                                $safeLeaf = preg_replace('/[^a-zA-Z0-9_\.-]/', '_', pathinfo($_FILES['pdf_files']['name'][$f], PATHINFO_FILENAME));
+                                $targetName = 'baseline_e9_' . $mitra['kode'] . '_' . time() . '_' . $f . '_' . $safeLeaf . '.pdf';
+                                if (move_uploaded_file($_FILES['pdf_files']['tmp_name'][$f], $targetDir . $targetName)) {
+                                    $savedPaths[] = 'public/uploads/baseline_pdf/' . $targetName;
+                                }
+                            }
+                        }
+                    }
+
+                    if (!empty($savedPaths)) {
+                        $jsonVal = json_encode(array_values(array_unique($savedPaths)), JSON_UNESCAPED_UNICODE);
+                        $stmtU = $pdo->prepare('UPDATE baseline_elemen SET link_sumber_bukti = ?, status = \'TERVERIFIKASI\' WHERE mitra_id = ? AND nomor_elemen = 9');
+                        $stmtU->execute([$jsonVal, $id]);
+                        logAudit($id, $user['id'], 'UPLOAD_BASELINE_PDF', 'Upload multiple dokumen tindak lanjut ' . $mitra['kode']);
+                        $success = 'Berkas PDF Rencana Tindak Lanjut berhasil diunggah.';
+                    } else {
+                        $errors[] = 'Gagal mengunggah berkas. Pastikan format file adalah .PDF.';
+                    }
+                } else {
+                    // Single file for 1, 3, 12
+                    if (!isset($_FILES['pdf_file']) || $_FILES['pdf_file']['error'] !== UPLOAD_ERR_OK) {
+                        $errors[] = 'Pilih file PDF yang valid.';
+                    } else {
+                        $ext = strtolower(pathinfo($_FILES['pdf_file']['name'], PATHINFO_EXTENSION));
+                        if ($ext !== 'pdf') {
+                            $errors[] = 'Format file wajib .PDF.';
+                        } else {
+                            $targetName = 'baseline_e' . $elemenNomor . '_' . $mitra['kode'] . '_' . time() . '.pdf';
+                            if (move_uploaded_file($_FILES['pdf_file']['tmp_name'], $targetDir . $targetName)) {
+                                $filePath = 'public/uploads/baseline_pdf/' . $targetName;
+                                $stmtU = $pdo->prepare('UPDATE baseline_elemen SET link_sumber_bukti = ?, status = \'TERVERIFIKASI\' WHERE mitra_id = ? AND nomor_elemen = ?');
+                                $stmtU->execute([$filePath, $id, $elemenNomor]);
+
+                                if ($elemenNomor === 1) {
+                                    $stmtM = $pdo->prepare('UPDATE mitra_kinerja SET file_naskah = ? WHERE id = ?');
+                                    $stmtM->execute([$filePath, $id]);
+                                }
+
+                                logAudit($id, $user['id'], 'UPLOAD_BASELINE_PDF', 'Upload PDF elemen ' . $elemenNomor . ' ' . $mitra['kode']);
+                                $success = 'Berkas PDF untuk elemen ' . BASELINE_12_DEFS[$elemenNomor]['nama'] . ' berhasil diunggah.';
+                            } else {
+                                $errors[] = 'Gagal menyimpan file di server.';
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. Update PIC Data (Internal & Mitra)
+    elseif ($action === 'update_pic') {
+        if (!$canEdit) {
+            $errors[] = 'Akses ditolak.';
+        } elseif ($isLocked) {
+            $errors[] = 'Baseline FIX telah dikunci.';
+        } else {
+            $picType = $_POST['pic_type'] ?? '';
+            $namaPic = trim($_POST['nama_pic'] ?? '');
+            $jabatanPic = trim($_POST['jabatan_pic'] ?? '');
+            $unitPic = trim($_POST['unit_pic'] ?? '');
+            $kontakPic = trim($_POST['kontak_pic'] ?? '');
+            $skPic = trim($_POST['sk_pic'] ?? '');
+
+            if ($namaPic === '') {
+                $errors[] = 'Nama PIC wajib diisi.';
+            } else {
+                $summaryPic = $namaPic . ($jabatanPic ? " ({$jabatanPic})" : '') . ($kontakPic ? " - HP/WA: {$kontakPic}" : '');
+                if ($picType === 'internal') {
+                    $detailFakta = "PIC Internal: {$namaPic}\nJabatan: " . ($jabatanPic ?: '-') . "\nUnit: " . ($unitPic ?: '-') . "\nKontak: " . ($kontakPic ?: '-') . "\nDasar Penetapan/SK: " . ($skPic ?: '-');
+                    $stmtM = $pdo->prepare('UPDATE mitra_kinerja SET pic_internal = ? WHERE id = ?');
+                    $stmtM->execute([$summaryPic, $id]);
+                    $stmtE = $pdo->prepare('UPDATE baseline_elemen SET fakta_pemeriksaan = ?, status = \'TERVERIFIKASI\' WHERE mitra_id = ? AND nomor_elemen = 7');
+                    $stmtE->execute([$detailFakta, $id]);
+                    logAudit($id, $user['id'], 'UPDATE_PIC_INTERNAL', 'Update PIC Internal ' . $mitra['kode']);
+                    $success = 'Data PIC Internal berhasil diperbarui dan diverifikasi.';
+                } elseif ($picType === 'mitra') {
+                    $detailFakta = "PIC Mitra: {$namaPic}\nJabatan: " . ($jabatanPic ?: '-') . "\nInstansi: " . ($unitPic ?: $mitra['nama_mitra']) . "\nKontak: " . ($kontakPic ?: '-') . "\nKeterangan: " . ($skPic ?: '-');
+                    $stmtM = $pdo->prepare('UPDATE mitra_kinerja SET pic_mitra = ? WHERE id = ?');
+                    $stmtM->execute([$summaryPic, $id]);
+                    $stmtE = $pdo->prepare('UPDATE baseline_elemen SET fakta_pemeriksaan = ?, status = \'TERVERIFIKASI\' WHERE mitra_id = ? AND nomor_elemen = 8');
+                    $stmtE->execute([$detailFakta, $id]);
+                    logAudit($id, $user['id'], 'UPDATE_PIC_MITRA', 'Update PIC Mitra ' . $mitra['kode']);
+                    $success = 'Data PIC Mitra berhasil diperbarui dan diverifikasi.';
+                }
+                // Refresh data mitra
+                $stmt = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
+                $stmt->execute([$id]);
+                $mitra = $stmt->fetch();
+            }
+        }
+    }
 }
 
 /* ── VIEW ROUTER ─────────────────────────────────────────── */
@@ -489,16 +613,23 @@ if ($id > 0) {
                 <?php endif; ?>
             </div>
 
+            <?php
+            $stmtTLCount = $pdo->prepare('SELECT COUNT(*) FROM tindak_lanjut WHERE mitra_id = ?');
+            $stmtTLCount->execute([$id]);
+            $kegiatanCount = (int)$stmtTLCount->fetchColumn();
+            ?>
+
             <div class="table-wrap">
                 <table>
                     <thead>
                         <tr>
                             <th style="width:4%;text-align:center;">No</th>
-                            <th style="width:12%;">Kelompok</th>
-                            <th style="width:24%;">Elemen &amp; Standar Bukti</th>
-                            <th style="width:15%;">Status Baseline</th>
-                            <th style="width:25%;">Fakta / Hasil Pemeriksaan</th>
-                            <th style="width:20%;">Sumber / Bukti Minimum</th>
+                            <th style="width:10%;">Kelompok</th>
+                            <th style="width:20%;">Elemen &amp; Standar Bukti</th>
+                            <th style="width:12%;">Status Baseline</th>
+                            <th style="width:20%;">Fakta / Hasil Pemeriksaan</th>
+                            <th style="width:16%;">Sumber / Bukti Minimum</th>
+                            <th style="width:18%;text-align:center;">Aksi / Tindakan</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -543,6 +674,118 @@ if ($id > 0) {
                                     <textarea name="bukti_<?= $num ?>" rows="2" style="width:100%;font-size:11px;" placeholder="Tautan P2MA / surat / nomor arsip..."><?= h($el['link_sumber_bukti'] ?? '') ?></textarea>
                                 <?php endif; ?>
                             </td>
+                            <!-- Kolom Aksi / Tindakan Khusus Elemen -->
+                            <td style="text-align:center;vertical-align:middle;">
+                                <?php if ($num === 1): // IDENTITAS: fitur upload file pdf ?>
+                                    <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
+                                        <?php 
+                                            $pdfPath = $el['link_sumber_bukti'] ?: ($mitra['file_naskah'] ?? '');
+                                            if ($pdfPath && file_exists(__DIR__ . '/' . $pdfPath)): 
+                                        ?>
+                                            <a href="<?= h($pdfPath) ?>" target="_blank" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📄 Lihat PDF</a>
+                                        <?php endif; ?>
+                                        <?php if (!$isLocked && $canEdit): ?>
+                                            <button type="button" onclick="openUploadModal(1, 'Identitas Naskah')" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📤 Upload PDF</button>
+                                        <?php endif; ?>
+                                    </div>
+
+                                <?php elseif ($num === 3): // SUBSTANSI: fitur upload file pdf ?>
+                                    <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
+                                        <?php if (!empty($el['link_sumber_bukti']) && file_exists(__DIR__ . '/' . $el['link_sumber_bukti'])): ?>
+                                            <a href="<?= h($el['link_sumber_bukti']) ?>" target="_blank" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📄 Lihat PDF</a>
+                                        <?php endif; ?>
+                                        <?php if (!$isLocked && $canEdit): ?>
+                                            <button type="button" onclick="openUploadModal(3, 'Dokumen Ruang Lingkup')" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📤 Upload PDF</button>
+                                        <?php endif; ?>
+                                    </div>
+
+                                <?php elseif ($num === 7): // PIC internal: fitur update data PIC internal ?>
+                                    <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
+                                        <?php if (!empty($mitra['pic_internal'])): ?>
+                                            <div style="font-size:11px;color:#1e40af;font-weight:600;max-width:140px;"><?= h(singkat($mitra['pic_internal'], 28)) ?></div>
+                                        <?php endif; ?>
+                                        <?php if (!$isLocked && $canEdit): ?>
+                                            <button type="button" onclick="openPicModal('internal')" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;display:inline-flex;align-items:center;gap:3px;">
+                                                👤 Update PIC
+                                            </button>
+                                        <?php endif; ?>
+                                    </div>
+
+                                <?php elseif ($num === 8): // PIC mitra: fitur update data PIC mitra ?>
+                                    <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
+                                        <?php if (!empty($mitra['pic_mitra'])): ?>
+                                            <div style="font-size:11px;color:#1e40af;font-weight:600;max-width:140px;"><?= h(singkat($mitra['pic_mitra'], 28)) ?></div>
+                                        <?php endif; ?>
+                                        <?php if (!$isLocked && $canEdit): ?>
+                                            <button type="button" onclick="openPicModal('mitra')" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;display:inline-flex;align-items:center;gap:3px;">
+                                                🤝 Update PIC
+                                            </button>
+                                        <?php endif; ?>
+                                    </div>
+
+                                <?php elseif ($num === 9): // TINDAK LANJUT: fitur upload multiple pdf ?>
+                                    <div style="display:flex;flex-direction:column;gap:3px;align-items:center;">
+                                        <?php 
+                                            $tlFiles = [];
+                                            if (!empty($el['link_sumber_bukti'])) {
+                                                $decoded = json_decode($el['link_sumber_bukti'], true);
+                                                if (is_array($decoded)) {
+                                                    $tlFiles = $decoded;
+                                                } elseif (str_contains($el['link_sumber_bukti'], ';')) {
+                                                    $tlFiles = explode(';', $el['link_sumber_bukti']);
+                                                } elseif (str_ends_with(strtolower($el['link_sumber_bukti']), '.pdf')) {
+                                                    $tlFiles = [$el['link_sumber_bukti']];
+                                                }
+                                            }
+                                            foreach ($tlFiles as $idxF => $fPath):
+                                                $fName = basename(trim($fPath));
+                                        ?>
+                                            <a href="<?= h(trim($fPath)) ?>" target="_blank" class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 5px;margin-bottom:2px;">
+                                                📄 <?= h(singkat($fName, 16)) ?>
+                                            </a>
+                                        <?php endforeach; ?>
+                                        <?php if (!$isLocked && $canEdit): ?>
+                                            <button type="button" onclick="openUploadMultipleModal(9, 'Dokumen Rencana Tindak Lanjut')" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">
+                                                📤 Upload PDF (Multi)
+                                            </button>
+                                        <?php endif; ?>
+                                    </div>
+
+                                <?php elseif ($num === 10): // PELAKSANAAN: terbaca "(angka) Kegiatan" dari menu Tindak Lanjut ?>
+                                    <div>
+                                        <span class="badge badge-<?= $kegiatanCount > 0 ? 'success' : 'secondary' ?>" style="font-size:11.5px;font-weight:700;padding:4px 8px;">
+                                            <?= $kegiatanCount ?> Kegiatan
+                                        </span>
+                                        <div class="muted" style="font-size:10px;margin-top:2px;">Dari Tindak Lanjut</div>
+                                    </div>
+
+                                <?php elseif ($num === 11): // EVIDEN: jika terdapat kegiatan, tampilkan tombol ke menu Tindak Lanjut ?>
+                                    <div>
+                                        <?php if ($kegiatanCount > 0): ?>
+                                            <a href="tindak_lanjut.php?mitra_id=<?= $id ?>" target="_blank" class="btn btn-primary btn-sm" style="font-size:10.5px;display:inline-flex;align-items:center;gap:3px;padding:3px 6px;">
+                                                📂 Buka Tindak Lanjut &rarr;
+                                            </a>
+                                        <?php else: ?>
+                                            <a href="tindak_lanjut.php" target="_blank" class="btn btn-outline btn-sm" style="font-size:10px;color:#64748b;padding:2px 5px;">
+                                                + Tambah Kegiatan
+                                            </a>
+                                        <?php endif; ?>
+                                    </div>
+
+                                <?php elseif ($num === 12): // HAMBATAN: fitur upload file pdf ?>
+                                    <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
+                                        <?php if (!empty($el['link_sumber_bukti']) && file_exists(__DIR__ . '/' . $el['link_sumber_bukti'])): ?>
+                                            <a href="<?= h($el['link_sumber_bukti']) ?>" target="_blank" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📄 Lihat PDF</a>
+                                        <?php endif; ?>
+                                        <?php if (!$isLocked && $canEdit): ?>
+                                            <button type="button" onclick="openUploadModal(12, 'Dokumen Kendala / Gap')" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📤 Upload PDF</button>
+                                        <?php endif; ?>
+                                    </div>
+
+                                <?php else: ?>
+                                    <span class="muted" style="font-size:11px;">-</span>
+                                <?php endif; ?>
+                            </td>
                         </tr>
                         <?php endfor; ?>
                     </tbody>
@@ -557,6 +800,123 @@ if ($id > 0) {
             <?php endif; ?>
         </div>
     </form>
+
+    <!-- Modal Upload Single PDF (Elemen 1, 3, 12) -->
+    <div id="modalUploadSingle" class="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:999;overflow:auto;">
+        <div style="background:#fff;max-width:480px;margin:80px auto;padding:20px;border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,0.15);">
+            <div class="flex-between" style="margin-bottom:12px;">
+                <h3 id="modalSingleTitle" style="margin:0;font-size:16px;color:#1e40af;">Upload Berkas PDF</h3>
+                <button type="button" onclick="document.getElementById('modalUploadSingle').style.display='none'" style="background:none;border:none;font-size:18px;cursor:pointer;">&times;</button>
+            </div>
+            <form method="post" enctype="multipart/form-data">
+                <input type="hidden" name="action" value="upload_baseline_pdf">
+                <input type="hidden" id="modalSingleElemen" name="elemen_nomor" value="1">
+                <div class="field" style="margin-bottom:16px;">
+                    <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;">Pilih File Dokumen (.PDF) *</label>
+                    <input type="file" name="pdf_file" accept=".pdf" required style="width:100%;font-size:12.5px;">
+                    <div class="muted" style="font-size:11px;margin-top:4px;">Wajib format .PDF resmi bertanda tangan.</div>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                    <button type="button" onclick="document.getElementById('modalUploadSingle').style.display='none'" class="btn btn-outline btn-sm">Batal</button>
+                    <button type="submit" class="btn btn-primary btn-sm">📤 Unggah PDF</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Upload Multiple PDF (Elemen 9: Tindak Lanjut) -->
+    <div id="modalUploadMulti" class="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:999;overflow:auto;">
+        <div style="background:#fff;max-width:520px;margin:80px auto;padding:20px;border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,0.15);">
+            <div class="flex-between" style="margin-bottom:12px;">
+                <h3 style="margin:0;font-size:16px;color:#1e40af;">Upload Dokumen Tindak Lanjut (Bisa Multiple PDF)</h3>
+                <button type="button" onclick="document.getElementById('modalUploadMulti').style.display='none'" style="background:none;border:none;font-size:18px;cursor:pointer;">&times;</button>
+            </div>
+            <p style="font-size:12px;color:#475569;margin-top:0;">
+                Anda dapat memilih satu atau beberapa file PDF sekaligus. Sistem mendukung dokumen berukuran besar hingga 50 MB tanpa perlu menggabungkan secara manual.
+            </p>
+            <form method="post" enctype="multipart/form-data">
+                <input type="hidden" name="action" value="upload_baseline_pdf">
+                <input type="hidden" name="elemen_nomor" value="9">
+                <div class="field" style="margin-bottom:16px;">
+                    <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;">Pilih File PDF (Multiple) *</label>
+                    <input type="file" name="pdf_files[]" multiple accept=".pdf" required style="width:100%;font-size:12.5px;">
+                    <div class="muted" style="font-size:11px;margin-top:4px;">Gunakan tombol Ctrl atau Shift untuk memilih lebih dari 1 file PDF.</div>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                    <button type="button" onclick="document.getElementById('modalUploadMulti').style.display='none'" class="btn btn-outline btn-sm">Batal</button>
+                    <button type="submit" class="btn btn-primary btn-sm">📤 Unggah Dokumen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Update PIC (Elemen 7: Internal & Elemen 8: Mitra) -->
+    <div id="modalUpdatePic" class="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:999;overflow:auto;">
+        <div style="background:#fff;max-width:520px;margin:60px auto;padding:22px;border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,0.15);">
+            <div class="flex-between" style="margin-bottom:14px;">
+                <h3 id="modalPicTitle" style="margin:0;font-size:16px;color:#1e40af;">Update Data PIC</h3>
+                <button type="button" onclick="document.getElementById('modalUpdatePic').style.display='none'" style="background:none;border:none;font-size:18px;cursor:pointer;">&times;</button>
+            </div>
+            <form method="post">
+                <input type="hidden" name="action" value="update_pic">
+                <input type="hidden" id="modalPicType" name="pic_type" value="internal">
+                <div class="field" style="margin-bottom:12px;">
+                    <label id="lblNamaPic" style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Nama Lengkap PIC *</label>
+                    <input type="text" id="picNama" name="nama_pic" required style="width:100%;padding:6px 8px;font-size:12.5px;border:1px solid #cbd5e1;border-radius:4px;">
+                </div>
+                <div class="field" style="margin-bottom:12px;">
+                    <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Jabatan</label>
+                    <input type="text" id="picJabatan" name="jabatan_pic" style="width:100%;padding:6px 8px;font-size:12.5px;border:1px solid #cbd5e1;border-radius:4px;">
+                </div>
+                <div class="field" style="margin-bottom:12px;">
+                    <label id="lblUnitPic" style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Unit Kerja / Instansi</label>
+                    <input type="text" id="picUnit" name="unit_pic" style="width:100%;padding:6px 8px;font-size:12.5px;border:1px solid #cbd5e1;border-radius:4px;">
+                </div>
+                <div class="field" style="margin-bottom:12px;">
+                    <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Nomor Kontak / WhatsApp</label>
+                    <input type="text" id="picKontak" name="kontak_pic" placeholder="08xxxxxxxxxx" style="width:100%;padding:6px 8px;font-size:12.5px;border:1px solid #cbd5e1;border-radius:4px;">
+                </div>
+                <div class="field" style="margin-bottom:16px;">
+                    <label id="lblSkPic" style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Dasar Penetapan (SK / ND / Surat Resmi)</label>
+                    <input type="text" id="picSk" name="sk_pic" placeholder="Nomor SK / Dasar Penunjukan" style="width:100%;padding:6px 8px;font-size:12.5px;border:1px solid #cbd5e1;border-radius:4px;">
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                    <button type="button" onclick="document.getElementById('modalUpdatePic').style.display='none'" class="btn btn-outline btn-sm">Batal</button>
+                    <button type="submit" class="btn btn-primary btn-sm">💾 Simpan Data PIC</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    function openUploadModal(elemenNo, label) {
+        document.getElementById('modalSingleElemen').value = elemenNo;
+        document.getElementById('modalSingleTitle').innerText = 'Upload ' + label + ' (.PDF)';
+        document.getElementById('modalUploadSingle').style.display = 'block';
+    }
+
+    function openUploadMultipleModal(elemenNo, label) {
+        document.getElementById('modalUploadMulti').style.display = 'block';
+    }
+
+    function openPicModal(type) {
+        document.getElementById('modalPicType').value = type;
+        if (type === 'internal') {
+            document.getElementById('modalPicTitle').innerText = 'Update Data PIC Internal (Kanwil Kepri)';
+            document.getElementById('lblNamaPic').innerText = 'Nama PIC Internal *';
+            document.getElementById('lblUnitPic').innerText = 'Divisi / Subbagian Internal';
+            document.getElementById('lblSkPic').innerText = 'Dasar Penunjukan (Nomor SK / Nota Dinas)';
+            document.getElementById('picNama').value = '<?= addslashes($mitra['pic_internal'] ?? '') ?>';
+        } else {
+            document.getElementById('modalPicTitle').innerText = 'Update Data PIC Mitra Kerja Sama';
+            document.getElementById('lblNamaPic').innerText = 'Nama PIC Mitra *';
+            document.getElementById('lblUnitPic').innerText = 'Instansi / Lembaga Mitra';
+            document.getElementById('lblSkPic').innerText = 'Surat Tugas / Konfirmasi Resmi Mitra';
+            document.getElementById('picNama').value = '<?= addslashes($mitra['pic_mitra'] ?? '') ?>';
+        }
+        document.getElementById('modalUpdatePic').style.display = 'block';
+    }
+    </script>
 
     <?php
     require __DIR__ . '/includes/footer.php';

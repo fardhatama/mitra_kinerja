@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
     $password = $_POST['password'] ?? '';
     $role = $_POST['role'] ?? '';
 
-    if ($nama === '' || $username === '' || strlen($password) < 6 || !in_array($role, ['admin','pemeriksa','validator','pimpinan'], true)) {
+    if ($nama === '' || $username === '' || strlen($password) < 6 || !in_array($role, ['admin','pemeriksa','validator','pimpinan','pengampu','pic'], true)) {
         $errors[] = 'Lengkapi semua kolom. Password minimal 6 karakter.';
     } else {
         try {
@@ -62,6 +62,8 @@ require __DIR__ . '/includes/header.php';
                     <option value="pemeriksa">Pemeriksa</option>
                     <option value="validator">Validator</option>
                     <option value="pimpinan">Pimpinan</option>
+                    <option value="pengampu">Pengampu</option>
+                    <option value="pic">PIC Kerja Sama</option>
                     <option value="admin">Admin</option>
                 </select>
             </div>

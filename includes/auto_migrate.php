@@ -122,12 +122,16 @@ function ensureDatabaseSchema(PDO $pdo): void {
 
             // Add missing columns to mitra_kinerja safely
             $alterQueries = [
+                "ALTER TABLE users MODIFY COLUMN role ENUM('admin','pemeriksa','validator','pimpinan','pengampu','pic') NOT NULL",
+                "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS bidang ENUM('AHU', 'KI', 'P3H', 'PPL', 'Keuangan', 'Humas', 'SDM') NULL DEFAULT 'AHU' AFTER jenis",
                 "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS pks_induk_id INT NULL AFTER jenis",
                 "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS baseline_status ENUM('BELUM DIISI', 'DALAM PROSES', 'TERVERIFIKASI / DIKUNCI') NOT NULL DEFAULT 'BELUM DIISI' AFTER status_tanggal",
                 "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS baseline_locked_at DATETIME NULL AFTER baseline_status",
                 "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS baseline_locked_by INT NULL AFTER baseline_locked_at",
                 "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS baseline_pemeriksa VARCHAR(255) NULL AFTER baseline_locked_by",
                 "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS baseline_catatan_ringkasan TEXT NULL AFTER baseline_pemeriksa",
+                "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS pic_internal VARCHAR(255) NULL AFTER sumber_baseline",
+                "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS pic_mitra VARCHAR(255) NULL AFTER pic_internal",
                 "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS posisi_portofolio ENUM('BELUM DAPAT DITENTUKAN','AKTIF','OUTPUT TERSEDIA','OUTCOME TERBENTUK','BERDAMPAK') NOT NULL DEFAULT 'BELUM DAPAT DITENTUKAN' AFTER status_scorecard",
                 "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS rekomendasi ENUM('BELUM DITENTUKAN','LANJUT','PERBAIKI','PERPANJANG','REPLIKASI','HENTIKAN') NOT NULL DEFAULT 'BELUM DITENTUKAN' AFTER posisi_portofolio",
                 "ALTER TABLE indikator_skor ADD COLUMN IF NOT EXISTS kondisi_baseline TEXT NULL AFTER referensi_baseline",
@@ -136,6 +140,14 @@ function ensureDatabaseSchema(PDO $pdo): void {
             foreach ($alterQueries as $q) {
                 try { $pdo->exec($q); } catch (Throwable $e) {}
             }
+
+            // Ensure demo users exist
+            try {
+                $hashPengampu = password_hash('pengampu123', PASSWORD_BCRYPT);
+                $hashPic = password_hash('pic123', PASSWORD_BCRYPT);
+                $pdo->exec("INSERT INTO users (nama, username, password_hash, role, aktif) VALUES ('Unit Pengampu (Divisi/Bagian)', 'pengampu', '{$hashPengampu}', 'pengampu', 1) ON DUPLICATE KEY UPDATE role='pengampu'");
+                $pdo->exec("INSERT INTO users (nama, username, password_hash, role, aktif) VALUES ('PIC Operasional Kerja Sama', 'pic', '{$hashPic}', 'pic', 1) ON DUPLICATE KEY UPDATE role='pic'");
+            } catch (Throwable $e) {}
         }
     } catch (Throwable $e) {
         error_log('ensureDatabaseSchema error: ' . $e->getMessage());

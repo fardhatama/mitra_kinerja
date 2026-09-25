@@ -21,16 +21,16 @@ $icons = [
 $role = $user['role'] ?? 'pemeriksa';
 
 $allNavItems = [
-    ['page' => 'dashboard',      'label' => 'Dashboard',         'roles' => ['admin','pemeriksa','validator','pimpinan']],
-    ['page' => 'gate0',          'label' => 'Gate 0 (Pra-PKS)',  'roles' => ['admin','pemeriksa','pimpinan']],
-    ['page' => 'portofolio',     'label' => 'Portofolio',        'roles' => ['admin','pemeriksa','validator','pimpinan']],
-    ['page' => 'mitra_manage',   'label' => 'Manajemen Naskah',  'roles' => ['admin','pemeriksa']],
-    ['page' => 'baseline',       'label' => 'Baseline',          'roles' => ['admin','pemeriksa','validator','pimpinan']],
-    ['page' => 'scorecard',      'label' => 'Scorecard',         'roles' => ['admin','pemeriksa','validator','pimpinan']],
+    ['page' => 'dashboard',      'label' => 'Dashboard',         'roles' => ['admin','pemeriksa','validator','pimpinan','pengampu','pic']],
+    ['page' => 'gate0',          'label' => 'Gate 0 (Pra-PKS)',  'roles' => ['admin','pemeriksa','pimpinan','pengampu']],
+    ['page' => 'portofolio',     'label' => 'Portofolio',        'roles' => ['admin','pemeriksa','validator','pimpinan','pengampu','pic']],
+    ['page' => 'mitra_manage',   'label' => 'Manajemen Naskah',  'roles' => ['admin','pemeriksa','pengampu']],
+    ['page' => 'baseline',       'label' => 'Baseline',          'roles' => ['admin','pemeriksa','validator','pimpinan','pengampu','pic']],
+    ['page' => 'scorecard',      'label' => 'Scorecard',         'roles' => ['admin','pemeriksa','validator','pimpinan','pengampu','pic']],
     ['page' => 'mitra_validasi', 'label' => 'Validasi Naskah',   'roles' => ['admin','validator']],
-    ['page' => 'early_warning',  'label' => 'Early Warning',     'roles' => ['admin','pemeriksa','validator','pimpinan']],
-    ['page' => 'tindak_lanjut',  'label' => 'Tindak Lanjut',     'roles' => ['admin','pemeriksa','validator','pimpinan']],
-    ['page' => 'laporan',        'label' => 'Laporan',           'roles' => ['admin','pemeriksa','validator','pimpinan']],
+    ['page' => 'early_warning',  'label' => 'Early Warning',     'roles' => ['admin','pemeriksa','validator','pimpinan','pengampu','pic']],
+    ['page' => 'tindak_lanjut',  'label' => 'Tindak Lanjut',     'roles' => ['admin','pemeriksa','validator','pimpinan','pengampu','pic']],
+    ['page' => 'laporan',        'label' => 'Laporan',           'roles' => ['admin','pemeriksa','validator','pimpinan','pengampu','pic']],
 ];
 
 $navItems = array_filter($allNavItems, fn($n) => in_array($role, $n['roles'], true));
