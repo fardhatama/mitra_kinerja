@@ -145,8 +145,9 @@ function ensureDatabaseSchema(PDO $pdo): void {
             try {
                 $hashPengampu = password_hash('pengampu123', PASSWORD_BCRYPT);
                 $hashPic = password_hash('pic123', PASSWORD_BCRYPT);
-                $pdo->exec("INSERT INTO users (nama, username, password_hash, role, aktif) VALUES ('Unit Pengampu (Divisi/Bagian)', 'pengampu', '{$hashPengampu}', 'pengampu', 1) ON DUPLICATE KEY UPDATE role='pengampu'");
-                $pdo->exec("INSERT INTO users (nama, username, password_hash, role, aktif) VALUES ('PIC Operasional Kerja Sama', 'pic', '{$hashPic}', 'pic', 1) ON DUPLICATE KEY UPDATE role='pic'");
+                $stmtUser = $pdo->prepare("INSERT INTO users (nama, username, password_hash, role, aktif) VALUES (?, ?, ?, ?, 1) ON DUPLICATE KEY UPDATE role = VALUES(role)");
+                $stmtUser->execute(['Unit Pengampu (Divisi/Bagian)', 'pengampu', $hashPengampu, 'pengampu']);
+                $stmtUser->execute(['PIC Operasional Kerja Sama', 'pic', $hashPic, 'pic']);
             } catch (Throwable $e) {}
         }
     } catch (Throwable $e) {

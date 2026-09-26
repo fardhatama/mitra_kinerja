@@ -362,23 +362,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST['action'])) {
             }
 
             // Inisialisasi 12 Elemen Baseline FIX
-            $b12Defs = [
-                1 => ['kelompok' => 'IDENTITAS', 'nama' => 'Identitas naskah', 'sumber' => 'Naskah bertanda tangan; P2MA sebagai pembanding.'],
-                2 => ['kelompok' => 'MASA BERLAKU', 'nama' => 'Masa berlaku', 'sumber' => 'Klausul jangka waktu; halaman tanda tangan; P2MA.'],
-                3 => ['kelompok' => 'SUBSTANSI', 'nama' => 'Ruang lingkup', 'sumber' => 'Pasal ruang lingkup/hak-kewajiban; lampiran.'],
-                4 => ['kelompok' => 'TATA KELOLA', 'nama' => 'Status arsip', 'sumber' => 'Arsip resmi; register; folder organisasi.'],
-                5 => ['kelompok' => 'TATA KELOLA', 'nama' => 'Status P2MA', 'sumber' => 'P2MA dan naskah bertanda tangan.'],
-                6 => ['kelompok' => 'PENGAMPU', 'nama' => 'Unit pengampu', 'sumber' => 'ND/SK/pembagian tugas; konfirmasi tertulis unit.'],
-                7 => ['kelompok' => 'PIC', 'nama' => 'PIC internal', 'sumber' => 'ND/SK/daftar PIC; konfirmasi tertulis unit.'],
-                8 => ['kelompok' => 'PIC', 'nama' => 'PIC mitra', 'sumber' => 'Surat/email/form konfirmasi resmi dari mitra.'],
-                9 => ['kelompok' => 'TINDAK LANJUT', 'nama' => 'Rencana tindak lanjut', 'sumber' => 'Rencana aksi; matriks kerja; kalender; notula.'],
-                10 => ['kelompok' => 'PELAKSANAAN', 'nama' => 'Pelaksanaan dan hasil', 'sumber' => 'Laporan; undangan; notula; daftar hadir; data hasil.'],
-                11 => ['kelompok' => 'EVIDEN', 'nama' => 'Eviden implementasi', 'sumber' => 'Folder resmi; indeks bukti; dokumen/data kegiatan.'],
-                12 => ['kelompok' => 'HAMBATAN', 'nama' => 'Hambatan/gap', 'sumber' => 'Konfirmasi unit/PIC/mitra; notula; laporan; bukti keterlambatan.']
-            ];
-            foreach ($b12Defs as $n => $d) {
-                $pdo->prepare('INSERT INTO baseline_elemen (mitra_id, nomor_elemen, kelompok, nama_elemen, status, sumber_minimum) VALUES (?, ?, ?, ?, \'BELUM DIISI\', ?)')
-                    ->execute([$mid, $n, $d['kelompok'], $d['nama'], $d['sumber']]);
+            foreach (BASELINE_12_DEFS as $n => $d) {
+                $pdo->prepare('INSERT INTO baseline_elemen (mitra_id, nomor_elemen, kelompok, nama_elemen, yang_diperiksa, sumber_bukti_minimum, status) VALUES (?, ?, ?, ?, ?, ?, \'BELUM DIISI\')')
+                    ->execute([$mid, $n, $d['kelompok'], $d['nama'], $d['yang_diperiksa'], $d['sumber_minimum']]);
             }
 
             foreach (['Masa berlaku','Aktivitas/tenggat','Data/eviden','PIC'] as $d) { $pdo->prepare("INSERT INTO early_warning (mitra_id,dimensi,status,progres) VALUES (?,?,'V0','BELUM MULAI')")->execute([$mid,$d]); }

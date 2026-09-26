@@ -15,81 +15,8 @@ $view = $_GET['view'] ?? 'ledger';
 $errors = [];
 $success = '';
 
-/* ── DEFINISI 12 ELEMEN BASELINE FIX (BAB IV PEDOMAN) ─────── */
-const BASELINE_12_DEFS = [
-    1 => [
-        'kelompok' => 'IDENTITAS',
-        'nama' => 'Identitas naskah',
-        'yang_diperiksa' => 'Jenis, seluruh nomor para pihak, judul, dan nama resmi mitra sesuai naskah.',
-        'sumber_minimum' => 'Naskah bertanda tangan; P2MA sebagai pembanding.'
-    ],
-    2 => [
-        'kelompok' => 'MASA BERLAKU',
-        'nama' => 'Masa berlaku',
-        'yang_diperiksa' => 'Tanggal efektif, durasi, dan tanggal berakhir sesuai klausul naskah.',
-        'sumber_minimum' => 'Klausul jangka waktu; halaman tanda tangan; P2MA.'
-    ],
-    3 => [
-        'kelompok' => 'SUBSTANSI',
-        'nama' => 'Ruang lingkup',
-        'yang_diperiksa' => 'Ruang kerja, kewajiban, atau kegiatan utama yang disepakati.',
-        'sumber_minimum' => 'Pasal ruang lingkup/hak-kewajiban; lampiran.'
-    ],
-    4 => [
-        'kelompok' => 'TATA KELOLA',
-        'nama' => 'Status arsip',
-        'yang_diperiksa' => 'Ketersediaan naskah lengkap pada lokasi arsip resmi dan dapat ditemukan kembali.',
-        'sumber_minimum' => 'Arsip resmi; register; folder organisasi.'
-    ],
-    5 => [
-        'kelompok' => 'TATA KELOLA',
-        'nama' => 'Status P2MA',
-        'yang_diperiksa' => 'Keberadaan entri dan kesesuaian metadata P2MA dengan naskah resmi.',
-        'sumber_minimum' => 'P2MA dan naskah bertanda tangan.'
-    ],
-    6 => [
-        'kelompok' => 'PENGAMPU',
-        'nama' => 'Unit pengampu',
-        'yang_diperiksa' => 'Unit internal yang bertanggung jawab atas substansi dan implementasi kerja sama.',
-        'sumber_minimum' => 'ND/SK/pembagian tugas; konfirmasi tertulis unit.'
-    ],
-    7 => [
-        'kelompok' => 'PIC',
-        'nama' => 'PIC internal',
-        'yang_diperiksa' => 'PIC utama dan cadangan yang aktif, lengkap dengan jabatan, kontak, dan dasar penetapan.',
-        'sumber_minimum' => 'ND/SK/daftar PIC; konfirmasi tertulis unit.'
-    ],
-    8 => [
-        'kelompok' => 'PIC',
-        'nama' => 'PIC mitra',
-        'yang_diperiksa' => 'Penghubung operasional pihak mitra yang telah dikonfirmasi.',
-        'sumber_minimum' => 'Surat/email/form konfirmasi resmi dari mitra.'
-    ],
-    9 => [
-        'kelompok' => 'TINDAK LANJUT',
-        'nama' => 'Rencana tindak lanjut',
-        'yang_diperiksa' => 'Dokumen atau komitmen operasional yang memuat kegiatan, periode, target, dan/atau PIC.',
-        'sumber_minimum' => 'Rencana aksi; matriks kerja; kalender; notula.'
-    ],
-    10 => [
-        'kelompok' => 'PELAKSANAAN',
-        'nama' => 'Pelaksanaan dan hasil',
-        'yang_diperiksa' => 'Kegiatan aktual, realisasi terhadap target jatuh tempo, serta output yang dihasilkan.',
-        'sumber_minimum' => 'Laporan; undangan; notula; daftar hadir; data hasil.'
-    ],
-    11 => [
-        'kelompok' => 'EVIDEN',
-        'nama' => 'Eviden implementasi',
-        'yang_diperiksa' => 'Bukti pelaksanaan/output, lokasi penyimpanan, dan tingkat keteraturannya.',
-        'sumber_minimum' => 'Folder resmi; indeks bukti; dokumen/data kegiatan.'
-    ],
-    12 => [
-        'kelompok' => 'HAMBATAN',
-        'nama' => 'Hambatan/gap',
-        'yang_diperiksa' => 'Kendala faktual atau kekosongan data yang memengaruhi implementasi dan sudah dikonfirmasi.',
-        'sumber_minimum' => 'Konfirmasi unit/PIC/mitra; notula; laporan; bukti keterlambatan.'
-    ]
-];
+/* ── DEFINISI 12 ELEMEN BASELINE FIX (DEFINED IN INCLUDES/FUNCTIONS.PHP) ─────── */
+$b12Defs = BASELINE_12_DEFS;
 
 /* ── POST HANDLERS UNTUK DETAIL NASKAH ───────────────────── */
 if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -360,6 +287,24 @@ if ($id > 0) {
         $elemenData[(int)$r['nomor_elemen']] = $r;
     }
 
+    // Self-healing: pastikan ke-12 elemen ada di database
+    for ($i = 1; $i <= 12; $i++) {
+        if (!isset($elemenData[$i])) {
+            $def = BASELINE_12_DEFS[$i];
+            $pdo->prepare('INSERT INTO baseline_elemen (mitra_id, nomor_elemen, kelompok, nama_elemen, yang_diperiksa, sumber_bukti_minimum, status) VALUES (?, ?, ?, ?, ?, ?, \'BELUM DIISI\') ON DUPLICATE KEY UPDATE id=id')
+                ->execute([$id, $i, $def['kelompok'], $def['nama'], $def['yang_diperiksa'], $def['sumber_minimum']]);
+            $elemenData[$i] = [
+                'mitra_id' => $id,
+                'nomor_elemen' => $i,
+                'kelompok' => $def['kelompok'],
+                'nama_elemen' => $def['nama'],
+                'status' => 'BELUM DIISI',
+                'fakta_pemeriksaan' => '',
+                'link_sumber_bukti' => ''
+            ];
+        }
+    }
+
     // Hitung status kelengkapan
     $countVerified = 0;
     $countFilled = 0;
@@ -422,9 +367,9 @@ if ($id > 0) {
             <table style="margin-bottom:14px;">
                 <tr><th style="width:25%;">Kode &amp; Mitra</th><td><strong><?= h($mitra['kode']) ?></strong> &mdash; <?= h($mitra['nama_mitra']) ?></td><th style="width:20%;">Portofolio</th><td><?= h($mitra['portofolio']) ?></td></tr>
                 <tr><th>Judul Kerja Sama</th><td colspan="3"><?= h($mitra['judul']) ?></td></tr>
-                <tr><th>Jenis &amp; Masa Berlaku</th><td><?= h($mitra['jenis']) ?> (<?= formatTanggal($mitra['tanggal_mulai']) ?> s.d. <?= formatTanggal($mitra['tanggal_berakhir']) ?>)</td><th>Status Tanggal</th><td><?= h($mitra['status_tanggal']) ?></td></tr>
+                <tr><th>Bidang &amp; Bentuk Naskah</th><td><strong><?= h($mitra['bidang'] ?? 'AHU') ?></strong> &mdash; <?= h($mitra['jenis']) ?> (<?= formatTanggal($mitra['tanggal_mulai']) ?> s.d. <?= formatTanggal($mitra['tanggal_berakhir']) ?>)</td><th>Status Tanggal</th><td><?= h($mitra['status_tanggal']) ?></td></tr>
                 <tr><th>Tanggal Cut-off Baseline</th><td><strong><?= formatTanggal($mitra['cutoff_date']) ?></strong></td><th>Status Kunci</th><td><strong><?= h($mitra['baseline_status']) ?></strong> <?= $mitra['baseline_locked_at'] ? '(' . formatTanggal($mitra['baseline_locked_at']) . ')' : '' ?></td></tr>
-                <tr><th>Pemeriksa Baseline</th><td><?= h($mitra['baseline_pemeriksa'] ?? 'Tim Penilai') ?></td><th>Sumber Rujukan</th><td><?= h($mitra['sumber_baseline'] ?? 'P2MA Kemenkumham') ?></td></tr>
+                <tr><th>Pemeriksa Baseline</th><td><?= h($mitra['baseline_pemeriksa'] ?? 'Tim Penilai') ?></td><th>Sumber Rujukan</th><td><?= h($mitra['sumber_baseline'] ?? 'P2MA Kementerian Hukum') ?></td></tr>
             </table>
 
             <table>
@@ -469,7 +414,7 @@ if ($id > 0) {
                     <div>Unit Pengampu / PIC,</div>
                     <div style="height:60px;"></div>
                     <div style="font-weight:700;text-decoration:underline;">Pejabat Pemangku Kegiatan</div>
-                    <div class="muted">Kanwil Kemenkumham Kepri</div>
+                    <div class="muted">Kanwil Kementerian Hukum Kepri</div>
                 </div>
                 <div>
                     <div>Pemeriksa / Verifikator,</div>
@@ -592,7 +537,7 @@ if ($id > 0) {
                 </div>
                 <div class="field">
                     <label>Sumber Baseline Utama</label>
-                    <input type="text" name="sumber_baseline" value="<?= h($mitra['sumber_baseline'] ?? 'P2MA Kemenkumham RI') ?>" placeholder="P2MA / Berkas Fisik" <?= $isLocked || !$canEdit ? 'disabled' : '' ?>>
+                    <input type="text" name="sumber_baseline" value="<?= h($mitra['sumber_baseline'] ?? 'P2MA Kementerian Hukum RI') ?>" placeholder="P2MA / Berkas Fisik" <?= $isLocked || !$canEdit ? 'disabled' : '' ?>>
                 </div>
                 <div class="field" style="grid-column:1/-1;">
                     <label>Catatan Ringkasan Kondisi Awal</label>

@@ -196,7 +196,7 @@ def build_gate0_data(tipe="Dalam Negeri", no_usulan="PRA-DN-001", mitra_sample="
     # Bagian II: 18 Pertanyaan Uji
     data.append({'is_section': True, 'text': 'BAGIAN II: UJI KELAYAKAN 5 KRITERIA (18 PERTANYAAN EVALUASI)'})
     questions = [
-        ('Q1', 'K1.1: Kesesuaian dengan tugas pokok dan fungsi (Tusi) Kementerian Hukum dan HAM', 'YA', 'Sesuai Renstra Kanwil Kemenkumham Kepri'),
+        ('Q1', 'K1.1: Kesesuaian dengan tugas pokok dan fungsi (Tusi) Kementerian Hukum', 'YA', 'Sesuai Renstra Kanwil Kementerian Hukum Kepri'),
         ('Q2', 'K1.2: Kesesuaian dengan sasaran kinerja organisasi dan prioritas wilayah', 'YA', 'Mendukung target kinerja BPHN & Kanwil Kepri'),
         ('Q3', 'K1.3: Tidak melampaui batas kewenangan kewilayahan/substansi', 'YA', 'Ruang lingkup dalam batas kewenangan wilayah Kepri'),
         ('Q4', 'K2.1: Terdapat kebutuhan nyata atas pelaksanaan kerja sama', 'YA', 'Kebutuhan nyata akses keadilan masyarakat pesisir'),
@@ -221,13 +221,13 @@ def build_gate0_data(tipe="Dalam Negeri", no_usulan="PRA-DN-001", mitra_sample="
     # Bagian III: 7 Triggers
     data.append({'is_section': True, 'text': 'BAGIAN III: PEMICU KARAKTERISTIK KHUSUS (7 TRIGGERS)'})
     triggers = [
-        ('T1', 'Pemicu 1: Keterlibatan Pihak Asing / Entitas Luar Negeri', 'YA' if tipe == 'Luar Negeri' else 'TIDAK', 'Clearance Biro Hukerma Kemenkumham RI' if tipe == 'Luar Negeri' else 'Tidak ada keterlibatan entitas asing'),
+        ('T1', 'Pemicu 1: Keterlibatan Pihak Asing / Entitas Luar Negeri', 'YA' if tipe == 'Luar Negeri' else 'TIDAK', 'Clearance Biro Hukerma Kementerian Hukum RI' if tipe == 'Luar Negeri' else 'Tidak ada keterlibatan entitas asing'),
         ('T2', 'Pemicu 2: Dampak Keuangan, Aset Negara, atau Pembiayaan Khusus', 'TIDAK', 'Tidak ada pendanaan APBN yang mengikat'),
         ('T3', 'Pemicu 3: Penggunaan Data, Kerahasiaan, atau Sistem Informasi', 'TIDAK', 'Tidak ada integrasi data rahasia'),
         ('T4', 'Pemicu 4: Hak Kekayaan Intelektual (Pemanfaatan Merek, Cipta, Paten)', 'TIDAK', 'Tidak ada komersialisasi KI'),
         ('T5', 'Pemicu 5: Integrasi Teknologi Informasi, Server, atau API', 'TIDAK', 'Tidak menggunakan API server internal'),
         ('T6', 'Pemicu 6: Potensi Risiko Hukum Signifikan atau Isu Sensitif', 'TIDAK', 'Aktivitas pembinaan standar'),
-        ('T7', 'Pemicu 7: Publikasi, Penggunaan Logo, dan Branding Resmi', 'TIDAK', 'Sesuai pedoman humas Kemenkumham')
+        ('T7', 'Pemicu 7: Publikasi, Penggunaan Logo, dan Branding Resmi', 'TIDAK', 'Sesuai pedoman humas Kementerian Hukum')
     ]
     for t_no, t_text, t_ans, t_note in triggers:
         data.append({'no': t_no, 'param': t_text, 'val': t_ans, 'note': t_note})
@@ -236,7 +236,7 @@ def build_gate0_data(tipe="Dalam Negeri", no_usulan="PRA-DN-001", mitra_sample="
     data.append({'is_section': True, 'text': 'BAGIAN IV: CATATAN & HASIL REVIU VERIFIKATOR'})
     data.append({'no': 'C1', 'param': 'Catatan Verifikator', 'val': 'Proposal lengkap dan telah dicek legalitas mitra.', 'note': 'Komentar tim pengelola kerja sama'})
     data.append({'no': 'C2', 'param': 'Gap yang Harus Ditutup', 'val': 'Tidak ada gap material.' if tipe == 'Dalam Negeri' else 'Menunggu surat rekomendasi / clearance hubungan luar negeri.', 'note': 'Syarat perbaikan sebelum penandatanganan'})
-    data.append({'no': 'C3', 'param': 'Unit/Fungsi Reviu Tambahan', 'val': 'Subbagian Humas, RB, dan TI' if tipe == 'Dalam Negeri' else 'Biro Hukerma Kemenkumham RI & Ditjen AHU', 'note': 'Unit verifikator tambahan yang dilibatkan'})
+    data.append({'no': 'C3', 'param': 'Unit/Fungsi Reviu Tambahan', 'val': 'Subbagian Humas, RB, dan TI' if tipe == 'Dalam Negeri' else 'Biro Hukerma Kementerian Hukum RI & Ditjen AHU', 'note': 'Unit verifikator tambahan yang dilibatkan'})
 
     return data
 

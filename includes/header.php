@@ -27,7 +27,7 @@ $allNavItems = [
     ['page' => 'mitra_manage',   'label' => 'Manajemen Naskah',  'roles' => ['admin','pemeriksa','pengampu']],
     ['page' => 'baseline',       'label' => 'Baseline',          'roles' => ['admin','pemeriksa','validator','pimpinan','pengampu','pic']],
     ['page' => 'scorecard',      'label' => 'Scorecard',         'roles' => ['admin','pemeriksa','validator','pimpinan','pengampu','pic']],
-    ['page' => 'mitra_validasi', 'label' => 'Validasi Naskah',   'roles' => ['admin','validator']],
+    ['page' => 'mitra_validasi', 'label' => 'Penilaian',         'roles' => ['admin','pemeriksa','validator']],
     ['page' => 'early_warning',  'label' => 'Early Warning',     'roles' => ['admin','pemeriksa','validator','pimpinan','pengampu','pic']],
     ['page' => 'tindak_lanjut',  'label' => 'Tindak Lanjut',     'roles' => ['admin','pemeriksa','validator','pimpinan','pengampu','pic']],
     ['page' => 'laporan',        'label' => 'Laporan',           'roles' => ['admin','pemeriksa','validator','pimpinan','pengampu','pic']],
@@ -69,7 +69,7 @@ if ($user) {
             </a>
             <?php endif; ?>
         </nav>
-        <div class="sidebar-motto">Kanwil Kemenkumham<br>Kepulauan Riau</div>
+        <div class="sidebar-motto">Kanwil Kementerian Hukum<br>Kepulauan Riau</div>
     </aside>
     <div class="app-content">
         <header class="app-hero">

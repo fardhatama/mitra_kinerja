@@ -194,7 +194,8 @@ require __DIR__ . '/includes/header.php';
     <div class="form-grid">
         <div class="field"><label>Kode</label><input value="<?= h($mitra['kode']) ?>" disabled></div>
         <div class="field"><label>Portofolio</label><input value="<?= h($mitra['portofolio']) ?>" disabled></div>
-        <div class="field"><label>Jenis</label><input value="<?= h($mitra['jenis']) ?>" disabled></div>
+        <div class="field"><label>Bidang</label><input value="<?= h($mitra['bidang'] ?? 'AHU') ?>" disabled></div>
+        <div class="field"><label>Bentuk Naskah</label><input value="<?= h($mitra['jenis']) ?>" disabled></div>
         <div class="field"><label>Mulai</label><input value="<?= formatTanggal($mitra['tanggal_mulai']) ?>" disabled></div>
         <div class="field"><label>Berakhir</label><input value="<?= formatTanggal($mitra['tanggal_berakhir']) ?>" disabled></div>
         <div class="field">

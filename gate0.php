@@ -244,14 +244,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'promo
                 $nextNum = $lastP ? ((int)substr($lastP, 1) + 1) : 11;
                 $newKode = 'P' . str_pad($nextNum, 2, '0', STR_PAD_LEFT);
 
+                // Tentukan Bidang terkait
+                $bidangCandidate = 'AHU';
+                $unitLower = strtolower($pra['unit_pemrakarsa'] . ' ' . ($pra['penanggung_jawab_usulan'] ?? ''));
+                if (str_contains($unitLower, 'kekayaan intelektual') || str_contains($unitLower, ' ki ') || str_contains($unitLower, 'ki')) $bidangCandidate = 'KI';
+                elseif (str_contains($unitLower, 'ham') || str_contains($unitLower, 'p3h')) $bidangCandidate = 'P3H';
+                elseif (str_contains($unitLower, 'peraturan') || str_contains($unitLower, 'perundang') || str_contains($unitLower, 'ppl')) $bidangCandidate = 'PPL';
+                elseif (str_contains($unitLower, 'keuangan')) $bidangCandidate = 'Keuangan';
+                elseif (str_contains($unitLower, 'humas')) $bidangCandidate = 'Humas';
+                elseif (str_contains($unitLower, 'sdm') || str_contains($unitLower, 'kepegawaian')) $bidangCandidate = 'SDM';
+
+                $mulaiPks = $pra['perkiraan_mulai'] ?: date('Y-m-d');
+                $selesaiPks = $pra['perkiraan_selesai'] ?: date('Y-m-d', strtotime('+3 years'));
+
                 // Insert ke mitra_kinerja
                 $stmtM = $pdo->prepare('INSERT INTO mitra_kinerja (
-                    kode, portofolio, nama_mitra, judul, jenis, tanggal_mulai, tanggal_berakhir,
-                    status_tanggal, cutoff_date, sumber_baseline, status_scorecard, posisi_portofolio, rekomendasi
-                ) VALUES (?, \'Pilot Utama\', ?, ?, ?, ?, ?, \'TERVERIFIKASI\', CURDATE(), \'Gate 0 Promoted\', \'BELUM LENGKAP\', \'AKTIF\', \'LANJUT\')');
+                    kode, portofolio, nama_mitra, judul, bidang, jenis, tanggal_mulai, tanggal_berakhir,
+                    status_tanggal, cutoff_date, sumber_baseline, status_scorecard, posisi_portofolio, rekomendasi,
+                    pic_internal
+                ) VALUES (?, \'Pilot Utama\', ?, ?, ?, ?, ?, ?, \'TERVERIFIKASI\', CURDATE(), \'Gate 0 Promoted\', \'BELUM LENGKAP\', \'AKTIF\', \'LANJUT\', ?)');
                 $stmtM->execute([
-                    $newKode, $pra['calon_mitra'], $pra['judul_rencana'], $pra['jenis_naskah'],
-                    $pra['perkiraan_mulai'] ?: date('Y-m-d'), $pra['perkiraan_selesai'] ?: date('Y-m-d', strtotime('+3 years'))
+                    $newKode, $pra['calon_mitra'], $pra['judul_rencana'], $bidangCandidate, $pra['jenis_naskah'],
+                    $mulaiPks, $selesaiPks, $pra['penanggung_jawab_usulan'] ?: $pra['unit_pemrakarsa']
                 ]);
                 $newMitraId = (int)$pdo->lastInsertId();
 
@@ -264,10 +278,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'promo
                     'Rencana Kerja ' . $pra['judul_rencana'],
                     $pra['ruang_lingkup'],
                     $pra['tujuan_singkat'],
-                    $pra['perkiraan_mulai'] ?: date('Y-m-d'),
-                    $pra['perkiraan_selesai'] ?: date('Y-m-d', strtotime('+1 year')),
+                    $mulaiPks,
+                    date('Y-m-d', strtotime($mulaiPks . ' +1 year')),
                     'Disetujui otomatis melalui kelayakan Gate 0'
                 ]);
+
+                // Inisialisasi 12 Elemen Baseline FIX
+                foreach (BASELINE_12_DEFS as $n => $d) {
+                    $faktaInit = '';
+                    $statusInit = 'BELUM DIISI';
+                    if ($n === 1) {
+                        $faktaInit = "Identitas dari Gate 0 ({$pra['nomor_usulan']}): {$pra['calon_mitra']} - {$pra['judul_rencana']}";
+                        $statusInit = 'TERVERIFIKASI';
+                    } elseif ($n === 3) {
+                        $faktaInit = $pra['ruang_lingkup'] ?: 'Ruang lingkup usulan Gate 0 disepakati.';
+                        $statusInit = 'TERVERIFIKASI';
+                    } elseif ($n === 6) {
+                        $faktaInit = "Unit pengampu: {$pra['unit_pemrakarsa']}";
+                        $statusInit = 'TERVERIFIKASI';
+                    } elseif ($n === 7 && !empty($pra['penanggung_jawab_usulan'])) {
+                        $faktaInit = "PIC internal: {$pra['penanggung_jawab_usulan']}";
+                        $statusInit = 'TERVERIFIKASI';
+                    } elseif ($n === 9 && !empty($pra['tujuan_singkat'])) {
+                        $faktaInit = "Tujuan & tindak lanjut: {$pra['tujuan_singkat']}";
+                        $statusInit = 'TERVERIFIKASI';
+                    }
+                    $pdo->prepare('INSERT INTO baseline_elemen (mitra_id, nomor_elemen, kelompok, nama_elemen, yang_diperiksa, sumber_bukti_minimum, status, fakta_pemeriksaan) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+                        ->execute([$newMitraId, $n, $d['kelompok'], $d['nama'], $d['yang_diperiksa'], $d['sumber_minimum'], $statusInit, $faktaInit ?: null]);
+                }
+
+                // Inisialisasi Siklus Monev Berkala
+                $keb = hitungKebutuhanScorecard($mulaiPks, $selesaiPks, 3);
+                if (!empty($keb['milestones'])) {
+                    foreach ($keb['milestones'] as $ms) {
+                        $pdo->prepare('INSERT INTO siklus_monev (mitra_id, siklus_ke, nama_siklus, tanggal_target_evaluasi, status_siklus) VALUES (?, ?, ?, ?, ?)')
+                            ->execute([$newMitraId, $ms['siklus_ke'], $ms['nama'], $ms['target_tgl'], $ms['is_past'] ? 'Perlu Penilaian Segera' : 'Menunggu']);
+                    }
+                }
 
                 // Inisialisasi 7 Indikator V2.1
                 $v2Defaults = [
@@ -889,7 +936,7 @@ if (($view === 'detail' || $view === 'print') && $detailId > 0) {
                 <div>Pengelola Kerja Sama / Verifikator,</div>
                 <div style="height:60px;"></div>
                 <div style="font-weight:700;text-decoration:underline;">Bagian Tata Usaha dan Umum</div>
-                <div class="muted">Kanwil Kemenkumham Kepri</div>
+                <div class="muted">Kanwil Kementerian Hukum Kepri</div>
             </div>
             <div>
                 <div>Kepala Kantor Wilayah,</div>

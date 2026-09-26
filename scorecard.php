@@ -6,6 +6,16 @@ requireLogin();
 $pdo = getDB();
 $all = getAllMitraSummary($pdo);
 
+$user = currentUser();
+$userRole = $user['role'] ?? 'pemeriksa';
+
+$dueSoonMonev = [];
+foreach ($all as $s) {
+    if (!empty($s['monev']['warning_1_bulan'])) {
+        $dueSoonMonev[] = $s;
+    }
+}
+
 $pageTitle = 'Scorecard';
 require __DIR__ . '/includes/header.php';
 ?>
@@ -17,6 +27,38 @@ require __DIR__ . '/includes/header.php';
     </div>
     <a href="dashboard.php" class="btn btn-outline btn-sm">&larr; Dashboard</a>
 </div>
+
+<?php if (!empty($dueSoonMonev) && ($userRole === 'pengampu' || $userRole === 'admin')): ?>
+<div class="alert alert-warning" style="margin-bottom:20px;border-left:4px solid #ea580c;background:#fff7ed;color:#9a3412;">
+    <div style="font-weight:700;font-size:14px;margin-bottom:4px;color:#c2410c;">
+        ⚠️ Notifikasi Pengisian Jadwal Evaluasi (Akun Pengampu)
+    </div>
+    <div style="font-size:13px;line-height:1.5;">
+        Akun <strong>Pengampu</strong> perlu untuk melakukan pengisian setiap <strong>SC1 atau SC2 atau SC3</strong> dan siklus evaluasi lainnya, sebelum <strong>30 hari</strong> dari tenggat waktu SC tersebut:
+    </div>
+    <ul style="margin:6px 0 0 18px;padding:0;font-size:12.5px;">
+        <?php foreach ($dueSoonMonev as $ds): 
+            $msLabel = 'SC-1';
+            if (!empty($ds['monev']['milestones'])) {
+                foreach ($ds['monev']['milestones'] as $ms) {
+                    if (!empty($ms['is_due_soon'])) {
+                        $msLabel = $ms['nama'];
+                        break;
+                    }
+                }
+            }
+        ?>
+        <li style="margin-bottom:4px;">
+            <strong><?= h($ds['mitra']['kode']) ?></strong> &mdash; <?= h($ds['mitra']['nama_mitra']) ?> &bull; 
+            Siklus: <span class="badge badge-warning" style="font-size:10px;font-weight:600;"><?= h($msLabel) ?></span> &bull;
+            Target: <strong><?= formatTanggal($ds['monev']['target_evaluasi_terdekat']) ?></strong> 
+            (<?= $ds['monev']['hari_menuju_evaluasi'] ?> hari lagi) &bull;
+            <a href="mitra_edit.php?id=<?= $ds['mitra']['id'] ?>" style="color:#2563eb;text-decoration:underline;">Buka Pengisian &rarr;</a>
+        </li>
+        <?php endforeach; ?>
+    </ul>
+</div>
+<?php endif; ?>
 
 <div class="card">
     <div class="table-wrap">

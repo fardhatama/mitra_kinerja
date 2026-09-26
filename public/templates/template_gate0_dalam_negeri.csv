@@ -13,7 +13,7 @@
 11;Perkiraan Tanggal Mulai;2026-11-01;Format tanggal: YYYY-MM-DD
 12;Perkiraan Tanggal Selesai;2029-10-31;Format tanggal: YYYY-MM-DD
 #;BAGIAN II: UJI KELAYAKAN 5 KRITERIA (18 PERTANYAAN EVALUASI);;
-Q1;K1.1: Kesesuaian dengan tugas pokok dan fungsi (Tusi) Kementerian Hukum dan HAM;YA;Sesuai Renstra Kanwil Kemenkumham Kepri
+Q1;K1.1: Kesesuaian dengan tugas pokok dan fungsi (Tusi) Kementerian Hukum;YA;Sesuai Renstra Kanwil Kementerian Hukum Kepri
 Q2;K1.2: Kesesuaian dengan sasaran kinerja organisasi dan prioritas wilayah;YA;Mendukung target kinerja BPHN & Kanwil Kepri
 Q3;K1.3: Tidak melampaui batas kewenangan kewilayahan/substansi;YA;Ruang lingkup dalam batas kewenangan wilayah Kepri
 Q4;K2.1: Terdapat kebutuhan nyata atas pelaksanaan kerja sama;YA;Kebutuhan nyata akses keadilan masyarakat pesisir
@@ -38,7 +38,7 @@ T3;Pemicu 3: Penggunaan Data, Kerahasiaan, atau Sistem Informasi;TIDAK;Tidak ada
 T4;Pemicu 4: Hak Kekayaan Intelektual (Pemanfaatan Merek, Cipta, Paten);TIDAK;Tidak ada komersialisasi KI
 T5;Pemicu 5: Integrasi Teknologi Informasi, Server, atau API;TIDAK;Tidak menggunakan API server internal
 T6;Pemicu 6: Potensi Risiko Hukum Signifikan atau Isu Sensitif;TIDAK;Aktivitas pembinaan standar
-T7;Pemicu 7: Publikasi, Penggunaan Logo, dan Branding Resmi;TIDAK;Sesuai pedoman humas Kemenkumham
+T7;Pemicu 7: Publikasi, Penggunaan Logo, dan Branding Resmi;TIDAK;Sesuai pedoman humas Kementerian Hukum
 #;BAGIAN IV: CATATAN & HASIL REVIU VERIFIKATOR;;
 C1;Catatan Verifikator;Proposal lengkap dan telah dicek legalitas mitra.;Komentar tim pengelola kerja sama
 C2;Gap yang Harus Ditutup;Tidak ada gap material.;Syarat perbaikan sebelum penandatanganan

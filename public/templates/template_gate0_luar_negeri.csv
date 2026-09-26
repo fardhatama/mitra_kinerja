@@ -13,7 +13,7 @@
 11;Perkiraan Tanggal Mulai;2026-11-01;Format tanggal: YYYY-MM-DD
 12;Perkiraan Tanggal Selesai;2029-10-31;Format tanggal: YYYY-MM-DD
 #;BAGIAN II: UJI KELAYAKAN 5 KRITERIA (18 PERTANYAAN EVALUASI);;
-Q1;K1.1: Kesesuaian dengan tugas pokok dan fungsi (Tusi) Kementerian Hukum dan HAM;YA;Sesuai Renstra Kanwil Kemenkumham Kepri
+Q1;K1.1: Kesesuaian dengan tugas pokok dan fungsi (Tusi) Kementerian Hukum;YA;Sesuai Renstra Kanwil Kementerian Hukum Kepri
 Q2;K1.2: Kesesuaian dengan sasaran kinerja organisasi dan prioritas wilayah;YA;Mendukung target kinerja BPHN & Kanwil Kepri
 Q3;K1.3: Tidak melampaui batas kewenangan kewilayahan/substansi;YA;Ruang lingkup dalam batas kewenangan wilayah Kepri
 Q4;K2.1: Terdapat kebutuhan nyata atas pelaksanaan kerja sama;YA;Kebutuhan nyata akses keadilan masyarakat pesisir
@@ -32,14 +32,14 @@ Q16;K5.2: Komitmen tindak lanjut operasional pasca-penandatanganan;YA;Evaluasi t
 Q17;K5.3: Keberlanjutan manfaat kerja sama jangka panjang;YA;Manfaat berkelanjutan bagi kelompok binaan
 Q18;K5.4: Kesiapan rencana mitigasi bila timbul hambatan pelaksanaan;YA;Mitigasi cuaca dan sarana transportasi disiapkan
 #;BAGIAN III: PEMICU KARAKTERISTIK KHUSUS (7 TRIGGERS);;
-T1;Pemicu 1: Keterlibatan Pihak Asing / Entitas Luar Negeri;YA;Clearance Biro Hukerma Kemenkumham RI
+T1;Pemicu 1: Keterlibatan Pihak Asing / Entitas Luar Negeri;YA;Clearance Biro Hukerma Kementerian Hukum RI
 T2;Pemicu 2: Dampak Keuangan, Aset Negara, atau Pembiayaan Khusus;TIDAK;Tidak ada pendanaan APBN yang mengikat
 T3;Pemicu 3: Penggunaan Data, Kerahasiaan, atau Sistem Informasi;TIDAK;Tidak ada integrasi data rahasia
 T4;Pemicu 4: Hak Kekayaan Intelektual (Pemanfaatan Merek, Cipta, Paten);TIDAK;Tidak ada komersialisasi KI
 T5;Pemicu 5: Integrasi Teknologi Informasi, Server, atau API;TIDAK;Tidak menggunakan API server internal
 T6;Pemicu 6: Potensi Risiko Hukum Signifikan atau Isu Sensitif;TIDAK;Aktivitas pembinaan standar
-T7;Pemicu 7: Publikasi, Penggunaan Logo, dan Branding Resmi;TIDAK;Sesuai pedoman humas Kemenkumham
+T7;Pemicu 7: Publikasi, Penggunaan Logo, dan Branding Resmi;TIDAK;Sesuai pedoman humas Kementerian Hukum
 #;BAGIAN IV: CATATAN & HASIL REVIU VERIFIKATOR;;
 C1;Catatan Verifikator;Proposal lengkap dan telah dicek legalitas mitra.;Komentar tim pengelola kerja sama
 C2;Gap yang Harus Ditutup;Menunggu surat rekomendasi / clearance hubungan luar negeri.;Syarat perbaikan sebelum penandatanganan
-C3;Unit/Fungsi Reviu Tambahan;Biro Hukerma Kemenkumham RI & Ditjen AHU;Unit verifikator tambahan yang dilibatkan
+C3;Unit/Fungsi Reviu Tambahan;Biro Hukerma Kementerian Hukum RI & Ditjen AHU;Unit verifikator tambahan yang dilibatkan

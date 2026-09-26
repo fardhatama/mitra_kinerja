@@ -14,6 +14,83 @@ const BOBOT_INDIKATOR = [
     'I1' => 10, 'I2' => 15, 'I3' => 15, 'I4' => 20, 'I5' => 20, 'I6' => 10, 'I7' => 10,
 ];
 
+if (!defined('BASELINE_12_DEFS')) {
+    define('BASELINE_12_DEFS', [
+        1 => [
+            'kelompok' => 'IDENTITAS',
+            'nama' => 'Identitas naskah',
+            'yang_diperiksa' => 'Jenis, seluruh nomor para pihak, judul, dan nama resmi mitra sesuai naskah.',
+            'sumber_minimum' => 'Naskah bertanda tangan; P2MA sebagai pembanding.'
+        ],
+        2 => [
+            'kelompok' => 'MASA BERLAKU',
+            'nama' => 'Masa berlaku',
+            'yang_diperiksa' => 'Tanggal efektif, durasi, dan tanggal berakhir sesuai klausul naskah.',
+            'sumber_minimum' => 'Klausul jangka waktu; halaman tanda tangan; P2MA.'
+        ],
+        3 => [
+            'kelompok' => 'SUBSTANSI',
+            'nama' => 'Ruang lingkup',
+            'yang_diperiksa' => 'Ruang kerja, kewajiban, atau kegiatan utama yang disepakati.',
+            'sumber_minimum' => 'Pasal ruang lingkup/hak-kewajiban; lampiran.'
+        ],
+        4 => [
+            'kelompok' => 'TATA KELOLA',
+            'nama' => 'Status arsip',
+            'yang_diperiksa' => 'Ketersediaan naskah lengkap pada lokasi arsip resmi dan dapat ditemukan kembali.',
+            'sumber_minimum' => 'Arsip resmi; register; folder organisasi.'
+        ],
+        5 => [
+            'kelompok' => 'TATA KELOLA',
+            'nama' => 'Status P2MA',
+            'yang_diperiksa' => 'Keberadaan entri dan kesesuaian metadata P2MA dengan naskah resmi.',
+            'sumber_minimum' => 'P2MA dan naskah bertanda tangan.'
+        ],
+        6 => [
+            'kelompok' => 'PENGAMPU',
+            'nama' => 'Unit pengampu',
+            'yang_diperiksa' => 'Unit internal yang bertanggung jawab atas substansi dan implementasi kerja sama.',
+            'sumber_minimum' => 'ND/SK/pembagian tugas; konfirmasi tertulis unit.'
+        ],
+        7 => [
+            'kelompok' => 'PIC',
+            'nama' => 'PIC internal',
+            'yang_diperiksa' => 'PIC utama dan cadangan yang aktif, lengkap dengan jabatan, kontak, dan dasar penetapan.',
+            'sumber_minimum' => 'ND/SK/daftar PIC; konfirmasi tertulis unit.'
+        ],
+        8 => [
+            'kelompok' => 'PIC',
+            'nama' => 'PIC mitra',
+            'yang_diperiksa' => 'Penghubung operasional pihak mitra yang telah dikonfirmasi.',
+            'sumber_minimum' => 'Surat/email/form konfirmasi resmi dari mitra.'
+        ],
+        9 => [
+            'kelompok' => 'TINDAK LANJUT',
+            'nama' => 'Rencana tindak lanjut',
+            'yang_diperiksa' => 'Dokumen atau komitmen operasional yang memuat kegiatan, periode, target, dan/atau PIC.',
+            'sumber_minimum' => 'Rencana aksi; matriks kerja; kalender; notula.'
+        ],
+        10 => [
+            'kelompok' => 'PELAKSANAAN',
+            'nama' => 'Pelaksanaan dan hasil',
+            'yang_diperiksa' => 'Kegiatan aktual, realisasi terhadap target jatuh tempo, serta output yang dihasilkan.',
+            'sumber_minimum' => 'Laporan; undangan; notula; daftar hadir; data hasil.'
+        ],
+        11 => [
+            'kelompok' => 'EVIDEN',
+            'nama' => 'Eviden implementasi',
+            'yang_diperiksa' => 'Bukti pelaksanaan/output, lokasi penyimpanan, dan tingkat keteraturannya.',
+            'sumber_minimum' => 'Folder resmi; indeks bukti; dokumen/data kegiatan.'
+        ],
+        12 => [
+            'kelompok' => 'HAMBATAN',
+            'nama' => 'Hambatan/gap',
+            'yang_diperiksa' => 'Kendala faktual atau kekosongan data yang memengaruhi implementasi dan sudah dikonfirmasi.',
+            'sumber_minimum' => 'Konfirmasi unit/PIC/mitra; notula; laporan; bukti keterlambatan.'
+        ]
+    ]);
+}
+
 /**
  * Hitung status "Cek" untuk satu baris indikator V2.1.
  * Mendukung: DAPAT DINILAI / BUKTI MEMADAI, BUKTI BELUM MEMADAI, BELUM DAPAT DINILAI, BELUM DITELAAH.

@@ -42,7 +42,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
     }
 }
 
-$tindakLanjut = getTindakLanjut($pdo);
+$filterMitraId = !empty($_GET['mitra_id']) ? (int)$_GET['mitra_id'] : null;
+$filteredMitra = null;
+if ($filterMitraId > 0) {
+    $stmtFM = $pdo->prepare('SELECT kode, nama_mitra FROM mitra_kinerja WHERE id = ?');
+    $stmtFM->execute([$filterMitraId]);
+    $filteredMitra = $stmtFM->fetch();
+}
+
+$tindakLanjut = getTindakLanjut($pdo, $filterMitraId);
 $allMitra = $pdo->query('SELECT id, kode, nama_mitra FROM mitra_kinerja ORDER BY kode')->fetchAll();
 
 $pageTitle = 'Tindak Lanjut';
@@ -52,9 +60,22 @@ require __DIR__ . '/includes/header.php';
 <div class="flex-between" style="margin-bottom:18px;">
     <div>
         <h1 style="margin:0;font-size:20px;">Tindak Lanjut</h1>
-        <div class="muted" style="font-size:13px;">Pantau dan kelola progres perbaikan per naskah</div>
+        <div class="muted" style="font-size:13px;">
+            <?php if ($filteredMitra): ?>
+                Menampilkan tindak lanjut khusus naskah: <strong><?= h($filteredMitra['kode']) ?> &mdash; <?= h($filteredMitra['nama_mitra']) ?></strong>
+            <?php else: ?>
+                Pantau dan kelola progres perbaikan per naskah
+            <?php endif; ?>
+        </div>
     </div>
-    <a href="dashboard.php" class="btn btn-outline btn-sm">&larr; Dashboard</a>
+    <div style="display:flex;gap:8px;align-items:center;">
+        <?php if ($filteredMitra): ?>
+            <a href="tindak_lanjut.php" class="btn btn-outline btn-sm">Tampilkan Semua</a>
+            <a href="baseline.php?id=<?= $filterMitraId ?>" class="btn btn-outline btn-sm">&larr; Kembali ke Baseline</a>
+        <?php else: ?>
+            <a href="dashboard.php" class="btn btn-outline btn-sm">&larr; Dashboard</a>
+        <?php endif; ?>
+    </div>
 </div>
 
 <?php if ($success): ?><div class="alert alert-info"><?= h($success) ?></div><?php endif; ?>
@@ -71,7 +92,7 @@ require __DIR__ . '/includes/header.php';
                 <select name="mitra_id" required>
                     <option value="">Pilih Naskah...</option>
                     <?php foreach ($allMitra as $m): ?>
-                    <option value="<?= $m['id'] ?>"><?= h($m['kode']) ?> — <?= h(singkat($m['nama_mitra'], 50)) ?></option>
+                    <option value="<?= $m['id'] ?>" <?= $filterMitraId === (int)$m['id'] ? 'selected' : '' ?>><?= h($m['kode']) ?> — <?= h(singkat($m['nama_mitra'], 50)) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
