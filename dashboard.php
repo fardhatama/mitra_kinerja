@@ -122,7 +122,7 @@ foreach ($all as $s) {
         <div class="kpi-data">
             <div class="kpi-number"><?= $stats['total'] ?></div>
             <div class="kpi-label">Total Naskah Kerja Sama</div>
-            <div class="kpi-sub"><?= $stats['pilotCount'] ?> Naskah Pilot<br><?= $stats['total'] - $stats['pilotCount'] ?> Perjanjian Kerja Sama</div>
+            <div class="kpi-sub"><?= $stats['pilotCount'] ?> Pilot Utama<br><?= $stats['total'] - $stats['pilotCount'] ?> Naskah Cadangan</div>
         </div>
     </div>
     <div class="kpi-card">

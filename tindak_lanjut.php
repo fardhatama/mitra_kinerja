@@ -20,10 +20,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         if ($mitraId <= 0 || $tindakan === '') {
             $errors[] = 'Pilih naskah dan isi tindakan.';
         } else {
-            $stmt = $pdo->prepare('INSERT INTO tindak_lanjut (mitra_id, tindakan, tenggat) VALUES (?, ?, ?)');
-            $stmt->execute([$mitraId, $tindakan, $tenggat ?: null]);
-            logAudit($mitraId, $user['id'], 'TINDAK_LANJUT', 'Tambah tindak lanjut baru');
-            $success = 'Tindak lanjut berhasil ditambahkan.';
+            // Upload File Bukti Kegiatan
+            $fileBukti = null;
+            if (isset($_FILES['file_bukti']) && $_FILES['file_bukti']['error'] === UPLOAD_ERR_OK) {
+                $ext = strtolower(pathinfo($_FILES['file_bukti']['name'], PATHINFO_EXTENSION));
+                $allowedExts = ['pdf', 'jpg', 'jpeg', 'png', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt'];
+                if (!in_array($ext, $allowedExts, true)) {
+                    $errors[] = 'Format file bukti tidak didukung. Gunakan PDF, JPG, PNG, DOCX, XLSX, atau PPTX.';
+                } elseif ($_FILES['file_bukti']['size'] > 25 * 1024 * 1024) {
+                    $errors[] = 'Ukuran file bukti melebihi batas maksimum 25MB.';
+                } else {
+                    $uploadDir = __DIR__ . '/public/uploads/tindak_lanjut/';
+                    if (!is_dir($uploadDir)) {
+                        mkdir($uploadDir, 0777, true);
+                    }
+                    $cleanBase = preg_replace('/[^a-zA-Z0-9_\.-]/', '_', pathinfo($_FILES['file_bukti']['name'], PATHINFO_FILENAME));
+                    $targetFile = 'bukti_' . $mitraId . '_' . time() . '_' . $cleanBase . '.' . $ext;
+                    if (move_uploaded_file($_FILES['file_bukti']['tmp_name'], $uploadDir . $targetFile)) {
+                        $fileBukti = 'public/uploads/tindak_lanjut/' . $targetFile;
+                    } else {
+                        $errors[] = 'Gagal menyimpan file bukti kegiatan di server.';
+                    }
+                }
+            }
+
+            if (empty($errors)) {
+                $stmt = $pdo->prepare('INSERT INTO tindak_lanjut (mitra_id, tindakan, tenggat, file_bukti) VALUES (?, ?, ?, ?)');
+                $stmt->execute([$mitraId, $tindakan, $tenggat ?: null, $fileBukti]);
+                logAudit($mitraId, $user['id'], 'TINDAK_LANJUT', 'Tambah tindak lanjut baru: ' . $tindakan);
+                $success = 'Tindak lanjut berhasil ditambahkan.';
+            }
         }
     }
 }
@@ -51,7 +77,7 @@ if ($filterMitraId > 0) {
 }
 
 $tindakLanjut = getTindakLanjut($pdo, $filterMitraId);
-$allMitra = $pdo->query('SELECT id, kode, nama_mitra FROM mitra_kinerja ORDER BY kode')->fetchAll();
+$allMitra = $pdo->query('SELECT id, kode, nama_mitra, judul, bidang FROM mitra_kinerja ORDER BY kode')->fetchAll();
 
 $pageTitle = 'Tindak Lanjut';
 require __DIR__ . '/includes/header.php';
@@ -84,22 +110,30 @@ require __DIR__ . '/includes/header.php';
 <?php if ($canEdit): ?>
 <div class="card">
     <h2>Tambah Tindak Lanjut</h2>
-    <form method="post">
+    <form method="post" enctype="multipart/form-data">
         <input type="hidden" name="action" value="create">
         <div class="form-grid">
-            <div class="field">
-                <label>Naskah</label>
-                <select name="mitra_id" required>
+            <div class="field" style="grid-column: span 2;">
+                <label>Naskah / Judul Kerja Sama * (Ketik untuk mencari)</label>
+                <select name="mitra_id" required class="searchable-select" placeholder="Ketik nama mitra / kode PKS / pilih naskah...">
                     <option value="">Pilih Naskah...</option>
                     <?php foreach ($allMitra as $m): ?>
-                    <option value="<?= $m['id'] ?>" <?= $filterMitraId === (int)$m['id'] ? 'selected' : '' ?>><?= h($m['kode']) ?> — <?= h(singkat($m['nama_mitra'], 50)) ?></option>
+                    <option value="<?= $m['id'] ?>" data-sub="Judul: <?= h(singkat($m['judul'] ?: '-', 50)) ?> | Bidang: <?= h($m['bidang'] ?? 'AHU') ?>" <?= $filterMitraId === (int)$m['id'] ? 'selected' : '' ?>>
+                        <?= h($m['kode']) ?> &mdash; <?= h($m['nama_mitra']) ?>
+                    </option>
                     <?php endforeach; ?>
                 </select>
+                <div class="muted" style="font-size:11px;margin-top:2px;">Ketik kata kunci untuk memfilter saran naskah secara instan.</div>
             </div>
-            <div class="field"><label>Tindakan</label><input type="text" name="tindakan" required placeholder="Deskripsi tindakan"></div>
             <div class="field"><label>Tenggat</label><input type="date" name="tenggat"></div>
+            <div class="field" style="grid-column: 1 / -1;"><label>Tindakan *</label><input type="text" name="tindakan" required placeholder="Deskripsi kegiatan atau tindak lanjut"></div>
+            <div class="field" style="grid-column: 1 / -1;">
+                <label>Bukti Kegiatan (PDF, JPG, PNG, DOCX, XLSX, PPTX)</label>
+                <input type="file" name="file_bukti" accept=".pdf,.jpg,.jpeg,.png,.docx,.doc,.xlsx,.xls,.pptx,.ppt">
+                <div class="muted" style="font-size:11px;margin-top:2px;">Unggah dokumen hasil, notula, laporan, atau foto dokumentasi (maks. 25MB).</div>
+            </div>
         </div>
-        <div style="margin-top:14px;"><button type="submit" class="btn btn-primary">Tambah</button></div>
+        <div style="margin-top:14px;"><button type="submit" class="btn btn-primary">Tambah Tindak Lanjut</button></div>
     </form>
 </div>
 <?php endif; ?>
@@ -108,10 +142,10 @@ require __DIR__ . '/includes/header.php';
     <h2>Daftar Tindak Lanjut</h2>
     <div class="table-wrap">
     <table>
-        <thead><tr><th>Naskah</th><th>Tindakan</th><th>Tenggat</th><th>Status</th><?php if ($canEdit): ?><th>Aksi</th><?php endif; ?></tr></thead>
+        <thead><tr><th>Naskah</th><th>Tindakan</th><th>Tenggat</th><th>Status</th><th>Bukti Kegiatan</th><th>Aksi</th></tr></thead>
         <tbody>
         <?php if (empty($tindakLanjut)): ?>
-            <tr><td colspan="5" class="muted" style="text-align:center;padding:20px;">Belum ada tindak lanjut</td></tr>
+            <tr><td colspan="6" class="muted" style="text-align:center;padding:20px;">Belum ada tindak lanjut</td></tr>
         <?php else: foreach ($tindakLanjut as $tl):
             $dotClass = match($tl['status']) { 'Selesai' => 'dot-green', 'Proses' => 'dot-yellow', default => 'dot-red' };
         ?>
@@ -120,18 +154,29 @@ require __DIR__ . '/includes/header.php';
                 <td><?= h($tl['tindakan']) ?></td>
                 <td><?= formatTanggal($tl['tenggat']) ?></td>
                 <td><span class="status-dot <?= $dotClass ?>"><?= h($tl['status']) ?></span></td>
-                <?php if ($canEdit): ?>
                 <td>
-                    <?php if ($tl['status'] !== 'Selesai'): ?>
+                    <?php if (!empty($tl['file_bukti'])): ?>
+                    <a href="<?= h($tl['file_bukti']) ?>" target="_blank" download class="btn btn-outline btn-sm" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;">
+                        📄 Unduh Bukti
+                    </a>
+                    <?php else: ?>
+                    <span class="muted" style="font-size:11.5px;">-</span>
+                    <?php endif; ?>
+                </td>
+                <td>
+                    <?php if ($canEdit && $tl['status'] !== 'Selesai'): ?>
                     <form method="post" style="display:inline;">
                         <input type="hidden" name="action" value="update_status">
                         <input type="hidden" name="tl_id" value="<?= $tl['id'] ?>">
                         <input type="hidden" name="new_status" value="<?= $tl['status'] === 'Belum' ? 'Proses' : 'Selesai' ?>">
                         <button type="submit" class="btn btn-outline btn-sm"><?= $tl['status'] === 'Belum' ? 'Mulai' : 'Selesai' ?></button>
                     </form>
+                    <?php elseif ($tl['status'] === 'Selesai'): ?>
+                    <span class="muted" style="font-size:11.5px;">✓ Tuntas</span>
+                    <?php else: ?>
+                    <span class="muted" style="font-size:11.5px;">-</span>
                     <?php endif; ?>
                 </td>
-                <?php endif; ?>
             </tr>
         <?php endforeach; endif; ?>
         </tbody>

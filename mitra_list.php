@@ -52,6 +52,8 @@ require __DIR__ . '/includes/header.php';
                         <a href="mitra_edit.php?id=<?= $m['id'] ?>" class="btn btn-outline btn-sm">Scorecard</a>
                         <?php if (in_array($user['role'], ['admin','validator'], true)): ?>
                         <a href="mitra_validasi.php?id=<?= $m['id'] ?>" class="btn btn-primary btn-sm">Validasi</a>
+                        <?php elseif ($user['role'] === 'pemeriksa'): ?>
+                        <a href="mitra_validasi.php" class="btn btn-outline btn-sm">Penilaian</a>
                         <?php endif; ?>
                     </div>
                 </td>

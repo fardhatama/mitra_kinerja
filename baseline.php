@@ -167,7 +167,7 @@ if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     for ($f = 0; $f < $fileCount; $f++) {
                         if ($_FILES['pdf_files']['error'][$f] === UPLOAD_ERR_OK) {
                             $ext = strtolower(pathinfo($_FILES['pdf_files']['name'][$f], PATHINFO_EXTENSION));
-                            if ($ext === 'pdf') {
+                            if ($ext === 'pdf' && isPdfValid($_FILES['pdf_files']['tmp_name'][$f])) {
                                 $safeLeaf = preg_replace('/[^a-zA-Z0-9_\.-]/', '_', pathinfo($_FILES['pdf_files']['name'][$f], PATHINFO_FILENAME));
                                 $targetName = 'baseline_e9_' . $mitra['kode'] . '_' . time() . '_' . $f . '_' . $safeLeaf . '.pdf';
                                 if (move_uploaded_file($_FILES['pdf_files']['tmp_name'][$f], $targetDir . $targetName)) {
@@ -192,8 +192,8 @@ if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
                         $errors[] = 'Pilih file PDF yang valid.';
                     } else {
                         $ext = strtolower(pathinfo($_FILES['pdf_file']['name'], PATHINFO_EXTENSION));
-                        if ($ext !== 'pdf') {
-                            $errors[] = 'Format file wajib .PDF.';
+                        if ($ext !== 'pdf' || !isPdfValid($_FILES['pdf_file']['tmp_name'])) {
+                            $errors[] = 'Format file wajib berupa dokumen .PDF asli bertanda tangan.';
                         } else {
                             $targetName = 'baseline_e' . $elemenNomor . '_' . $mitra['kode'] . '_' . time() . '.pdf';
                             if (move_uploaded_file($_FILES['pdf_file']['tmp_name'], $targetDir . $targetName)) {

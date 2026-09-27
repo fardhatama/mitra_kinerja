@@ -260,9 +260,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'promo
                 // Insert ke mitra_kinerja
                 $stmtM = $pdo->prepare('INSERT INTO mitra_kinerja (
                     kode, portofolio, nama_mitra, judul, bidang, jenis, tanggal_mulai, tanggal_berakhir,
-                    status_tanggal, cutoff_date, sumber_baseline, status_scorecard, posisi_portofolio, rekomendasi,
+                    status_tanggal, evaluasi_per_tahun, cutoff_date, sumber_baseline, status_scorecard, posisi_portofolio, rekomendasi,
                     pic_internal
-                ) VALUES (?, \'Pilot Utama\', ?, ?, ?, ?, ?, ?, \'TERVERIFIKASI\', CURDATE(), \'Gate 0 Promoted\', \'BELUM LENGKAP\', \'AKTIF\', \'LANJUT\', ?)');
+                ) VALUES (?, \'Pilot Utama\', ?, ?, ?, ?, ?, ?, \'TERVERIFIKASI\', 4, CURDATE(), \'Gate 0 Promoted\', \'BELUM LENGKAP\', \'AKTIF\', \'LANJUT\', ?)');
                 $stmtM->execute([
                     $newKode, $pra['calon_mitra'], $pra['judul_rencana'], $bidangCandidate, $pra['jenis_naskah'],
                     $mulaiPks, $selesaiPks, $pra['penanggung_jawab_usulan'] ?: $pra['unit_pemrakarsa']
@@ -349,6 +349,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'promo
                         ->execute([$newMitraId, $idx + 1, $t]);
                 }
 
+                // Inisialisasi status validasi
+                $pdo->prepare("INSERT INTO validasi (mitra_id, status) VALUES (?, 'BELUM')")->execute([$newMitraId]);
+
                 // Tandai sudah dipromosikan
                 $pdo->prepare('UPDATE pra_pks SET is_promoted_to_pks = 1 WHERE id = ?')->execute([$idUsulan]);
 
@@ -387,17 +390,38 @@ function parseGate0Upload(string $tmpPath, string $origName): array {
         if ($sheetXml) {
             $xml = simplexml_load_string($sheetXml);
             foreach ($xml->sheetData->row as $r) {
-                $rowValues = [];
+                $rowMap = [];
+                $maxCol = 0;
                 foreach ($r->c as $c) {
-                    $type = (string)$c['t'];
-                    $val = (string)$c->v;
-                    if ($type === 's' && isset($sharedStrings[(int)$val])) {
-                        $rowValues[] = $sharedStrings[(int)$val];
-                    } else {
-                        $rowValues[] = $val;
+                    $ref = (string)$c['r'];
+                    $colIdx = 0;
+                    if (preg_match('/^([A-Z]+)/', $ref, $mCol)) {
+                        $colLetters = $mCol[1];
+                        $colIdx = 0;
+                        for ($ci = 0; $ci < strlen($colLetters); $ci++) {
+                            $colIdx = $colIdx * 26 + (ord($colLetters[$ci]) - ord('A') + 1);
+                        }
+                        $colIdx -= 1;
                     }
+                    $type = (string)$c['t'];
+                    if ($type === 'inlineStr') {
+                        $val = (string)($c->is->t ?? '');
+                    } elseif ($type === 's') {
+                        $sIdx = (int)$c->v;
+                        $val = $sharedStrings[$sIdx] ?? '';
+                    } else {
+                        $val = (string)($c->v ?? '');
+                    }
+                    $rowMap[$colIdx] = $val;
+                    if ($colIdx > $maxCol) $maxCol = $colIdx;
                 }
-                if (!empty($rowValues)) $rows[] = $rowValues;
+                if (!empty($rowMap)) {
+                    $rowValues = [];
+                    for ($k = 0; $k <= $maxCol; $k++) {
+                        $rowValues[$k] = $rowMap[$k] ?? '';
+                    }
+                    $rows[] = $rowValues;
+                }
             }
         }
         $zip->close();

@@ -100,7 +100,8 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
         ? $mitra['rekomendasi']
         : hitungRekomendasi($ringkasan['nilai_berjalan'], $warning['status'], $posisiPortofolio, $sisaHari);
 
-    $monev = hitungKebutuhanScorecard($mitra['tanggal_mulai'] ?? null, $mitra['tanggal_berakhir'] ?? null);
+    $evaluasiPerTahun = (int)($mitra['evaluasi_per_tahun'] ?? 4);
+    $monev = hitungKebutuhanScorecard($mitra['tanggal_mulai'] ?? null, $mitra['tanggal_berakhir'] ?? null, $evaluasiPerTahun);
 
     return [
         'mitra'             => $mitra,

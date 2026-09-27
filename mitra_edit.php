@@ -144,6 +144,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $summary = getMitraSummary($pdo, $mitra);
 
+// Hitung total kegiatan tindak lanjut terkait PKS ini
+$stmtTLCount = $pdo->prepare('SELECT COUNT(*) FROM tindak_lanjut WHERE mitra_id = ?');
+$stmtTLCount->execute([$id]);
+$kegiatanCount = (int)$stmtTLCount->fetchColumn();
+
 $pageTitle = 'Naskah ' . $mitra['kode'];
 require __DIR__ . '/includes/header.php';
 ?>
@@ -160,30 +165,35 @@ require __DIR__ . '/includes/header.php';
 <?php foreach ($errors as $e): ?><div class="alert alert-warning"><?= h($e) ?></div><?php endforeach; ?>
 <?php if (!$canEdit): ?><div class="alert alert-info">Anda melihat data ini sebagai <?= h($user['role']) ?> (mode baca saja).</div><?php endif; ?>
 
-<div class="kpi-grid" style="margin-bottom:20px;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));">
-    <div class="kpi-card">
+<div class="kpi-grid" style="margin-bottom:20px;grid-template-columns:repeat(auto-fit, minmax(135px, 1fr));gap:12px;">
+    <div class="kpi-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:92px;padding:10px 8px;">
         <div class="kpi-value"><?= number_format($summary['nilai_berjalan'], 2) ?></div>
         <div class="kpi-label">Nilai Berjalan (<?= $summary['bobot_dinilai'] ?>%)</div>
     </div>
-    <div class="kpi-card">
+    <div class="kpi-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:92px;padding:10px 8px;">
         <div class="kpi-value"><?= $summary['kelengkapan'] ?>%</div>
         <div class="kpi-label">Kelengkapan</div>
     </div>
-    <div class="kpi-card">
-        <span class="badge badge-<?= warnaKategori($summary['kategori']) ?>" style="font-size:13px;"><?= h($summary['kategori']) ?></span>
-        <div class="kpi-label">Kategori</div>
+    <div class="kpi-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:92px;padding:10px 8px;">
+        <span class="badge badge-<?= warnaKategori($summary['kategori']) ?>" style="font-size:12px;font-weight:700;white-space:normal;line-height:1.25;padding:4px 8px;max-width:100%;text-align:center;word-break:break-word;display:inline-block;"><?= h($summary['kategori']) ?></span>
+        <div class="kpi-label" style="margin-top:4px;">Kategori</div>
     </div>
-    <div class="kpi-card">
-        <span class="badge badge-primary" style="font-size:12px;"><?= h($summary['posisi_portofolio']) ?></span>
-        <div class="kpi-label">Posisi Portofolio</div>
+    <div class="kpi-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:92px;padding:10px 8px;">
+        <span class="badge badge-primary" style="font-size:11px;font-weight:700;white-space:normal;line-height:1.25;padding:4px 8px;max-width:100%;text-align:center;word-break:break-word;display:inline-block;"><?= h($summary['posisi_portofolio']) ?></span>
+        <div class="kpi-label" style="margin-top:4px;">Posisi Portofolio</div>
     </div>
-    <div class="kpi-card">
-        <span class="badge badge-warning" style="font-size:12px;"><?= h($summary['rekomendasi']) ?></span>
-        <div class="kpi-label">Rekomendasi</div>
+    <div class="kpi-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:92px;padding:10px 8px;">
+        <span class="badge badge-warning" style="font-size:11px;font-weight:700;white-space:normal;line-height:1.25;padding:4px 8px;max-width:100%;text-align:center;word-break:break-word;display:inline-block;"><?= h($summary['rekomendasi']) ?></span>
+        <div class="kpi-label" style="margin-top:4px;">Rekomendasi</div>
     </div>
-    <div class="kpi-card">
-        <span class="badge badge-<?= warnaWarning($summary['warning']['status']) ?>" style="font-size:12px;"><?= h($summary['warning']['label']) ?></span>
-        <div class="kpi-label">Warning Tertinggi</div>
+    <div class="kpi-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:92px;padding:10px 8px;">
+        <span class="badge badge-<?= warnaWarning($summary['warning']['status']) ?>" style="font-size:11px;font-weight:700;white-space:normal;line-height:1.25;padding:4px 8px;max-width:100%;text-align:center;word-break:break-word;display:inline-block;"><?= h($summary['warning']['label']) ?></span>
+        <div class="kpi-label" style="margin-top:4px;">Warning Tertinggi</div>
+    </div>
+    <div class="kpi-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:92px;padding:10px 8px;">
+        <div class="kpi-value" style="color:#0284c7;font-weight:800;"><?= $kegiatanCount ?></div>
+        <div class="kpi-label">Kegiatan Terkait</div>
+        <div style="font-size:10px;margin-top:2px;"><a href="tindak_lanjut.php?mitra_id=<?= $id ?>" style="color:#0284c7;text-decoration:none;">Lihat Kegiatan &rarr;</a></div>
     </div>
 </div>
 
@@ -255,12 +265,12 @@ $monev = $summary['monev'];
 
     <div class="kpi-grid" style="margin:16px 0;grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));">
         <div class="kpi-card">
-            <div class="kpi-value"><?= $monev['durasi_bulan'] ?> Bln</div>
-            <div class="kpi-label">Durasi Perjanjian</div>
+            <div class="kpi-value"><?= $monev['durasi_bulan'] ?> Bulan</div>
+            <div class="kpi-label">Durasi Berjalan</div>
         </div>
         <div class="kpi-card">
             <div class="kpi-value"><?= $monev['total_siklus'] ?> Kali</div>
-            <div class="kpi-label">Target Evaluasi</div>
+            <div class="kpi-label">Target Evaluasi Rencana Kerja</div>
         </div>
         <div class="kpi-card">
             <div class="kpi-value" style="font-size:15px;"><?= $monev['target_evaluasi_terdekat'] ? formatTanggal($monev['target_evaluasi_terdekat']) : '-' ?></div>

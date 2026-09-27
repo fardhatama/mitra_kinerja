@@ -1,12 +1,3 @@
--- ============================================================
--- MITRA KINERJA - DATABASE SCHEMA DDL (V2.2)
--- Kantor Wilayah Kementerian Hukum Kepulauan Riau
--- ============================================================
-
-CREATE DATABASE IF NOT EXISTS  DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE ;
-
-SET FOREIGN_KEY_CHECKS = 0;
 -- MariaDB dump 10.19  Distrib 10.4.32-MariaDB, for Win64 (AMD64)
 --
 -- Host: localhost    Database: mitra_kinerja
@@ -43,7 +34,7 @@ CREATE TABLE `audit_log` (
   KEY `user_id` (`user_id`),
   CONSTRAINT `audit_log_ibfk_1` FOREIGN KEY (`mitra_id`) REFERENCES `mitra_kinerja` (`id`) ON DELETE SET NULL,
   CONSTRAINT `audit_log_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=98 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=117 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -189,6 +180,7 @@ CREATE TABLE `mitra_kinerja` (
   `tanggal_mulai` date DEFAULT NULL,
   `tanggal_berakhir` date DEFAULT NULL,
   `status_tanggal` enum('TERVERIFIKASI','BELUM TERVERIFIKASI') NOT NULL DEFAULT 'BELUM TERVERIFIKASI',
+  `evaluasi_per_tahun` int(11) NOT NULL DEFAULT 4,
   `baseline_status` enum('BELUM DIISI','DALAM PROSES','TERVERIFIKASI / DIKUNCI') NOT NULL DEFAULT 'BELUM DIISI',
   `baseline_locked_at` datetime DEFAULT NULL,
   `baseline_locked_by` int(11) DEFAULT NULL,
@@ -213,7 +205,7 @@ CREATE TABLE `mitra_kinerja` (
   KEY `fk_mitra_induk` (`pks_induk_id`),
   CONSTRAINT `fk_mitra_induk` FOREIGN KEY (`pks_induk_id`) REFERENCES `mitra_kinerja` (`id`) ON DELETE SET NULL,
   CONSTRAINT `mitra_kinerja_ibfk_1` FOREIGN KEY (`pemeriksa_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=22 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -331,12 +323,13 @@ CREATE TABLE `tindak_lanjut` (
   `tindakan` text NOT NULL,
   `tenggat` date DEFAULT NULL,
   `status` enum('Belum','Proses','Selesai') NOT NULL DEFAULT 'Belum',
+  `file_bukti` varchar(255) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `mitra_id` (`mitra_id`),
   CONSTRAINT `tindak_lanjut_ibfk_1` FOREIGN KEY (`mitra_id`) REFERENCES `mitra_kinerja` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -378,7 +371,7 @@ CREATE TABLE `validasi` (
   KEY `validator_id` (`validator_id`),
   CONSTRAINT `validasi_ibfk_1` FOREIGN KEY (`mitra_id`) REFERENCES `mitra_kinerja` (`id`) ON DELETE CASCADE,
   CONSTRAINT `validasi_ibfk_2` FOREIGN KEY (`validator_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -394,6 +387,4 @@ CREATE TABLE `validasi` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-09-26 15:15:49
-
-SET FOREIGN_KEY_CHECKS = 1;
+-- Dump completed on 2026-09-27 13:34:04

@@ -328,12 +328,15 @@ function hitungMasaBerlaku(?string $tanggalBerakhir, ?string $cutoffDate, ?strin
 
 /**
  * Menghitung kebutuhan siklus scorecard selama masa berlaku kerja sama (flow.pdf & SOP 5).
- * Cadence default: 4 kali per tahun (setiap 3 bulan).
+ * Parameter $evaluasiPerTahun: berapa kali evaluasi rencana kerja dilakukan per tahun (default 4).
+ * Contoh: 36 Bulan Durasi Berjalan / 4 = 9 Kali Target Evaluasi Rencana Kerja.
  */
-function hitungKebutuhanScorecard(?string $tanggalMulai, ?string $tanggalBerakhir, int $cadenceBulan = 3): array {
+function hitungKebutuhanScorecard(?string $tanggalMulai, ?string $tanggalBerakhir, int $evaluasiPerTahun = 4): array {
+    $evaluasiPerTahun = max(1, $evaluasiPerTahun);
     $fallback = [
         'total_siklus'             => 0,
         'durasi_bulan'             => 0,
+        'evaluasi_per_tahun'       => $evaluasiPerTahun,
         'warning_1_bulan'          => false,
         'hari_menuju_evaluasi'     => null,
         'target_evaluasi_terdekat' => null,
@@ -355,6 +358,7 @@ function hitungKebutuhanScorecard(?string $tanggalMulai, ?string $tanggalBerakhi
         return [
             'total_siklus'             => 1,
             'durasi_bulan'             => 0,
+            'evaluasi_per_tahun'       => $evaluasiPerTahun,
             'warning_1_bulan'          => false,
             'hari_menuju_evaluasi'     => null,
             'target_evaluasi_terdekat' => null,
@@ -364,7 +368,9 @@ function hitungKebutuhanScorecard(?string $tanggalMulai, ?string $tanggalBerakhi
 
     $diff = $start->diff($end);
     $durasiBulan = ($diff->y * 12) + $diff->m + ($diff->d > 15 ? 1 : 0);
-    $totalSiklus = max(1, (int)ceil($durasiBulan / $cadenceBulan));
+    // Formula arahan tim: Durasi bulan dibagi evaluasi rencana kerja per tahun
+    $totalSiklus = max(1, (int)ceil($durasiBulan / $evaluasiPerTahun));
+    $cadenceBulan = max(1, (int)round($durasiBulan / $totalSiklus));
 
     $today = new DateTime('now');
     $milestones = [];
@@ -382,7 +388,7 @@ function hitungKebutuhanScorecard(?string $tanggalMulai, ?string $tanggalBerakhi
 
         $milestones[] = [
             'siklus_ke'   => $i,
-            'nama'        => $i === 1 ? 'SC-1: Baseline / Awal' : 'SC-' . $i . ': Evaluasi Triwulan ' . ($i - 1),
+            'nama'        => $i === 1 ? 'SC-1: Baseline / Awal' : 'SC-' . $i . ': Evaluasi Tahap ' . $i,
             'target_tgl'  => $targetStr,
             'sisa_hari'   => $diffDays,
             'is_due_soon' => ($diffDays >= 0 && $diffDays <= 30),
@@ -401,6 +407,7 @@ function hitungKebutuhanScorecard(?string $tanggalMulai, ?string $tanggalBerakhi
     return [
         'total_siklus'             => $totalSiklus,
         'durasi_bulan'             => $durasiBulan,
+        'evaluasi_per_tahun'       => $evaluasiPerTahun,
         'warning_1_bulan'          => $warning1Bulan,
         'hari_menuju_evaluasi'     => $hariMenujuEvaluasi,
         'target_evaluasi_terdekat' => $targetEvaluasiTerdekat,
@@ -520,11 +527,23 @@ function warnaWarning(string $status): string {
 }
 
 function formatTanggal(?string $tgl): string {
-    if (!$tgl) return '-';
+    if (!$tgl || $tgl === '0000-00-00' || $tgl === '0000-00-00 00:00:00' || str_starts_with($tgl, '0000-00-00')) {
+        return '-';
+    }
     $t = strtotime($tgl);
     if (!$t) return '-';
     $bulan = ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
     return date('d', $t) . ' ' . $bulan[(int)date('n', $t)] . ' ' . date('Y', $t);
+}
+
+function formatTanggalPanjang(?string $tgl): string {
+    if (!$tgl || $tgl === '0000-00-00' || $tgl === '0000-00-00 00:00:00' || str_starts_with($tgl, '0000-00-00')) {
+        return '-';
+    }
+    $t = strtotime($tgl);
+    if (!$t) return '-';
+    $bulanPanjang = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    return (int)date('d', $t) . ' ' . $bulanPanjang[(int)date('n', $t)] . ' ' . date('Y', $t);
 }
 
 function h(?string $s): string {
@@ -538,6 +557,27 @@ function singkat(?string $teks, int $panjang, string $akhiran = '…'): string {
         return mb_strimwidth($teks, 0, $panjang, $akhiran, 'UTF-8');
     }
     return strlen($teks) > $panjang ? substr($teks, 0, max(1, $panjang - 1)) . $akhiran : $teks;
+}
+
+/** Verifikasi file PDF asli melalui magic header %PDF (mencegah file palsu/script). */
+function isPdfValid(string $filePath): bool {
+    if (!file_exists($filePath) || filesize($filePath) < 4) {
+        return false;
+    }
+    $h = @fopen($filePath, 'rb');
+    if (!$h) return false;
+    $bytes = fread($h, 4);
+    fclose($h);
+    return str_starts_with($bytes, '%PDF');
+}
+
+/** Verifikasi integritas file gambar (JPG, PNG, WebP) melalui getimagesize. */
+function isImageValid(string $filePath): bool {
+    if (!file_exists($filePath) || filesize($filePath) < 12) {
+        return false;
+    }
+    $info = @getimagesize($filePath);
+    return ($info !== false && in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true));
 }
 
 /* ============================================================

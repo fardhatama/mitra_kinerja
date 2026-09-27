@@ -137,7 +137,7 @@ require __DIR__ . '/includes/header.php';
                 <div style="font-size:10pt;">Kanwil Kementerian Hukum Kepulauan Riau</div>
             </td>
             <td style="border:none;width:50%;text-align:center;font-size:12pt;vertical-align:top;">
-                <div>Tanjungpinang, <?= date('d F Y') ?></div>
+                <div>Tanjungpinang, <?= formatTanggalPanjang(date('Y-m-d')) ?></div>
                 <div style="font-weight:700;">Kepala Kantor Wilayah</div>
                 <div style="height:70px;"></div>
                 <div style="font-weight:700;text-decoration:underline;">EDISON MANIK, S.H., M.Si.</div>

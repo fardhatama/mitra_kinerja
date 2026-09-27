@@ -153,6 +153,14 @@ def create_vertical_gate0_xlsx(filename, sheet_name, title, rows_data):
   <sheetData>
     {''.join(sheet_rows_xml)}
   </sheetData>
+  <dataValidations count="2">
+    <dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="C16:C33">
+      <formula1>&quot;YA,TIDAK&quot;</formula1>
+    </dataValidation>
+    <dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="C35:C41">
+      <formula1>&quot;YA,TIDAK&quot;</formula1>
+    </dataValidation>
+  </dataValidations>
 </worksheet>"""
 
     si_entries = []

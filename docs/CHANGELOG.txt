@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-09-27
+
+### Added
+- Gate 0 Excel Data Validation: Native OpenXML dropdown data validations (`"YA,TIDAK"`) embedded directly into cell ranges `C16:C33` (18 evaluation questions) and `C35:C41` (7 special triggers) for both Dalam Negeri and Luar Negeri templates.
+- Manajemen Naskah: Added `evaluasi_per_tahun` integer field ("Evaluasi Rencana Kerja (Per Tahun)") with dynamic scorecard cycle calculation (e.g., 36 months / 4 times = 9 review milestones).
+- Scorecard Progress Header: Added 7th summary card ("Kegiatan Terkait") showing total linked activities with a direct shortcut to `tindak_lanjut.php?mitra_id=X`.
+- Tindak Lanjut Evidence Upload: Integrated file upload field supporting multi-format evidence (`.pdf, .jpg, .jpeg, .png, .docx, .xlsx, .pptx` up to 25MB) with download button in the activity ledger.
+- Searchable Combobox Widget: Built native interactive autocomplete widget (`public/js/searchable_dropdown.js`) featuring instant query filtering, suggestion list, and full keyboard navigation (`ArrowDown`, `ArrowUp`, `Enter`, `Escape`).
+- Portofolio Instant Search: Added live search input box to `portofolio.php` allowing instantaneous filtering by partner name, code, or division.
+- Formal Long Date Formatting: Added `formatTanggalPanjang()` in `includes/functions.php` formatting dates in formal Indonesian civil-service standard (e.g., "27 September 2026").
+
+### Fixed
+- Fixed sparse cell column-shifting bug in `gate0.php` OpenXML parser: mapped cells via alphanumeric coordinates (`c['r']`) and added `inlineStr` tag support.
+- Fixed validation record persistence bug: converted `UPDATE validasi` into `INSERT ... ON DUPLICATE KEY UPDATE` and seeded `validasi` records for all partnerships, guaranteeing zero silent update drops.
+- Fixed badge and text overflow in scorecard summary cards: applied flexible text wrapping (`white-space: normal`, `word-break: break-word`) to prevent text overflow outside container boundaries.
+- Hardened early warning sorting against PHP 8 type coercion by replacing `array_search` with strict severity mapping.
+- Cleaned test artifacts and synchronized `database/mitra_kinerja_dump.sql`, `schema.sql`, and `seed_data.sql` across all 13 tables.
+
 ## [2.2.0] - 2026-09-25
 
 ### Added
@@ -39,6 +57,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed UI inconsistency: added `Bidang` column and badges across `mitra_edit.php`, `mitra_list.php`, `laporan.php`, and `baseline.php?view=print`.
 - Added interactive division filter (`fBidang`) to `portofolio.php`.
 - Parameterized demo user account generation in `includes/auto_migrate.php`.
+- Hardened date parsing in `formatTanggal()` to intercept `0000-00-00` strings, preventing invalid "30 Nov -0001" artifacts.
+- Hardened authentication in `includes/auth.php` by adding `session_regenerate_id(true)` to prevent session fixation, and enforced `SameSite=Lax` and `HttpOnly` cookie flags.
+- Sealed validation approval endpoint in `mitra_validasi.php`: strictly rejects non-validator/non-admin POST requests with HTTP 403 Forbidden.
+- Added magic-byte verification (`%PDF-` and `getimagesize`) on uploaded documents and photos, preventing renamed malicious payload executions.
+- Updated `public/uploads/.htaccess` with modern Apache 2.4 `Require all denied` and `Options -Indexes -ExecCGI` directives, and deployed directory defense to `baseline_pdf/`.
+- Enhanced `scripts/make_backup.py` with static SQL dump fallback when mysqldump is temporarily unreachable.
 
 ## [2.1.0] - 2026-09-23
 

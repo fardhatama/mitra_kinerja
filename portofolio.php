@@ -23,6 +23,7 @@ require __DIR__ . '/includes/header.php';
 
 <div class="card">
     <div class="filters">
+        <input type="text" id="fSearch" placeholder="🔍 Cari kode / mitra / bidang..." style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:200px;">
         <select id="fPortofolio">
             <option value="">Semua Portofolio</option>
             <option value="Pilot Utama">Pilot Utama</option>
@@ -99,20 +100,23 @@ require __DIR__ . '/includes/header.php';
 
 <script>
 function applyFilters() {
+    var q = (document.getElementById('fSearch').value || '').toLowerCase().trim();
     var p = document.getElementById('fPortofolio').value;
     var b = document.getElementById('fBidang').value;
     var pos = document.getElementById('fPosisi').value;
     var rek = document.getElementById('fRekomendasi').value;
     var s = document.getElementById('fStatus').value;
     document.querySelectorAll('#tblPortofolio tbody tr').forEach(function(tr) {
+        var matchQ = !q || tr.textContent.toLowerCase().indexOf(q) !== -1;
         var matchP = !p || tr.dataset.portofolio === p;
         var matchB = !b || tr.dataset.bidang === b;
         var matchPos = !pos || tr.dataset.posisi === pos;
         var matchRek = !rek || tr.dataset.rekomendasi === rek;
         var matchS = !s || tr.dataset.status === s;
-        tr.style.display = (matchP && matchB && matchPos && matchRek && matchS) ? '' : 'none';
+        tr.style.display = (matchQ && matchP && matchB && matchPos && matchRek && matchS) ? '' : 'none';
     });
 }
+document.getElementById('fSearch').addEventListener('input', applyFilters);
 document.getElementById('fPortofolio').addEventListener('change', applyFilters);
 document.getElementById('fBidang').addEventListener('change', applyFilters);
 document.getElementById('fPosisi').addEventListener('change', applyFilters);

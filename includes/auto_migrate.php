@@ -132,6 +132,8 @@ function ensureDatabaseSchema(PDO $pdo): void {
                 "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS baseline_catatan_ringkasan TEXT NULL AFTER baseline_pemeriksa",
                 "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS pic_internal VARCHAR(255) NULL AFTER sumber_baseline",
                 "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS pic_mitra VARCHAR(255) NULL AFTER pic_internal",
+                "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS evaluasi_per_tahun INT NOT NULL DEFAULT 4 AFTER status_tanggal",
+                "ALTER TABLE tindak_lanjut ADD COLUMN IF NOT EXISTS file_bukti VARCHAR(255) NULL AFTER status",
                 "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS posisi_portofolio ENUM('BELUM DAPAT DITENTUKAN','AKTIF','OUTPUT TERSEDIA','OUTCOME TERBENTUK','BERDAMPAK') NOT NULL DEFAULT 'BELUM DAPAT DITENTUKAN' AFTER status_scorecard",
                 "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS rekomendasi ENUM('BELUM DITENTUKAN','LANJUT','PERBAIKI','PERPANJANG','REPLIKASI','HENTIKAN') NOT NULL DEFAULT 'BELUM DITENTUKAN' AFTER posisi_portofolio",
                 "ALTER TABLE indikator_skor ADD COLUMN IF NOT EXISTS kondisi_baseline TEXT NULL AFTER referensi_baseline",
@@ -140,6 +142,11 @@ function ensureDatabaseSchema(PDO $pdo): void {
             foreach ($alterQueries as $q) {
                 try { $pdo->exec($q); } catch (Throwable $e) {}
             }
+
+            // Ensure validasi row exists for all mitra
+            try {
+                $pdo->exec("INSERT IGNORE INTO validasi (mitra_id, status) SELECT id, 'BELUM' FROM mitra_kinerja WHERE id NOT IN (SELECT mitra_id FROM validasi)");
+            } catch (Throwable $e) {}
 
             // Ensure demo users exist
             try {

@@ -36,6 +36,14 @@ def make_backup(tag="major_milestone_v2_1"):
                     break
         except Exception:
             continue
+
+    # Fallback to existing static dump if live mysqldump is offline
+    if not dump_success:
+        static_dump = os.path.join(project_root, "database", "mitra_kinerja_dump.sql")
+        if os.path.exists(static_dump) and os.path.getsize(static_dump) > 1000:
+            import shutil
+            shutil.copyfile(static_dump, db_dump_path)
+            dump_success = True
             
     # Directories/files to exclude
     exclude_dirs = {".git", "backups", "__pycache__", ".venv", "node_modules", "tmp"}

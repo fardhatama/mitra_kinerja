@@ -10,6 +10,10 @@ $id = (int)($_GET['id'] ?? 0);
 
 // Jika pemeriksa membuka detail validasi, arahkan langsung ke form penilaian (mitra_edit.php)
 if ($id > 0 && $userRole === 'pemeriksa') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        http_response_code(403);
+        die('Akses ditolak: Hanya validator dan administrator yang berwenang menetapkan keputusan validasi.');
+    }
     header('Location: mitra_edit.php?id=' . $id);
     exit;
 }
@@ -138,6 +142,10 @@ $saved = false;
 $summary = getMitraSummary($pdo, $mitra);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!in_array($userRole, ['admin', 'validator'], true)) {
+        http_response_code(403);
+        die('Akses ditolak: Hanya validator dan administrator yang berwenang menetapkan keputusan validasi.');
+    }
     $status = $_POST['status'] ?? 'BELUM';
     $catatan = trim($_POST['catatan'] ?? '');
 
@@ -149,9 +157,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Tulis catatan bagian yang harus diperbaiki.';
     } else {
         $stmtV = $pdo->prepare(
-            'UPDATE validasi SET status=?, validator_id=?, tanggal_validasi=CURDATE(), catatan=? WHERE mitra_id=?'
+            'INSERT INTO validasi (mitra_id, status, validator_id, tanggal_validasi, catatan)
+             VALUES (?, ?, ?, CURDATE(), ?)
+             ON DUPLICATE KEY UPDATE status=VALUES(status), validator_id=VALUES(validator_id), tanggal_validasi=VALUES(tanggal_validasi), catatan=VALUES(catatan)'
         );
-        $stmtV->execute([$status, $user['id'], $catatan ?: null, $id]);
+        $stmtV->execute([$id, $status, $user['id'], $catatan ?: null]);
         syncStatusScorecard($pdo, $id);
         logAudit($id, $user['id'], 'VALIDASI', 'Status validasi diubah menjadi ' . $status);
         $saved = true;
