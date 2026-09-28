@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.2] - 2026-09-28
+
+### Added
+- Integrated authoritative `Paket_Scorecard_dan_Baseline_Final` dataset across all 15 core partnerships:
+  - Ingested 180 audited baseline elements from `FINAL_BASELINE_MITRA_KINERJA_28_AGUSTUS_2026.xlsx` with zero contradictions ($X = 0$) and designated 73 follow-up scorecard markers ($\blacktriangle$).
+  - Realigned portfolio composition per team directives: STIT Mumtaz Karimun promoted to Pilot Utama (`P05`), STAIN Sultan Abdurrahman transitioned to Portofolio Pengayaan (`C01`), and Politeknik Bintan Cakrawala shifted to (`C02`).
+  - Recorded official examiner assignments: Evlin (`P01`), Ischika (`P03`, `C02`), Nur'ah Darina (`P09`, `C01`, `C05`), Hariawan Novriadi (`P06`), Nadia Putri Boga (`P07`, `C03`), and Kompilasi Pokja Data (`P02`, `P04`, `P05`, `P08`, `P10`, `C04`).
+  - Ingested authentic field activities and evidence into `tindak_lanjut` for Bapperida Bintan, UMRAH, STAIN SAR, PBC, and UIS with verified Google Drive proof URLs and registration numbers.
+  - Ingested authentic partner action plans into `rencana_kerja` for STAI Natuna, Bapperida, PBC, and UIS.
+  - Synchronized database dump bundles (`mitra_kinerja_dump.sql`, `seed_data.sql`, `schema.sql`) reflecting the complete post-merge state.
+
 ## [2.2.1] - 2026-09-27
 
 ### Added
