@@ -43,8 +43,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'uploa
                 $savedPath = 'public/uploads/' . $targetName;
                 $stmtU = $pdo->prepare('UPDATE mitra_kinerja SET file_naskah = ? WHERE id = ?');
                 $stmtU->execute([$savedPath, $targetMitraId]);
+
+                // Sinkronkan otomatis ke Baseline Elemen 1 (Identitas naskah)
+                $stmtB = $pdo->prepare("UPDATE baseline_elemen SET link_sumber_bukti = ?, status = 'TERVERIFIKASI' WHERE mitra_id = ? AND nomor_elemen = 1");
+                $stmtB->execute([$savedPath, $targetMitraId]);
+
                 logAudit($targetMitraId, $user['id'], 'UPLOAD_SCAN', 'Upload scan naskah PDF: ' . $kodeMitra);
-                $success = 'Berkas scan naskah PDF untuk ' . $kodeMitra . ' berhasil diunggah.';
+                $success = 'Berkas scan naskah PDF untuk ' . $kodeMitra . ' berhasil diunggah dan disinkronkan ke Identitas Baseline.';
             } else {
                 $errors[] = 'Gagal menyimpan berkas scan naskah di server.';
             }
@@ -128,6 +133,11 @@ if ($id > 0) {
         } elseif (empty($errors)) {
             $stmtU = $pdo->prepare('UPDATE mitra_kinerja SET nama_mitra=?, judul=?, portofolio=?, bidang=?, jenis=?, pks_induk_id=?, tanggal_mulai=?, tanggal_berakhir=?, status_tanggal=?, cutoff_date=?, sumber_baseline=?, pic_internal=?, pic_mitra=?, evaluasi_per_tahun=?, file_naskah=?, foto_kerjasama=? WHERE id=?');
             $stmtU->execute([$namaMitra, $judul, $portofolio, $bidang, $jenis, $pksIndukId, $mulai, $berakhir, $statusTgl, $cutoff, $sumber, $picInternal, $picMitra, $evaluasiPerTahun, $fileNaskah, $fotoKerjasama, $id]);
+            if ($fileNaskah) {
+                // Sinkronkan ke Baseline Elemen 1 (Identitas naskah)
+                $stmtB = $pdo->prepare("UPDATE baseline_elemen SET link_sumber_bukti = ?, status = 'TERVERIFIKASI' WHERE mitra_id = ? AND nomor_elemen = 1");
+                $stmtB->execute([$fileNaskah, $id]);
+            }
             syncStatusScorecard($pdo, $id);
             logAudit($id, $user['id'], 'UPDATE_MITRA', 'Data naskah ' . $mitra['kode'] . ' diperbarui');
             $success = 'Data naskah berhasil diperbarui.';
@@ -372,8 +382,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST['action'])) {
 
             // Inisialisasi 12 Elemen Baseline FIX
             foreach (BASELINE_12_DEFS as $n => $d) {
-                $pdo->prepare('INSERT INTO baseline_elemen (mitra_id, nomor_elemen, kelompok, nama_elemen, yang_diperiksa, sumber_bukti_minimum, status) VALUES (?, ?, ?, ?, ?, ?, \'BELUM DIISI\')')
-                    ->execute([$mid, $n, $d['kelompok'], $d['nama'], $d['yang_diperiksa'], $d['sumber_minimum']]);
+                $linkInit = ($n === 1 && !empty($fileNaskah)) ? $fileNaskah : '';
+                $statusInit = ($n === 1 && !empty($fileNaskah)) ? 'TERVERIFIKASI' : 'BELUM DIISI';
+                $pdo->prepare('INSERT INTO baseline_elemen (mitra_id, nomor_elemen, kelompok, nama_elemen, yang_diperiksa, sumber_bukti_minimum, link_sumber_bukti, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+                    ->execute([$mid, $n, $d['kelompok'], $d['nama'], $d['yang_diperiksa'], $d['sumber_minimum'], $linkInit, $statusInit]);
             }
 
             foreach (['Masa berlaku','Aktivitas/tenggat','Data/eviden','PIC'] as $d) { $pdo->prepare("INSERT INTO early_warning (mitra_id,dimensi,status,progres) VALUES (?,?,'V0','BELUM MULAI')")->execute([$mid,$d]); }

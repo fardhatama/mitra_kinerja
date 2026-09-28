@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-09-28
+
+### Added
+- **Menu Baru "Import" (`import.php`):**
+  - Integrated into top navigation bar (`includes/header.php`) with direct access for roles `admin`, `pemeriksa`, and `pengampu`.
+  - Comprehensive table listing all partnerships with status badges for Baseline, Scorecard, and Division.
+  - Added dedicated **"Template Excel"** column with 1-click download buttons (`⬇️ Unduh Template (.xlsx)`) sourcing official templates directly from `01_Pilot_Utama` (P01–P10) and `02_Portofolio_Pengayaan` (C01–C04).
+  - Added dedicated **"Import"** column with interactive modal and drag-and-drop/picker form to upload and process `.xlsx` files.
+  - Full-featured server-side OpenXML `.xlsx` parser (`parseFullWorkbookXlsx`) extracting Baseline elements, Scorecard indicators, PIC contacts, and P2MA links directly without external library dependencies.
+  - Automatically updates 12 Baseline elements (`baseline_elemen`), locks baseline status (`TERVERIFIKASI / DIKUNCI`), updates Scorecard indicators (`indikator_skor`), and recalculates total scorecard rating.
+
+### Changed
+- **Sinkronisasi 2 Arah Scan Naskah Asli (PDF) di Manajemen Naskah & Baseline:**
+  - In `mitra_manage.php`, uploading physical scanned PDFs via the modal, edit form, or new registration form now immediately updates and verifies Element 1 (`IDENTITAS`) in `baseline_elemen` (`link_sumber_bukti` and status `TERVERIFIKASI`).
+  - In `baseline.php`, uploading an agreement document in Element 1 updates `file_naskah` in `mitra_kinerja`, guaranteeing 100% 1:1 synchronization between both modules.
+
 ## [2.2.3] - 2026-09-28
 
 ### Fixed
