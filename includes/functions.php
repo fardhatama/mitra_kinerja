@@ -614,3 +614,57 @@ function warnaEfektivitas(string $status): string {
     };
 }
 
+/**
+ * Format teks sumber/link bukti menjadi tampilan interaktif yang rapi.
+ * Mengenali link P2MA Kemenkum, Google Drive, berkas lokal, dan tautan web lainnya.
+ */
+function formatLinkSumberBukti(?string $raw): string {
+    if (!$raw || trim($raw) === '' || trim($raw) === '-') {
+        return '<span class="muted">-</span>';
+    }
+    $raw = trim($raw);
+
+    // Jika berupa JSON array (misal multiple file upload di elemen 9)
+    if (str_starts_with($raw, '[') && str_ends_with($raw, ']')) {
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            $html = '<div style="display:flex;flex-direction:column;gap:3px;">';
+            foreach ($decoded as $idx => $f) {
+                $leaf = basename($f);
+                $html .= '<a href="' . h($f) . '" target="_blank" class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;">📄 Berkas ' . ($idx + 1) . ' (' . h(singkat($leaf, 20)) . ')</a>';
+            }
+            $html .= '</div>';
+            return $html;
+        }
+    }
+
+    // Jika diawali http:// atau https://
+    if (preg_match('/^https?:\/\//i', $raw)) {
+        if (str_contains($raw, 'p2ma.kemenkum.go.id')) {
+            if (str_ends_with(strtolower($raw), '.pdf') || str_contains($raw, '/naskah/')) {
+                return '<a href="' . h($raw) . '" target="_blank" rel="noopener noreferrer" class="badge badge-primary" style="font-size:10.5px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;">📄 Naskah P2MA (PDF) &rarr;</a>';
+            } elseif (str_contains($raw, '/pencarian')) {
+                return '<a href="' . h($raw) . '" target="_blank" rel="noopener noreferrer" class="badge badge-primary" style="font-size:10.5px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;">🔍 Verifikasi P2MA &rarr;</a>';
+            } else {
+                return '<a href="' . h($raw) . '" target="_blank" rel="noopener noreferrer" class="badge badge-primary" style="font-size:10.5px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;">🌐 Portal P2MA &rarr;</a>';
+            }
+        } elseif (str_contains($raw, 'drive.google.com') || str_contains($raw, 'docs.google.com')) {
+            return '<a href="' . h($raw) . '" target="_blank" rel="noopener noreferrer" class="badge badge-success" style="font-size:10.5px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;">📁 Google Drive &rarr;</a>';
+        } else {
+            return '<a href="' . h($raw) . '" target="_blank" rel="noopener noreferrer" class="badge badge-secondary" style="font-size:10.5px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;">🔗 Tautan Bukti &rarr;</a>';
+        }
+    }
+
+    // Jika mengandung URL di dalam teks, linkify URL-nya
+    if (preg_match('/https?:\/\/[^\s]+/i', $raw)) {
+        $replaced = preg_replace_callback('/https?:\/\/[^\s]+/i', function($m) {
+            $u = $m[0];
+            $label = str_contains($u, 'p2ma') ? '🌐 Portal P2MA' : (str_contains($u, 'google') ? '📁 Google Drive' : '🔗 Tautan');
+            return '<a href="' . h($u) . '" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;font-weight:600;">[' . $label . ']</a>';
+        }, h($raw));
+        return nl2br($replaced);
+    }
+
+    return nl2br(h($raw));
+}
+

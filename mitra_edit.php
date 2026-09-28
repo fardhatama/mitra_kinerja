@@ -232,6 +232,18 @@ require __DIR__ . '/includes/header.php';
             ?>
             <input value="<?= $mb['sisa_hari'] !== null ? $mb['sisa_hari'] . ' hari (' . h($mb['kondisi']) . ')' : 'Belum dapat dipastikan' ?>" disabled>
         </div>
+        <div class="field">
+            <label>Dokumen Naskah Asli</label>
+            <div>
+                <?php if (!empty($mitra['file_naskah'])): ?>
+                    <a href="<?= h($mitra['file_naskah']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;font-size:12px;font-weight:600;color:#1e40af;border-color:#93c5fd;background:#eff6ff;">
+                        📄 Buka Naskah Resmi (PDF) &rarr;
+                    </a>
+                <?php else: ?>
+                    <span class="muted" style="font-size:12px;">Belum diunggah</span>
+                <?php endif; ?>
+            </div>
+        </div>
     </div>
 </div>
 

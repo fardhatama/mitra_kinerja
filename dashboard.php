@@ -30,7 +30,7 @@ foreach ($all as $s) {
 }
 ?>
 
-<?php if (!empty($dueSoonMonev)): ?>
+<?php if ($userRole === 'pengampu' || $userRole === 'pic' || !empty($dueSoonMonev)): ?>
 <div class="alert alert-warning" style="margin-bottom:20px;border-left:4px solid #ea580c;background:#fff7ed;color:#9a3412;">
     <?php if ($userRole === 'pengampu'): ?>
         <div style="font-weight:700;font-size:14px;margin-bottom:4px;color:#c2410c;">
@@ -55,7 +55,9 @@ foreach ($all as $s) {
         </div>
     <?php endif; ?>
 
+    <?php if (!empty($dueSoonMonev)): ?>
     <div style="font-size:13px;margin-top:8px;">
+        <div style="font-weight:600;margin-bottom:4px;">Daftar Naskah Mendekati Tenggat (&lt; 30 Hari):</div>
         <ul style="margin:4px 0 0 18px;padding:0;">
             <?php foreach ($dueSoonMonev as $ds): 
                 $msLabel = 'SC-1';
@@ -68,16 +70,17 @@ foreach ($all as $s) {
                     }
                 }
             ?>
-            <li style="margin-bottom:6px;">
+            <li style="margin-bottom:4px;">
                 <strong><?= h($ds['mitra']['kode']) ?></strong> &mdash; <?= h($ds['mitra']['nama_mitra']) ?> &bull; 
-                Siklus: <span class="badge badge-warning" style="font-size:10.5px;font-weight:600;"><?= h($msLabel) ?></span> &bull;
+                Siklus: <span class="badge badge-warning" style="font-size:10px;font-weight:600;"><?= h($msLabel) ?></span> &bull;
                 Target: <strong><?= formatTanggal($ds['monev']['target_evaluasi_terdekat']) ?></strong> 
-                (<?= $ds['monev']['hari_menuju_evaluasi'] ?> hari lagi) &bull;
+                (<?= $ds['monev']['hari_menuju_evaluasi'] !== null ? ($ds['monev']['hari_menuju_evaluasi'] >= 0 ? $ds['monev']['hari_menuju_evaluasi'] . ' hari lagi' : abs($ds['monev']['hari_menuju_evaluasi']) . ' hari lalu') : '-' ?>) &bull;
                 <a href="mitra_edit.php?id=<?= $ds['mitra']['id'] ?>" style="color:#2563eb;text-decoration:underline;">Buka Penilaian &rarr;</a>
             </li>
             <?php endforeach; ?>
         </ul>
     </div>
+    <?php endif; ?>
 </div>
 <?php endif; ?>
 

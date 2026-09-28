@@ -403,7 +403,7 @@ if ($id > 0) {
                         </td>
                         <td style="text-align:center;"><span class="badge badge-<?= $bClass ?>"><?= h($st) ?></span></td>
                         <td><?= nl2br(h($el['fakta_pemeriksaan'] ?? '-')) ?></td>
-                        <td style="font-size:10.5px;"><?= nl2br(h($el['link_sumber_bukti'] ?? '-')) ?></td>
+                        <td style="font-size:10.5px;"><?= formatLinkSumberBukti($el['link_sumber_bukti'] ?? '') ?></td>
                     </tr>
                     <?php endfor; ?>
                 </tbody>
@@ -614,7 +614,7 @@ if ($id > 0) {
                             </td>
                             <td>
                                 <?php if ($isLocked || !$canEdit): ?>
-                                    <div style="font-size:11px;color:#475569;"><?= nl2br(h($el['link_sumber_bukti'] ?? '-')) ?></div>
+                                    <div style="font-size:11px;color:#475569;"><?= formatLinkSumberBukti($el['link_sumber_bukti'] ?? '') ?></div>
                                 <?php else: ?>
                                     <textarea name="bukti_<?= $num ?>" rows="2" style="width:100%;font-size:11px;" placeholder="Tautan P2MA / surat / nomor arsip..."><?= h($el['link_sumber_bukti'] ?? '') ?></textarea>
                                 <?php endif; ?>
@@ -625,9 +625,9 @@ if ($id > 0) {
                                     <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
                                         <?php 
                                             $pdfPath = $el['link_sumber_bukti'] ?: ($mitra['file_naskah'] ?? '');
-                                            if ($pdfPath && file_exists(__DIR__ . '/' . $pdfPath)): 
+                                            if ($pdfPath && (file_exists(__DIR__ . '/' . $pdfPath) || preg_match('/^https?:\/\//i', $pdfPath))): 
                                         ?>
-                                            <a href="<?= h($pdfPath) ?>" target="_blank" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📄 Lihat PDF</a>
+                                            <a href="<?= h($pdfPath) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📄 Lihat PDF</a>
                                         <?php endif; ?>
                                         <?php if (!$isLocked && $canEdit): ?>
                                             <button type="button" onclick="openUploadModal(1, 'Identitas Naskah')" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📤 Upload PDF</button>
@@ -636,8 +636,11 @@ if ($id > 0) {
 
                                 <?php elseif ($num === 3): // SUBSTANSI: fitur upload file pdf ?>
                                     <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
-                                        <?php if (!empty($el['link_sumber_bukti']) && file_exists(__DIR__ . '/' . $el['link_sumber_bukti'])): ?>
-                                            <a href="<?= h($el['link_sumber_bukti']) ?>" target="_blank" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📄 Lihat PDF</a>
+                                        <?php 
+                                            $subPath = $el['link_sumber_bukti'] ?? '';
+                                            if ($subPath && (file_exists(__DIR__ . '/' . $subPath) || preg_match('/^https?:\/\//i', $subPath))): 
+                                        ?>
+                                            <a href="<?= h($subPath) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📄 Lihat PDF</a>
                                         <?php endif; ?>
                                         <?php if (!$isLocked && $canEdit): ?>
                                             <button type="button" onclick="openUploadModal(3, 'Dokumen Ruang Lingkup')" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📤 Upload PDF</button>

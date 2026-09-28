@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.3] - 2026-09-28
+
+### Fixed
+- Fixed Login UI Demo Account buttons visibility: decoupled `.btn-demo` from `.login-card button` white text inheritance, enforcing `#1e293b` dark text on crisp `#ffffff` rounded buttons with active hover highlights.
+- Fixed non-clickable P2MA and external URLs across `baseline.php`, `tindak_lanjut.php`, and `mitra_edit.php`:
+  - Added `formatLinkSumberBukti()` converting raw P2MA links into active clickable badges (`📄 Naskah P2MA (PDF) →`, `🔍 Verifikasi P2MA →`, `📁 Google Drive →`).
+  - Fixed Action column in `baseline.php` to display `📄 Lihat PDF` for remote P2MA agreement URLs as well as local files.
+  - Fixed `tindak_lanjut.php` evidence links: cross-origin URLs now open directly in a new tab without broken `download` attribute traps, and registration text codes render as descriptive badges.
+  - Populated `mitra_kinerja.file_naskah` with the official P2MA signed agreement PDF URLs from Elemen 1, activating the `📄 Scan PDF` button in `mitra_manage.php` and adding a direct `📄 Buka Naskah Resmi (PDF)` button in `mitra_edit.php`.
+- Hardened role permissions and alert display:
+  - Linked database `siklus_monev` records with `$monev` calculations in `includes/data.php`.
+  - Guaranteed `pengampu` and `pic` standing operating directive banners always display on `dashboard.php` and `scorecard.php`, appending approaching deadline partnerships (< 30 days) when present.
+
 ## [2.2.2] - 2026-09-28
 
 ### Added

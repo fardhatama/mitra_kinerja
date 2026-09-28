@@ -155,11 +155,24 @@ require __DIR__ . '/includes/header.php';
                 <td><?= formatTanggal($tl['tenggat']) ?></td>
                 <td><span class="status-dot <?= $dotClass ?>"><?= h($tl['status']) ?></span></td>
                 <td>
-                    <?php if (!empty($tl['file_bukti'])): ?>
-                    <a href="<?= h($tl['file_bukti']) ?>" target="_blank" download class="btn btn-outline btn-sm" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;">
-                        📄 Unduh Bukti
-                    </a>
+                    <?php if (!empty($tl['file_bukti'])): 
+                        $fb = $tl['file_bukti'];
+                        if (preg_match('/^https?:\/\//i', $fb)):
+                            $isDrive = str_contains($fb, 'google.com');
+                            $isP2ma = str_contains($fb, 'p2ma');
+                            $btnLabel = $isDrive ? '📁 Google Drive' : ($isP2ma ? '🌐 P2MA' : '🔗 Tautan');
+                            $btnStyle = $isDrive ? 'color:#059669;border-color:#a7f3d0;background:#ecfdf5;' : 'color:#1e40af;border-color:#bfdbfe;background:#eff6ff;';
+                    ?>
+                        <a href="<?= h($fb) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;<?= $btnStyle ?>">
+                            <?= $btnLabel ?> &rarr;
+                        </a>
+                    <?php elseif (file_exists(__DIR__ . '/' . $fb) || str_starts_with($fb, 'public/uploads/')): ?>
+                        <a href="<?= h($fb) ?>" target="_blank" download class="btn btn-outline btn-sm" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;">
+                            📄 Unduh Bukti
+                        </a>
                     <?php else: ?>
+                        <span class="badge badge-secondary" style="font-size:10.5px;max-width:180px;white-space:normal;text-align:left;display:inline-block;line-height:1.25;"><?= h($fb) ?></span>
+                    <?php endif; else: ?>
                     <span class="muted" style="font-size:11.5px;">-</span>
                     <?php endif; ?>
                 </td>

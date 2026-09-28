@@ -103,6 +103,51 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
     $evaluasiPerTahun = (int)($mitra['evaluasi_per_tahun'] ?? 4);
     $monev = hitungKebutuhanScorecard($mitra['tanggal_mulai'] ?? null, $mitra['tanggal_berakhir'] ?? null, $evaluasiPerTahun);
 
+    // Integrasi jadwal aktual dari tabel siklus_monev jika tersedia
+    try {
+        $stmtSM = $pdo->prepare('SELECT * FROM siklus_monev WHERE mitra_id = ? ORDER BY tanggal_target_evaluasi ASC');
+        $stmtSM->execute([$mitra['id']]);
+        $realMilestones = $stmtSM->fetchAll();
+        if (!empty($realMilestones)) {
+            $todayTs = strtotime(date('Y-m-d'));
+            $nearestTarget = null;
+            $nearestDiff = null;
+            $warning1Bulan = false;
+            $msList = [];
+            foreach ($realMilestones as $rm) {
+                $tgtStr = $rm['tanggal_target_evaluasi'];
+                $diff = (int)round((strtotime($tgtStr) - $todayTs) / 86400);
+                $isDueSoon = ($diff >= 0 && $diff <= 30);
+                $isPast = ($diff < 0);
+                $msList[] = [
+                    'siklus_ke'     => (int)$rm['siklus_ke'],
+                    'nama'          => $rm['nama_siklus'],
+                    'target_tgl'    => $tgtStr,
+                    'sisa_hari'     => $diff,
+                    'is_due_soon'   => $isDueSoon,
+                    'is_past'       => $isPast,
+                    'status_siklus' => $rm['status_siklus']
+                ];
+                if ($nearestTarget === null && $diff >= -15) {
+                    $nearestTarget = $tgtStr;
+                    $nearestDiff = $diff;
+                    if ($isDueSoon) {
+                        $warning1Bulan = true;
+                    }
+                }
+            }
+            if (!empty($msList)) {
+                $monev['milestones'] = $msList;
+                $monev['total_siklus'] = count($msList);
+                if ($nearestTarget !== null) {
+                    $monev['target_evaluasi_terdekat'] = $nearestTarget;
+                    $monev['hari_menuju_evaluasi'] = $nearestDiff;
+                    $monev['warning_1_bulan'] = $warning1Bulan;
+                }
+            }
+        }
+    } catch (Throwable $e) {}
+
     return [
         'mitra'             => $mitra,
         'indikator'         => $indikatorRows,

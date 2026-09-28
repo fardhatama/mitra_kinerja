@@ -243,11 +243,35 @@ a:hover { text-decoration: underline; }
     border: 1.5px solid var(--border); border-radius: 10px; font-size: 14px; transition: border .2s;
 }
 .login-card input:focus { outline: none; border-color: var(--accent); }
-.login-card button {
+.login-card button[type="submit"],
+.login-card .btn-submit {
     width: 100%; padding: 12px; background: var(--accent); color: #fff;
     border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .2s;
 }
-.login-card button:hover { background: var(--accent-hover); }
+.login-card button[type="submit"]:hover,
+.login-card .btn-submit:hover { background: var(--accent-hover); }
+
+/* Tombol Cepat Akun Demo */
+.login-card .btn-demo {
+    width: 100%;
+    padding: 7px 8px !important;
+    background: #ffffff !important;
+    color: #1e293b !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    transition: all .15s ease !important;
+    text-align: center !important;
+    display: block !important;
+    box-sizing: border-box !important;
+}
+.login-card .btn-demo:hover {
+    background: #eff6ff !important;
+    color: #1d4ed8 !important;
+    border-color: #3b82f6 !important;
+}
 .error-box {
     background: #fef2f2; color: #b91c1c; padding: 10px 14px;
     border-radius: 8px; font-size: 13px; margin-bottom: 18px; border: 1px solid #fecaca;

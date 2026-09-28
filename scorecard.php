@@ -28,14 +28,29 @@ require __DIR__ . '/includes/header.php';
     <a href="dashboard.php" class="btn btn-outline btn-sm">&larr; Dashboard</a>
 </div>
 
-<?php if (!empty($dueSoonMonev) && ($userRole === 'pengampu' || $userRole === 'admin')): ?>
+<?php if ($userRole === 'pengampu' || $userRole === 'pic' || !empty($dueSoonMonev)): ?>
 <div class="alert alert-warning" style="margin-bottom:20px;border-left:4px solid #ea580c;background:#fff7ed;color:#9a3412;">
-    <div style="font-weight:700;font-size:14px;margin-bottom:4px;color:#c2410c;">
-        ⚠️ Notifikasi Pengisian Jadwal Evaluasi (Akun Pengampu)
-    </div>
-    <div style="font-size:13px;line-height:1.5;">
-        Akun <strong>Pengampu</strong> perlu untuk melakukan pengisian setiap <strong>SC1 atau SC2 atau SC3</strong> dan siklus evaluasi lainnya, sebelum <strong>30 hari</strong> dari tenggat waktu SC tersebut:
-    </div>
+    <?php if ($userRole === 'pengampu'): ?>
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px;color:#c2410c;">
+            ⚠️ Notifikasi Pengisian Jadwal Evaluasi (Akun Pengampu)
+        </div>
+        <div style="font-size:13px;line-height:1.5;">
+            Akun <strong>Pengampu</strong> perlu untuk melakukan pengisian setiap <strong>SC1 atau SC2 atau SC3</strong> dan siklus evaluasi lainnya, sebelum <strong>30 hari</strong> dari tenggat waktu SC tersebut.
+        </div>
+    <?php elseif ($userRole === 'pic'): ?>
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px;color:#c2410c;">
+            ⚠️ Pengingat Jadwal Evaluasi Kinerja (Akun PIC)
+        </div>
+        <div style="font-size:13px;line-height:1.5;">
+            Akun <strong>PIC</strong> bertugas untuk memantau dan mengingatkan Akun <strong>Pengampu</strong> agar melakukan pengisian setiap <strong>SC1 atau SC2 atau SC3</strong> sebelum <strong>30 hari</strong> dari tenggat waktu SC.
+        </div>
+    <?php else: ?>
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px;color:#c2410c;">
+            ⚠️ Monitoring Jadwal Evaluasi Mendatang (&lt; 30 Hari)
+        </div>
+    <?php endif; ?>
+
+    <?php if (!empty($dueSoonMonev)): ?>
     <ul style="margin:6px 0 0 18px;padding:0;font-size:12.5px;">
         <?php foreach ($dueSoonMonev as $ds): 
             $msLabel = 'SC-1';
@@ -52,11 +67,12 @@ require __DIR__ . '/includes/header.php';
             <strong><?= h($ds['mitra']['kode']) ?></strong> &mdash; <?= h($ds['mitra']['nama_mitra']) ?> &bull; 
             Siklus: <span class="badge badge-warning" style="font-size:10px;font-weight:600;"><?= h($msLabel) ?></span> &bull;
             Target: <strong><?= formatTanggal($ds['monev']['target_evaluasi_terdekat']) ?></strong> 
-            (<?= $ds['monev']['hari_menuju_evaluasi'] ?> hari lagi) &bull;
+            (<?= $ds['monev']['hari_menuju_evaluasi'] !== null ? ($ds['monev']['hari_menuju_evaluasi'] >= 0 ? $ds['monev']['hari_menuju_evaluasi'] . ' hari lagi' : abs($ds['monev']['hari_menuju_evaluasi']) . ' hari lalu') : '-' ?>) &bull;
             <a href="mitra_edit.php?id=<?= $ds['mitra']['id'] ?>" style="color:#2563eb;text-decoration:underline;">Buka Pengisian &rarr;</a>
         </li>
         <?php endforeach; ?>
     </ul>
+    <?php endif; ?>
 </div>
 <?php endif; ?>
 
