@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.2] - 2026-09-28
+
+### Fixed
+- **Self-Healing Otomatis Modul Gate 0 & Seluruh Database (`includes/auto_migrate.php`):**
+  - Resolved root cause of empty Gate 0 on teammate local setups: previously, `auto_migrate.php` only created the empty table `pra_pks` without populating seed data unless explicit dump was imported.
+  - Added autonomous runtime self-healing: on any page load, if `pra_pks` has 0 records, the system immediately seeds all 6 authentic Gate 0 proposals with full 18-question evaluation battery, 7 trigger evaluations, and approval statuses.
+  - Ensured all standard demo accounts (`admin`, `pemeriksa`, `validator`, `pimpinan`, `pengampu`, `pic`) are automatically restored if missing.
+  - Verified 100% database row parity across all 13 core tables, all 72 partner detail views, and all role authorization walls.
+
 ## [2.3.1] - 2026-09-28
 
 ### Added
