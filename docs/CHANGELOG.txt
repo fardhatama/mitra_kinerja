@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-09-28
+
+### Added
+- **Integrasi Penuh Paket Final Evaluasi 27 September 2026:**
+  - Ingested 10 authentic Scorecard workbooks from `01_SCORECARD_FINAL_27_SEPTEMBER_2026` (P01–P10) evaluated by the Kanwil Pokja Data committee.
+  - Ingested 180 verified Baseline elements across 15 partnerships from `FINAL_BASELINE_MITRA_KINERJA_AUDIT_FINAL_28_AGUSTUS_2026.xlsx` with examiner signatures (`Evlin`, `Kompilasi Pokja Data`, `Ischika`, `Fitra`, `Nur'ah Darina`, `Hariawan Novriadi`, `Nadia Putri Boga`).
+  - Ingested 59 authentic follow-up items from `SUMBER_AKTUAL` into the activity ledger (`tindak_lanjut`).
+  - Deployed official 27 September Scorecard templates into `public/templates/import_naskah/01_Scorecard_Final_27_Sep/` and `02_Baseline_Final/`.
+  - Upgraded `import.php` parser to natively parse both `PENILAIAN` + `REKOMENDASI` + `SUMBER_BASELINE` layouts and legacy sheets.
+  - Migrated `mitra_kinerja` columns (`status_scorecard`, `posisi_portofolio`, `rekomendasi`) to flexible `VARCHAR` types, preserving descriptive audit outputs (`OUTCOME AWAL / IMPLEMENTASI TERBATAS`, `OUTPUT AWAL / IMPLEMENTASI BERJALAN`, `MASA IMPLEMENTASI AWAL`).
+
 ## [2.3.0] - 2026-09-28
 
 ### Added

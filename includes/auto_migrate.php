@@ -134,8 +134,9 @@ function ensureDatabaseSchema(PDO $pdo): void {
                 "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS pic_mitra VARCHAR(255) NULL AFTER pic_internal",
                 "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS evaluasi_per_tahun INT NOT NULL DEFAULT 4 AFTER status_tanggal",
                 "ALTER TABLE tindak_lanjut ADD COLUMN IF NOT EXISTS file_bukti VARCHAR(255) NULL AFTER status",
-                "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS posisi_portofolio ENUM('BELUM DAPAT DITENTUKAN','AKTIF','OUTPUT TERSEDIA','OUTCOME TERBENTUK','BERDAMPAK') NOT NULL DEFAULT 'BELUM DAPAT DITENTUKAN' AFTER status_scorecard",
-                "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS rekomendasi ENUM('BELUM DITENTUKAN','LANJUT','PERBAIKI','PERPANJANG','REPLIKASI','HENTIKAN') NOT NULL DEFAULT 'BELUM DITENTUKAN' AFTER posisi_portofolio",
+                "ALTER TABLE mitra_kinerja MODIFY COLUMN status_scorecard VARCHAR(50) NOT NULL DEFAULT 'BELUM LENGKAP'",
+                "ALTER TABLE mitra_kinerja MODIFY COLUMN posisi_portofolio VARCHAR(150) NOT NULL DEFAULT 'BELUM DAPAT DITENTUKAN'",
+                "ALTER TABLE mitra_kinerja MODIFY COLUMN rekomendasi TEXT NULL",
                 "ALTER TABLE indikator_skor ADD COLUMN IF NOT EXISTS kondisi_baseline TEXT NULL AFTER referensi_baseline",
                 "ALTER TABLE indikator_skor ADD COLUMN IF NOT EXISTS kondisi_saat_ini TEXT NULL AFTER kondisi_baseline"
             ];

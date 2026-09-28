@@ -13,21 +13,21 @@ $errors = [];
 
 // Mapping file template resmi per kode naskah
 $templateMap = [
-    'P01' => ['file' => 'public/templates/import_naskah/01_Pilot_Utama/P01_Scorecard_Dekranasda_Kepri.xlsx', 'label' => 'Pilot Utama (P01)'],
-    'P02' => ['file' => 'public/templates/import_naskah/01_Pilot_Utama/P02_Scorecard_BNNP_Kepri.xlsx', 'label' => 'Pilot Utama (P02)'],
-    'P03' => ['file' => 'public/templates/import_naskah/01_Pilot_Utama/P03_Scorecard_Pemkot_Tanjungpinang.xlsx', 'label' => 'Pilot Utama (P03)'],
-    'P04' => ['file' => 'public/templates/import_naskah/01_Pilot_Utama/P04_Scorecard_Bapperida_Bintan.xlsx', 'label' => 'Pilot Utama (P04)'],
-    'P05' => ['file' => 'public/templates/import_naskah/01_Pilot_Utama/P05_Scorecard_STIT_Mumtaz_Karimun.xlsx', 'label' => 'Pilot Utama (P05)'],
-    'P06' => ['file' => 'public/templates/import_naskah/01_Pilot_Utama/P06_Scorecard_UMRAH.xlsx', 'label' => 'Pilot Utama (P06)'],
-    'P07' => ['file' => 'public/templates/import_naskah/01_Pilot_Utama/P07_Scorecard_STAI_Paduka_Anambas.xlsx', 'label' => 'Pilot Utama (P07)'],
-    'P08' => ['file' => 'public/templates/import_naskah/01_Pilot_Utama/P08_Scorecard_Politeknik_Negeri_Batam.xlsx', 'label' => 'Pilot Utama (P08)'],
-    'P09' => ['file' => 'public/templates/import_naskah/01_Pilot_Utama/P09_Scorecard_STAI_Natuna.xlsx', 'label' => 'Pilot Utama (P09)'],
-    'P10' => ['file' => 'public/templates/import_naskah/01_Pilot_Utama/P10_Scorecard_STISIP_Bunda_Tanah_Melayu.xlsx', 'label' => 'Pilot Utama (P10)'],
-    'C01' => ['file' => 'public/templates/import_naskah/02_Portofolio_Pengayaan/C01_Scorecard_STAIN_Sultan_Abdurrahman.xlsx', 'label' => 'Portofolio Pengayaan (C01)'],
+    'P01' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P01_DEKRANASDA_KEPRI_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P01)'],
+    'P02' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P02_BNNP_MASA_IMPLEMENTASI_AWAL_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P02)'],
+    'P03' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P03_PEMKOT_TANJUNGPINANG_FINAL_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P03)'],
+    'P04' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P04_BAPPERIDA_BINTAN_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P04)'],
+    'P05' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P05_STAIN_SAR_KEPRI_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P05/STAIN)'],
+    'P06' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P06_UMRAH_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P06)'],
+    'P07' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P07_STAI_ANAMBAS_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P07)'],
+    'P08' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P08_POLIBATAM_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P08)'],
+    'P09' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P09_STAI_NATUNA_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P09)'],
+    'P10' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P10_STISIP_BATAM_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P10)'],
+    'C01' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P05_STAIN_SAR_KEPRI_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (STAIN SAR)'],
     'C02' => ['file' => 'public/templates/import_naskah/02_Portofolio_Pengayaan/C02_Scorecard_Politeknik_Bintan_Cakrawala.xlsx', 'label' => 'Portofolio Pengayaan (C02)'],
     'C03' => ['file' => 'public/templates/import_naskah/02_Portofolio_Pengayaan/C03_Scorecard_Universitas_Ibnu_Sina.xlsx', 'label' => 'Portofolio Pengayaan (C03)'],
     'C04' => ['file' => 'public/templates/import_naskah/02_Portofolio_Pengayaan/C04_Scorecard_UNRIKA.xlsx', 'label' => 'Portofolio Pengayaan (C04)'],
-    'C05' => ['file' => 'public/templates/import_naskah/02_Portofolio_Pengayaan/C01_Scorecard_STAIN_Sultan_Abdurrahman.xlsx', 'label' => 'Template Pengayaan (C05)'],
+    'C05' => ['file' => 'public/templates/import_naskah/02_Baseline_Final/FINAL_BASELINE_MITRA_KINERJA_AUDIT_FINAL_28_AGUSTUS_2026.xlsx', 'label' => 'Baseline Final Audit (C05)'],
 ];
 
 /**
@@ -155,16 +155,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                 // Temukan Sheet Baseline & Sheet Scorecard
                 $baseSheetName = '';
                 $scSheetName = '';
+                $rekSheetName = '';
                 $picSheetName = '';
                 $kegSheetName = '';
                 $utlSheetName = '';
 
                 foreach (array_keys($parsedWb) as $sName) {
                     $upper = strtoupper($sName);
-                    if (str_contains($upper, 'BASELINE')) $baseSheetName = $sName;
-                    elseif (str_contains($upper, 'SCORECARD')) $scSheetName = $sName;
+                    if (str_contains($upper, 'SUMBER_BASELINE') || (str_contains($upper, 'BASELINE') && !str_contains($upper, 'REKAP') && !str_contains($upper, 'PANDUAN'))) {
+                        if (!$baseSheetName) $baseSheetName = $sName;
+                    }
+                    if (str_contains($upper, 'PENILAIAN') || str_contains($upper, 'SCORECARD')) {
+                        if (!$scSheetName) $scSheetName = $sName;
+                    }
+                    if (str_contains($upper, 'REKOMENDASI')) $rekSheetName = $sName;
                     elseif (str_contains($upper, 'IDENTITAS') || str_contains($upper, 'PIC')) $picSheetName = $sName;
-                    elseif (str_contains($upper, 'PELAKSANAAN') || str_contains($upper, 'KEGIATAN')) $kegSheetName = $sName;
+                    elseif (str_contains($upper, 'PELAKSANAAN') || str_contains($upper, 'KEGIATAN') || str_contains($upper, 'SUMBER_AKTUAL')) $kegSheetName = $sName;
                     elseif (str_contains($upper, 'USULAN') || str_contains($upper, 'TINDAK LANJUT')) $utlSheetName = $sName;
                 }
 
@@ -177,19 +183,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                     $baseRows = $parsedWb[$baseSheetName];
 
                     // Baca metadata pemeriksa & cut-off jika ada
-                    $pemeriksaVal = $baseRows[5][3] ?? $baseRows[5][4] ?? '';
-                    $cutoffVal = $baseRows[8][2] ?? $baseRows[8][3] ?? '';
+                    $pemeriksaVal = $baseRows[5][8] ?? $baseRows[5][7] ?? $baseRows[5][3] ?? '';
+                    $cutoffVal = $baseRows[8][8] ?? $baseRows[8][7] ?? $baseRows[8][2] ?? '';
                     if (!empty($cutoffVal) && preg_match('/(\d{4}-\d{2}-\d{2})/', $cutoffVal, $mCut)) {
                         $cutoffDate = $mCut[1];
                     } else {
                         $cutoffDate = date('Y-m-d');
                     }
 
-                    // Loop baris 13 s.d 24 (12 Elemen Baseline)
-                    for ($r = 12; $r <= 35; $r++) {
+                    // Loop baris elemen baseline (fleksibel baris 4 s.d 35)
+                    for ($r = 4; $r <= 35; $r++) {
                         if (!isset($baseRows[$r])) continue;
                         $row = $baseRows[$r];
-                        $col1 = $row[1] ?? '';
+                        $col1 = trim((string)($row[1] ?? ''));
                         if (!is_numeric($col1)) continue;
                         $elNum = (int)$col1;
                         if ($elNum < 1 || $elNum > 12) continue;
@@ -255,30 +261,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                 // 2. IMPORT DATA SCORECARD
                 if ($scSheetName && !empty($parsedWb[$scSheetName])) {
                     $scRows = $parsedWb[$scSheetName];
+                    $isPenilaianLayout = str_contains(strtoupper($scSheetName), 'PENILAIAN');
 
                     // Bobot default V2.1
                     $weights = ['I1' => 10, 'I2' => 15, 'I3' => 15, 'I4' => 20, 'I5' => 20, 'I6' => 10, 'I7' => 10];
 
                     foreach ($scRows as $rIdx => $row) {
                         $col1 = strtoupper(trim($row[1] ?? ''));
-                        if (!preg_match('/^I[1-7]$/', $col1)) continue;
+                        if (!preg_match('/^(I[1-7])\b/', $col1, $mCode)) continue;
+                        $kodeInd = $mCode[1];
 
-                        $kodeInd = $col1;
                         $bobot = isset($weights[$kodeInd]) ? $weights[$kodeInd] : (int)($row[2] ?? 10);
-                        $refBaseline = trim($row[3] ?? '');
-                        $rawStatus = strtoupper(trim($row[5] ?? ''));
-                        $kondisi = trim($row[6] ?? '');
-                        $rawSkor = trim($row[7] ?? '');
-                        $alasanSkor = trim($row[8] ?? '');
-                        $catatanTl = trim($row[9] ?? '');
+
+                        if ($isPenilaianLayout) {
+                            $kondisiBaseline = trim($row[4] ?? '');
+                            $kondisi = trim($row[5] ?? '');
+                            $rawStatus = strtoupper(trim($row[6] ?? ''));
+                            $evidenceLoc = trim($row[7] ?? '');
+                            $rawSkor = trim($row[8] ?? '');
+                            $alasanSkor = trim($row[10] ?? '');
+                            $catatanTl = trim($row[11] ?? '');
+                        } else {
+                            $kondisiBaseline = trim($row[3] ?? '');
+                            $rawStatus = strtoupper(trim($row[5] ?? ''));
+                            $kondisi = trim($row[6] ?? '');
+                            $rawSkor = trim($row[7] ?? '');
+                            $alasanSkor = trim($row[8] ?? '');
+                            $catatanTl = trim($row[9] ?? '');
+                            $evidenceLoc = '';
+                        }
 
                         // Normalisasi status pemeriksaan
                         $statusPem = 'BELUM DITELAAH';
-                        if (str_contains($rawStatus, 'MEMADAI') && !str_contains($rawStatus, 'BELUM')) $statusPem = 'BUKTI MEMADAI';
+                        if (str_contains($rawStatus, 'BELUM DAPAT') || str_contains($rawStatus, 'BELUM DINILAI')) $statusPem = 'BELUM DAPAT DINILAI';
+                        elseif (str_contains($rawStatus, 'DAPAT DINILAI') || (str_contains($rawStatus, 'MEMADAI') && !str_contains($rawStatus, 'BELUM'))) $statusPem = 'BUKTI MEMADAI';
                         elseif (str_contains($rawStatus, 'CUKUP')) $statusPem = 'BUKTI CUKUP';
-                        elseif (str_contains($rawStatus, 'BELUM DAPAT') || str_contains($rawStatus, 'BELUM DINILAI')) $statusPem = 'BELUM DAPAT DINILAI';
                         elseif (str_contains($rawStatus, 'BELUM MEMADAI')) $statusPem = 'BUKTI BELUM MEMADAI';
-                        elseif (str_contains($rawStatus, 'DAPAT DINILAI')) $statusPem = 'DAPAT DINILAI';
 
                         $skor = is_numeric($rawSkor) ? (int)$rawSkor : null;
                         $nilai = $skor !== null ? round(($skor / 4.0) * $bobot, 2) : null;
@@ -287,13 +305,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         $stmtCheck = $pdo->prepare('SELECT id FROM indikator_skor WHERE mitra_id = ? AND kode_indikator = ?');
                         $stmtCheck->execute([$targetId, $kodeInd]);
                         if ($stmtCheck->fetch()) {
-                            $stmtU = $pdo->prepare('UPDATE indikator_skor SET status_pemeriksaan = ?, kondisi_saat_ini = ?, skor = ?, alasan_skor = ?, catatan_tindak_lanjut = ?, nilai = ? WHERE mitra_id = ? AND kode_indikator = ?');
-                            $stmtU->execute([$statusPem, $kondisi, $skor, $alasanSkor, $catatanTl, $nilai, $targetId, $kodeInd]);
+                            $stmtU = $pdo->prepare('UPDATE indikator_skor SET status_pemeriksaan = ?, kondisi_baseline = ?, kondisi_saat_ini = ?, temuan_bukti = ?, skor = ?, alasan_skor = ?, catatan_tindak_lanjut = ?, nilai = ?, referensi_baseline = ? WHERE mitra_id = ? AND kode_indikator = ?');
+                            $stmtU->execute([$statusPem, $kondisiBaseline, $kondisi, $evidenceLoc, $skor, $alasanSkor, $catatanTl, $nilai, $kondisiBaseline, $targetId, $kodeInd]);
                         } else {
-                            $stmtI = $pdo->prepare('INSERT INTO indikator_skor (mitra_id, kode_indikator, deskripsi, bobot, referensi_baseline, status_pemeriksaan, kondisi_saat_ini, skor, alasan_skor, catatan_tindak_lanjut, nilai) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                            $stmtI->execute([$targetId, $kodeInd, "Indikator $kodeInd", $bobot, $refBaseline, $statusPem, $kondisi, $skor, $alasanSkor, $catatanTl, $nilai]);
+                            $stmtI = $pdo->prepare('INSERT INTO indikator_skor (mitra_id, kode_indikator, deskripsi, bobot, referensi_baseline, kondisi_baseline, status_pemeriksaan, kondisi_saat_ini, temuan_bukti, skor, alasan_skor, catatan_tindak_lanjut, nilai) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                            $stmtI->execute([$targetId, $kodeInd, "Indikator $kodeInd", $bobot, $kondisiBaseline, $kondisiBaseline, $statusPem, $kondisi, $evidenceLoc, $skor, $alasanSkor, $catatanTl, $nilai]);
                         }
                         $updatedScorecard++;
+                    }
+
+                    // Metadata tambahan dari Scorecard final (Status, Rekomendasi, Posisi)
+                    $rawScStatus = '';
+                    if ($isPenilaianLayout && isset($scRows[27][2])) {
+                        $rawScStatus = trim($scRows[27][2]);
+                    }
+
+                    $posisiPortofolio = '';
+                    $rekomNarrative = '';
+                    if ($rekSheetName && !empty($parsedWb[$rekSheetName])) {
+                        $rekRows = $parsedWb[$rekSheetName];
+                        $posisiPortofolio = trim($rekRows[9][2] ?? '');
+                        $rekomText = trim($rekRows[17][2] ?? '');
+                        $temuan = trim($rekRows[16][2] ?? '');
+                        $tl = trim($rekRows[19][2] ?? '');
+                        if ($rekomText) {
+                            $rekomNarrative = trim("$rekomText\n\nTemuan Utama:\n$temuan\n\nRencana Tindak Lanjut:\n$tl");
+                        }
+                    }
+
+                    $uSqlParts = [];
+                    $uParams = [];
+                    if (!empty($rawScStatus)) {
+                        $uSqlParts[] = 'status_scorecard = ?';
+                        $uParams[] = $rawScStatus;
+                    }
+                    if (!empty($posisiPortofolio)) {
+                        $uSqlParts[] = 'posisi_portofolio = ?';
+                        $uParams[] = $posisiPortofolio;
+                    }
+                    if (!empty($rekomNarrative)) {
+                        $uSqlParts[] = 'rekomendasi = ?';
+                        $uParams[] = $rekomNarrative;
+                    }
+                    if (!empty($uSqlParts)) {
+                        $uParams[] = $targetId;
+                        $pdo->prepare('UPDATE mitra_kinerja SET ' . implode(', ', $uSqlParts) . ' WHERE id = ?')->execute($uParams);
                     }
 
                     // Sinkronkan total skor dan status scorecard

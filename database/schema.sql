@@ -34,7 +34,7 @@ CREATE TABLE `audit_log` (
   KEY `user_id` (`user_id`),
   CONSTRAINT `audit_log_ibfk_1` FOREIGN KEY (`mitra_id`) REFERENCES `mitra_kinerja` (`id`) ON DELETE SET NULL,
   CONSTRAINT `audit_log_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=192 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=203 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -194,9 +194,9 @@ CREATE TABLE `mitra_kinerja` (
   `foto_kerjasama` varchar(255) DEFAULT NULL,
   `pemeriksa_id` int(11) DEFAULT NULL,
   `tanggal_review` date DEFAULT NULL,
-  `status_scorecard` enum('BELUM LENGKAP','SIAP DIVALIDASI','FINAL/TERVALIDASI','PERLU PERBAIKAN') NOT NULL DEFAULT 'BELUM LENGKAP',
-  `posisi_portofolio` enum('BELUM DAPAT DITENTUKAN','AKTIF','OUTPUT TERSEDIA','OUTCOME TERBENTUK','BERDAMPAK') NOT NULL DEFAULT 'BELUM DAPAT DITENTUKAN',
-  `rekomendasi` enum('BELUM DITENTUKAN','LANJUT','PERBAIKI','PERPANJANG','REPLIKASI','HENTIKAN') NOT NULL DEFAULT 'BELUM DITENTUKAN',
+  `status_scorecard` varchar(50) NOT NULL DEFAULT 'BELUM LENGKAP',
+  `posisi_portofolio` varchar(150) NOT NULL DEFAULT 'BELUM DAPAT DITENTUKAN',
+  `rekomendasi` text DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
@@ -375,6 +375,10 @@ CREATE TABLE `validasi` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Dumping events for database 'mitra_kinerja'
+--
+
+--
 -- Dumping routines for database 'mitra_kinerja'
 --
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -387,4 +391,4 @@ CREATE TABLE `validasi` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-09-28 12:09:01
+-- Dump completed on 2026-09-28 14:03:20

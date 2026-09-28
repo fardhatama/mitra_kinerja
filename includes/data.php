@@ -82,9 +82,14 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
     $warning = warningTertinggi($statusList);
     $hasilUji = hasilUjiIntervensi($pemicuRows, $warning['status']);
     $cekUsulan = cekUsulanIntervensi($pemicuRows, $hasilUji, $usulan['upaya_dilakukan'], $usulan['keputusan_diminta']);
-    $statusScorecard = hitungStatusScorecard($ringkasan['skor_lengkap'], $ringkasan['cek_lengkap_ok'], $validasi['status']);
+    $calculatedStatus = hitungStatusScorecard($ringkasan['skor_lengkap'], $ringkasan['cek_lengkap_ok'], $validasi['status']);
+    if (!empty($mitra['status_scorecard']) && in_array($mitra['status_scorecard'], ['MASA IMPLEMENTASI AWAL', 'FINAL', 'FINAL/TERVALIDASI'], true)) {
+        $statusScorecard = $mitra['status_scorecard'];
+    } else {
+        $statusScorecard = $calculatedStatus;
+    }
 
-    $posisiPortofolio = ($mitra['posisi_portofolio'] ?? 'BELUM DAPAT DITENTUKAN') !== 'BELUM DAPAT DITENTUKAN' 
+    $posisiPortofolio = (!empty($mitra['posisi_portofolio']) && $mitra['posisi_portofolio'] !== 'BELUM DAPAT DITENTUKAN') 
         ? $mitra['posisi_portofolio'] 
         : hitungPosisiPortofolio($indikatorRows);
 
@@ -96,7 +101,7 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
         }
     }
 
-    $rekomendasi = ($mitra['rekomendasi'] ?? 'BELUM DITENTUKAN') !== 'BELUM DITENTUKAN'
+    $rekomendasi = (!empty($mitra['rekomendasi']) && $mitra['rekomendasi'] !== 'BELUM DITENTUKAN')
         ? $mitra['rekomendasi']
         : hitungRekomendasi($ringkasan['nilai_berjalan'], $warning['status'], $posisiPortofolio, $sisaHari);
 
