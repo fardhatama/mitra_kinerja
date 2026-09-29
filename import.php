@@ -152,6 +152,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             if (empty($parsedWb)) {
                 $errors[] = 'Gagal membaca isi file Excel. Pastikan file tidak terkunci atau rusak.';
             } else {
+                $importType = trim($_POST['import_type'] ?? 'all');
+
                 // Temukan Sheet Baseline & Sheet Scorecard
                 $baseSheetName = '';
                 $scSheetName = '';
@@ -174,12 +176,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                     elseif (str_contains($upper, 'USULAN') || str_contains($upper, 'TINDAK LANJUT')) $utlSheetName = $sName;
                 }
 
+                // Fallback deteksi sheet jika nama sheet bukan standar
+                if (!$baseSheetName && $importType !== 'scorecard') {
+                    foreach ($parsedWb as $shName => $shRows) {
+                        for ($sr = 1; $sr <= 25; $sr++) {
+                            if (isset($shRows[$sr][1]) && ((string)$shRows[$sr][1] === '1' || $shRows[$sr][1] === 1)) {
+                                $baseSheetName = $shName;
+                                break 2;
+                            }
+                        }
+                    }
+                }
+                if (!$scSheetName && $importType !== 'baseline') {
+                    foreach ($parsedWb as $shName => $shRows) {
+                        for ($sr = 1; $sr <= 25; $sr++) {
+                            $c1 = strtoupper(trim((string)($shRows[$sr][1] ?? '')));
+                            if (str_starts_with($c1, 'I1')) {
+                                $scSheetName = $shName;
+                                break 2;
+                            }
+                        }
+                    }
+                }
+
                 $updatedBaseline = 0;
                 $updatedScorecard = 0;
                 $fileNaskahExtracted = null;
 
                 // 1. IMPORT DATA BASELINE
-                if ($baseSheetName && !empty($parsedWb[$baseSheetName])) {
+                if ($importType !== 'scorecard' && $baseSheetName && !empty($parsedWb[$baseSheetName])) {
                     $baseRows = $parsedWb[$baseSheetName];
 
                     // Baca metadata pemeriksa & cut-off jika ada
@@ -259,7 +284,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                 }
 
                 // 2. IMPORT DATA SCORECARD
-                if ($scSheetName && !empty($parsedWb[$scSheetName])) {
+                if ($importType !== 'baseline' && $scSheetName && !empty($parsedWb[$scSheetName])) {
                     $scRows = $parsedWb[$scSheetName];
                     $isPenilaianLayout = str_contains(strtoupper($scSheetName), 'PENILAIAN');
 
@@ -381,11 +406,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                     }
                 }
 
-                logAudit($targetId, $user['id'], 'IMPORT_EXCEL', "Import workbook Excel untuk {$targetMitra['kode']}: {$updatedBaseline} elemen baseline, {$updatedScorecard} indikator scorecard diperbarui.");
-                $success = "Data untuk naskah <strong>{$targetMitra['kode']} - {$targetMitra['nama_mitra']}</strong> berhasil di-import!<br>"
-                         . "&bull; {$updatedBaseline} elemen Baseline FIX diperbarui.<br>"
-                         . "&bull; {$updatedScorecard} indikator Scorecard disinkronkan ke sistem.<br>"
-                         . ($fileNaskahExtracted ? "&bull; Tautan naskah resmi P2MA terhubung secara otomatis.<br>" : "");
+                if ($importType === 'baseline') {
+                    logAudit($targetId, $user['id'], 'IMPORT_BASELINE', "Import Baseline untuk {$targetMitra['kode']}: {$updatedBaseline} elemen diperbarui.");
+                    $success = "Data Baseline FIX (12 Elemen) untuk <strong>{$targetMitra['kode']} - {$targetMitra['nama_mitra']}</strong> berhasil di-import!<br>"
+                             . "&bull; {$updatedBaseline} elemen Baseline FIX diperbarui dan diverifikasi.<br>"
+                             . "&bull; Status Baseline naskah telah dikunci (TERVERIFIKASI / DIKUNCI).<br>"
+                             . ($fileNaskahExtracted ? "&bull; Tautan naskah resmi P2MA terhubung secara otomatis.<br>" : "");
+                } elseif ($importType === 'scorecard') {
+                    logAudit($targetId, $user['id'], 'IMPORT_SCORECARD', "Import Scorecard untuk {$targetMitra['kode']}: {$updatedScorecard} indikator diperbarui.");
+                    $success = "Data Scorecard untuk <strong>{$targetMitra['kode']} - {$targetMitra['nama_mitra']}</strong> berhasil di-import!<br>"
+                             . "&bull; {$updatedScorecard} indikator Scorecard disinkronkan ke sistem.<br>"
+                             . (!empty($rawScStatus) ? "&bull; Status Scorecard: <strong>" . h($rawScStatus) . "</strong>.<br>" : "");
+                } else {
+                    logAudit($targetId, $user['id'], 'IMPORT_EXCEL', "Import workbook Excel untuk {$targetMitra['kode']}: {$updatedBaseline} elemen baseline, {$updatedScorecard} indikator scorecard diperbarui.");
+                    $success = "Data untuk naskah <strong>{$targetMitra['kode']} - {$targetMitra['nama_mitra']}</strong> berhasil di-import!<br>"
+                             . ($updatedBaseline ? "&bull; {$updatedBaseline} elemen Baseline FIX diperbarui.<br>" : "")
+                             . ($updatedScorecard ? "&bull; {$updatedScorecard} indikator Scorecard disinkronkan ke sistem.<br>" : "")
+                             . ($fileNaskahExtracted ? "&bull; Tautan naskah resmi P2MA terhubung secara otomatis.<br>" : "");
+                }
             }
         }
     }
@@ -395,7 +433,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
 $stmt = $pdo->query('
     SELECT m.*, 
            (SELECT COUNT(*) FROM baseline_elemen WHERE mitra_id = m.id AND status = "TERVERIFIKASI") as total_terverifikasi,
-           (SELECT COUNT(*) FROM indikator_skor WHERE mitra_id = m.id AND skor IS NOT NULL) as total_terisi_skor
+           (SELECT COUNT(*) FROM indikator_skor WHERE mitra_id = m.id AND skor IS NOT NULL) as total_terisi_skor,
+           (SELECT ROUND(SUM(nilai), 1) FROM indikator_skor WHERE mitra_id = m.id) as total_skor
     FROM mitra_kinerja m 
     ORDER BY m.portofolio DESC, m.kode ASC
 ');
@@ -451,12 +490,11 @@ require __DIR__ . '/includes/header.php';
     <div style="display:flex;gap:16px;align-items:flex-start;">
         <div style="font-size:28px;line-height:1;">💡</div>
         <div style="flex:1;">
-            <h3 style="margin:0 0 6px 0;font-size:15px;color:#1e293b;font-weight:700;">Petunjuk Penggunaan Template & Mekanisme Import:</h3>
+            <h3 style="margin:0 0 6px 0;font-size:15px;color:#1e293b;font-weight:700;">Petunjuk Penggunaan Template &amp; Mekanisme Import:</h3>
             <div style="font-size:13px;color:#475569;line-height:1.6;">
-                1. Setiap baris naskah kerja sama di bawah memiliki <strong>Template Excel (.xlsx)</strong> resmi yang bersumber dari folder <code>01_Pilot_Utama</code> dan <code>02_Portofolio_Pengayaan</code>.<br>
-                2. Unduh template kerja sama terkait dengan menekan tombol <strong>[⬇️ Unduh Template]</strong> pada kolom Template.<br>
-                3. Setelah file diisi oleh tim pengampu/pemeriksa, klik tombol <strong>[📥 Import Data]</strong> pada kolom Import untuk mengunggah file tersebut.<br>
-                4. Sistem akan secara otomatis membaca dan memperbarui data <strong>12 Elemen Baseline</strong>, <strong>Nilai Scorecard</strong>, serta menautkan naskah resmi P2MA.
+                1. <strong>Data Baseline (12 Elemen):</strong> Jika naskah kerja sama belum memiliki data Baseline (seperti P12, P13, atau naskah baru), tombol <strong>[⬇️ Unduh Template]</strong> dan <strong>[📥 Import]</strong> pada kolom Baseline akan <strong>aktif</strong>. Setelah data Baseline terisi/terkunci, tombol tersebut secara otomatis menjadi <strong>terkunci (disabled)</strong> untuk menjaga keutuhan data awal.<br>
+                2. <strong>Data Scorecard (V2.1):</strong> Unduh template evaluasi kinerja naskah melalui kolom Template Scorecard, lalu unggah berkas penilaian melalui tombol <strong>[📥 Import]</strong> Scorecard untuk memperbarui nilai berjalan I1–I7, posisi portofolio, dan rekomendasi tindak lanjut.<br>
+                3. Sistem secara otomatis mendeteksi format file Excel (.xlsx), membaca sheet <code>PENILAIAN</code>, <code>REKOMENDASI</code>, maupun <code>BASELINE_12_ELEMEN</code>, dan menyinkronkannya ke database.
             </div>
         </div>
     </div>
@@ -466,7 +504,7 @@ require __DIR__ . '/includes/header.php';
 <div class="card" style="border:1px solid #e2e8f0;background:#ffffff;border-radius:10px;overflow:hidden;">
     <div style="padding:16px 20px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;background:#f8fafc;">
         <div>
-            <h3 style="margin:0;font-size:16px;color:#0f172a;font-weight:700;">Daftar Naskah Kerja Sama & Fitur Import</h3>
+            <h3 style="margin:0;font-size:16px;color:#0f172a;font-weight:700;">Daftar Naskah Kerja Sama &amp; Fitur Import</h3>
             <div style="font-size:12px;color:#64748b;margin-top:2px;">Total: <?= count($daftarMitra) ?> Naskah Kerja Sama Terdaftar</div>
         </div>
     </div>
@@ -475,34 +513,47 @@ require __DIR__ . '/includes/header.php';
         <table class="table" style="width:100%;margin:0;border-collapse:collapse;font-size:13px;">
             <thead>
                 <tr style="background:#f1f5f9;color:#334155;text-align:left;border-bottom:1px solid #cbd5e1;">
-                    <th style="padding:12px 14px;width:70px;text-align:center;">Kode</th>
-                    <th style="padding:12px 14px;width:110px;">Portofolio</th>
-                    <th style="padding:12px 14px;">Mitra & Judul Kerja Sama</th>
-                    <th style="padding:12px 14px;width:90px;text-align:center;">Bidang</th>
-                    <th style="padding:12px 14px;width:120px;text-align:center;">Baseline</th>
-                    <th style="padding:12px 14px;width:130px;text-align:center;">Scorecard</th>
-                    <th style="padding:12px 14px;width:150px;text-align:center;">Template Excel</th>
-                    <th style="padding:12px 14px;width:160px;text-align:center;">Aksi Import</th>
+                    <th rowspan="2" style="padding:12px 14px;width:65px;text-align:center;vertical-align:middle;">Kode</th>
+                    <th rowspan="2" style="padding:12px 14px;width:105px;vertical-align:middle;">Portofolio</th>
+                    <th rowspan="2" style="padding:12px 14px;min-width:240px;vertical-align:middle;">Mitra &amp; Judul Kerja Sama</th>
+                    <th rowspan="2" style="padding:12px 14px;width:80px;text-align:center;vertical-align:middle;">Bidang</th>
+                    <th colspan="3" style="padding:10px 12px;text-align:center;background:#eef2ff;color:#3730a3;border-left:1px solid #cbd5e1;border-right:1px solid #cbd5e1;font-weight:700;">
+                        📋 DATA BASELINE (12 ELEMEN)
+                    </th>
+                    <th colspan="3" style="padding:10px 12px;text-align:center;background:#ecfdf5;color:#065f46;font-weight:700;">
+                        📊 DATA SCORECARD (V2.1)
+                    </th>
+                </tr>
+                <tr style="background:#f8fafc;color:#475569;border-bottom:2px solid #cbd5e1;font-size:12px;">
+                    <!-- Baseline Sub-Columns -->
+                    <th style="padding:8px 10px;text-align:center;border-left:1px solid #cbd5e1;width:115px;">Status Baseline</th>
+                    <th style="padding:8px 10px;text-align:center;width:125px;">Template Excel</th>
+                    <th style="padding:8px 10px;text-align:center;border-right:1px solid #cbd5e1;width:115px;">Aksi Import</th>
+                    <!-- Scorecard Sub-Columns -->
+                    <th style="padding:8px 10px;text-align:center;width:125px;">Status &amp; Nilai</th>
+                    <th style="padding:8px 10px;text-align:center;width:125px;">Template Excel</th>
+                    <th style="padding:8px 10px;text-align:center;width:115px;">Aksi Import</th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($daftarMitra as $m): 
                     $tInfo = $templateMap[$m['kode']] ?? null;
                     $isLocked = str_contains($m['baseline_status'] ?? '', 'DIKUNCI');
+                    $hasBaseline = $isLocked || ((int)($m['total_terverifikasi'] ?? 0) > 0);
                     $scorecardStatus = $m['status_scorecard'] ?? 'BELUM LENGKAP';
                 ?>
                 <tr style="border-bottom:1px solid #f1f5f9;transition:background 0.15s ease;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
-                    <td style="padding:12px 14px;text-align:center;font-weight:700;color:#1e40af;">
+                    <td style="padding:12px 14px;text-align:center;font-weight:700;color:#1e40af;vertical-align:middle;">
                         <?= h($m['kode']) ?>
                     </td>
-                    <td style="padding:12px 14px;">
-                        <?php if ($m['portofolio'] === 'PILOT'): ?>
+                    <td style="padding:12px 14px;vertical-align:middle;">
+                        <?php if ($m['portofolio'] === 'Pilot Utama' || $m['portofolio'] === 'PILOT'): ?>
                             <span class="badge badge-primary" style="font-size:10.5px;padding:3px 8px;">Pilot Utama</span>
                         <?php else: ?>
                             <span class="badge badge-secondary" style="font-size:10.5px;padding:3px 8px;">Cadangan</span>
                         <?php endif; ?>
                     </td>
-                    <td style="padding:12px 14px;">
+                    <td style="padding:12px 14px;vertical-align:middle;">
                         <div style="font-weight:600;color:#0f172a;margin-bottom:2px;font-size:13.5px;">
                             <?= h($m['nama_mitra']) ?>
                         </div>
@@ -517,51 +568,92 @@ require __DIR__ . '/includes/header.php';
                             </div>
                         <?php endif; ?>
                     </td>
-                    <td style="padding:12px 14px;text-align:center;">
+                    <td style="padding:12px 14px;text-align:center;vertical-align:middle;">
                         <span class="badge badge-outline" style="font-size:11px;font-weight:600;">
                             <?= h($m['bidang'] ?: ($m['jenis'] ?: 'AHU')) ?>
                         </span>
                     </td>
-                    <td style="padding:12px 14px;text-align:center;">
+
+                    <!-- 1. BASELINE: STATUS -->
+                    <td style="padding:12px 14px;text-align:center;vertical-align:middle;border-left:1px solid #f1f5f9;">
                         <?php if ($isLocked): ?>
                             <span class="badge badge-success" style="font-size:10.5px;padding:3px 7px;display:inline-flex;align-items:center;gap:3px;">
                                 <span>🔒</span> Terkunci
                             </span>
                             <div style="font-size:10.5px;color:#64748b;margin-top:2px;">(12 Elemen)</div>
-                        <?php else: ?>
+                        <?php elseif ((int)($m['total_terverifikasi'] ?? 0) > 0): ?>
                             <span class="badge badge-warning" style="font-size:10.5px;padding:3px 7px;">
                                 Dalam Proses
                             </span>
                             <div style="font-size:10.5px;color:#64748b;margin-top:2px;"><?= $m['total_terverifikasi'] ?>/12 Terisi</div>
+                        <?php else: ?>
+                            <span class="badge badge-secondary" style="font-size:10.5px;padding:3px 7px;background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1;">
+                                Belum Ada
+                            </span>
+                            <div style="font-size:10.5px;color:#94a3b8;margin-top:2px;">0/12 Terisi</div>
                         <?php endif; ?>
                     </td>
-                    <td style="padding:12px 14px;text-align:center;">
+
+                    <!-- 2. BASELINE: TEMPLATE EXCEL -->
+                    <td style="padding:12px 14px;text-align:center;vertical-align:middle;">
+                        <?php if ($hasBaseline): ?>
+                            <button type="button" class="btn btn-sm" disabled style="font-size:10.5px;padding:4px 8px;color:#94a3b8;background:#f8fafc;border:1px solid #e2e8f0;cursor:not-allowed;" title="Data Baseline sudah terisi / terkunci. Unduh template dinonaktifkan.">
+                                <span>🔒</span> Terkunci
+                            </button>
+                        <?php else: ?>
+                            <a href="public/templates/template_baseline_12_elemen.xlsx" download="Template_Baseline_<?= h($m['kode']) ?>.xlsx" class="btn btn-outline btn-sm" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;padding:5px 9px;color:#4338ca;border-color:#c7d2fe;background:#eef2ff;font-weight:600;" title="Unduh Formulir Template Baseline (.xlsx)">
+                                <span>⬇️</span> Unduh Template
+                            </a>
+                        <?php endif; ?>
+                    </td>
+
+                    <!-- 3. BASELINE: AKSI IMPORT -->
+                    <td style="padding:12px 14px;text-align:center;vertical-align:middle;border-right:1px solid #f1f5f9;">
+                        <?php if ($hasBaseline): ?>
+                            <button type="button" class="btn btn-sm" disabled style="font-size:10.5px;padding:5px 10px;color:#94a3b8;background:#f8fafc;border:1px solid #e2e8f0;cursor:not-allowed;" title="Data Baseline sudah terverifikasi dan terkunci. Import dinonaktifkan.">
+                                <span>🔒</span> Terkunci
+                            </button>
+                        <?php else: ?>
+                            <button type="button" class="btn btn-sm" onclick="openImportModal(<?= $m['id'] ?>, '<?= h($m['kode']) ?>', '<?= h(addslashes($m['nama_mitra'])) ?>', 'baseline')" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;padding:5px 12px;background:#4f46e5;color:#ffffff;border:none;border-radius:4px;font-weight:600;cursor:pointer;" title="Import Data Baseline">
+                                <span>📥</span> Import
+                            </button>
+                        <?php endif; ?>
+                    </td>
+
+                    <!-- 4. SCORECARD: STATUS & NILAI -->
+                    <td style="padding:12px 14px;text-align:center;vertical-align:middle;">
                         <?php if ($scorecardStatus === 'FINAL' || $scorecardStatus === 'FINAL/TERVALIDASI'): ?>
                             <span class="badge badge-success" style="font-size:10.5px;padding:3px 7px;">Tervalidasi</span>
                         <?php elseif ($scorecardStatus === 'SIAP_VALIDASI' || $scorecardStatus === 'SIAP DIVALIDASI'): ?>
                             <span class="badge badge-info" style="font-size:10.5px;padding:3px 7px;">Siap Validasi</span>
+                        <?php elseif ($scorecardStatus === 'MASA IMPLEMENTASI AWAL'): ?>
+                            <span class="badge badge-warning" style="font-size:10.5px;padding:3px 7px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;">Implementasi Awal</span>
                         <?php else: ?>
                             <span class="badge badge-secondary" style="font-size:10.5px;padding:3px 7px;">Belum Lengkap</span>
                         <?php endif; ?>
-                        <?php if ($m['total_skor'] !== null): ?>
+                        <?php if (isset($m['total_skor']) && $m['total_skor'] !== null && $m['total_skor'] !== ''): ?>
                             <div style="font-size:11px;font-weight:700;color:#0f172a;margin-top:2px;">
                                 <?= number_format((float)$m['total_skor'], 1) ?>
                             </div>
                         <?php endif; ?>
                     </td>
-                    <td style="padding:12px 14px;text-align:center;">
+
+                    <!-- 5. SCORECARD: TEMPLATE EXCEL -->
+                    <td style="padding:12px 14px;text-align:center;vertical-align:middle;">
                         <?php if ($tInfo && file_exists(__DIR__ . '/' . $tInfo['file'])): ?>
-                            <a href="<?= h($tInfo['file']) ?>" download class="btn btn-outline btn-sm" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;padding:5px 10px;color:#047857;border-color:#a7f3d0;background:#ecfdf5;">
+                            <a href="<?= h($tInfo['file']) ?>" download class="btn btn-outline btn-sm" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;padding:5px 9px;color:#047857;border-color:#a7f3d0;background:#ecfdf5;font-weight:600;" title="Unduh Template Scorecard (.xlsx)">
                                 <span>⬇️</span> Unduh Template
                             </a>
                         <?php else: ?>
-                            <a href="public/templates/template_gate0_dalam_negeri.xlsx" download class="btn btn-outline btn-sm" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;padding:5px 10px;">
+                            <a href="public/templates/template_gate0_dalam_negeri.xlsx" download class="btn btn-outline btn-sm" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;padding:5px 9px;" title="Unduh Template">
                                 <span>⬇️</span> Template Umum
                             </a>
                         <?php endif; ?>
                     </td>
-                    <td style="padding:12px 14px;text-align:center;">
-                        <button type="button" class="btn btn-primary btn-sm" onclick="openImportModal(<?= $m['id'] ?>, '<?= h($m['kode']) ?>', '<?= h(addslashes($m['nama_mitra'])) ?>')" style="font-size:11.5px;display:inline-flex;align-items:center;gap:4px;padding:6px 12px;font-weight:600;">
+
+                    <!-- 6. SCORECARD: AKSI IMPORT -->
+                    <td style="padding:12px 14px;text-align:center;vertical-align:middle;">
+                        <button type="button" class="btn btn-primary btn-sm" onclick="openImportModal(<?= $m['id'] ?>, '<?= h($m['kode']) ?>', '<?= h(addslashes($m['nama_mitra'])) ?>', 'scorecard')" style="font-size:11.5px;display:inline-flex;align-items:center;gap:4px;padding:5px 12px;font-weight:600;" title="Import Data Scorecard">
                             <span>📥</span> Import
                         </button>
                     </td>
@@ -578,7 +670,7 @@ require __DIR__ . '/includes/header.php';
         <div style="padding:16px 20px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;background:#f8fafc;">
             <div style="display:flex;align-items:center;gap:8px;">
                 <span style="font-size:20px;">📥</span>
-                <h3 style="margin:0;font-size:16px;font-weight:700;color:#0f172a;">Import Data Naskah (.xlsx)</h3>
+                <h3 id="modalTitle" style="margin:0;font-size:16px;font-weight:700;color:#0f172a;">Import Data Naskah (.xlsx)</h3>
             </div>
             <button type="button" onclick="closeImportModal()" style="border:none;background:transparent;font-size:20px;cursor:pointer;color:#64748b;">&times;</button>
         </div>
@@ -586,10 +678,11 @@ require __DIR__ . '/includes/header.php';
         <form method="POST" enctype="multipart/form-data" style="margin:0;">
             <input type="hidden" name="action" value="import_naskah">
             <input type="hidden" name="mitra_id" id="modalMitraId" value="0">
+            <input type="hidden" name="import_type" id="modalImportType" value="scorecard">
 
             <div style="padding:20px;">
                 <div style="margin-bottom:16px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;">
-                    <div style="font-size:11px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;">Target Naskah Kerja Sama:</div>
+                    <div id="modalTargetTypeLabel" style="font-size:11px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;">Target Naskah Kerja Sama:</div>
                     <div id="modalMitraLabel" style="font-size:14px;font-weight:700;color:#1e3a8a;margin-top:2px;">-</div>
                 </div>
 
@@ -598,16 +691,18 @@ require __DIR__ . '/includes/header.php';
                         Pilih Berkas Spreadsheet Excel (.xlsx) <span style="color:#ef4444;">*</span>
                     </label>
                     <input type="file" name="excel_file" accept=".xlsx" required style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;background:#f8fafc;">
-                    <div style="font-size:11.5px;color:#64748b;margin-top:4px;">
+                    <div id="modalHelpText" style="font-size:11.5px;color:#64748b;margin-top:4px;">
                         Format didukung: <strong>.xlsx</strong> (Maks. 25 MB). Gunakan template resmi dari folder <code>01_Pilot_Utama</code> atau <code>02_Portofolio_Pengayaan</code>.
                     </div>
                 </div>
 
-                <div style="font-size:12.5px;color:#475569;background:#f1f5f9;padding:12px 14px;border-radius:6px;line-height:1.5;">
+                <div id="modalInfoBox" style="font-size:12.5px;color:#475569;background:#f1f5f9;padding:12px 14px;border-radius:6px;line-height:1.5;">
                     <div style="font-weight:600;margin-bottom:4px;color:#1e293b;">Data yang akan otomatis di-update:</div>
-                    &bull; <strong>Baseline FIX:</strong> Status, fakta pemeriksaan, tautan bukti pada 12 Elemen.<br>
-                    &bull; <strong>Scorecard:</strong> Status pemeriksaan, kondisi saat ini, skor & alasan skor I1-I7.<br>
-                    &bull; <strong>Tautan Naskah Resmi:</strong> Tautan naskah P2MA pada Elemen 1 otomatis ditautkan ke profil kerja sama.
+                    <div id="modalInfoItems">
+                        &bull; <strong>Baseline FIX:</strong> Status, fakta pemeriksaan, tautan bukti pada 12 Elemen.<br>
+                        &bull; <strong>Scorecard:</strong> Status pemeriksaan, kondisi saat ini, skor & alasan skor I1-I7.<br>
+                        &bull; <strong>Tautan Naskah Resmi:</strong> Tautan naskah P2MA pada Elemen 1 otomatis ditautkan ke profil kerja sama.
+                    </div>
                 </div>
             </div>
 
@@ -615,7 +710,7 @@ require __DIR__ . '/includes/header.php';
                 <button type="button" onclick="closeImportModal()" class="btn btn-outline" style="font-size:12.5px;padding:7px 14px;">
                     Batal
                 </button>
-                <button type="submit" class="btn btn-primary" style="font-size:12.5px;padding:7px 18px;font-weight:600;">
+                <button type="submit" id="modalSubmitBtn" class="btn btn-primary" style="font-size:12.5px;padding:7px 18px;font-weight:600;">
                     📥 Mulai Proses Import
                 </button>
             </div>
@@ -624,9 +719,43 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <script>
-function openImportModal(id, kode, nama) {
+function openImportModal(id, kode, nama, type) {
+    type = type || 'scorecard';
     document.getElementById('modalMitraId').value = id;
-    document.getElementById('modalMitraLabel').innerHTML = '<strong>[' + kode + ']</strong> ' + nama;
+    document.getElementById('modalImportType').value = type;
+    
+    var titleEl = document.getElementById('modalTitle');
+    var targetLabelEl = document.getElementById('modalTargetTypeLabel');
+    var helpEl = document.getElementById('modalHelpText');
+    var infoItemsEl = document.getElementById('modalInfoItems');
+    var submitBtn = document.getElementById('modalSubmitBtn');
+
+    if (type === 'baseline') {
+        titleEl.textContent = 'Import Data Baseline FIX (12 Elemen)';
+        targetLabelEl.textContent = 'Target Naskah Kerja Sama (Modul Baseline):';
+        document.getElementById('modalMitraLabel').innerHTML = '<strong>[' + kode + ']</strong> ' + nama + ' <span class="badge badge-info" style="font-size:10px;margin-left:6px;background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;">Modul Baseline</span>';
+        helpEl.innerHTML = 'Format didukung: <strong>.xlsx</strong> (Maks. 25 MB). Gunakan template <code>template_baseline_12_elemen.xlsx</code>.';
+        infoItemsEl.innerHTML = '&bull; <strong>12 Elemen Baseline:</strong> Status pemeriksaan, fakta audit, dan tautan bukti.<br>' +
+                                '&bull; <strong>Kunci Status:</strong> Otomatis mengunci status baseline menjadi <em>TERVERIFIKASI / DIKUNCI</em>.<br>' +
+                                '&bull; <strong>Scan Naskah:</strong> Tautan naskah P2MA resmi pada Elemen 1 otomatis terhubung.';
+        submitBtn.className = 'btn';
+        submitBtn.style.background = '#4f46e5';
+        submitBtn.style.color = '#ffffff';
+        submitBtn.innerHTML = '📥 Mulai Import Baseline';
+    } else {
+        titleEl.textContent = 'Import Data Scorecard Kinerja (V2.1)';
+        targetLabelEl.textContent = 'Target Naskah Kerja Sama (Modul Scorecard):';
+        document.getElementById('modalMitraLabel').innerHTML = '<strong>[' + kode + ']</strong> ' + nama + ' <span class="badge badge-primary" style="font-size:10px;margin-left:6px;">Modul Scorecard</span>';
+        helpEl.innerHTML = 'Format didukung: <strong>.xlsx</strong> (Maks. 25 MB). Gunakan template evaluasi <code>Scorecard_*.xlsx</code>.';
+        infoItemsEl.innerHTML = '&bull; <strong>Indikator I1–I7:</strong> Status penilaian, kondisi saat ini, skor & alasan skor.<br>' +
+                                '&bull; <strong>Rekomendasi & Posisi:</strong> Posisi portofolio dan telaah tindak lanjut.<br>' +
+                                '&bull; <strong>Sinkronisasi Total Nilai:</strong> Nilai berjalan diperbarui secara otomatis.';
+        submitBtn.className = 'btn btn-primary';
+        submitBtn.style.background = '';
+        submitBtn.style.color = '';
+        submitBtn.innerHTML = '📥 Mulai Import Scorecard';
+    }
+
     var modal = document.getElementById('modalImport');
     modal.style.display = 'flex';
 }

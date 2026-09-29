@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.3] - 2026-09-28
+
+### Added
+- **Penyempurnaan Menu Import (Dual Baseline & Scorecard Actions):**
+  - Added dedicated **Template Excel** and **Aksi Import** columns specifically for **Baseline (12 Elemen)** right beside the Baseline status column.
+  - Provided new standardized fillable OpenXML spreadsheet template `public/templates/template_baseline_12_elemen.xlsx` with embedded dropdown data validation for element statuses (`TERVERIFIKASI,BELUM TERVERIFIKASI,BELUM TERSEDIA,TIDAK RELEVAN,BELUM DIISI`).
+  - Added autonomous button state management: if a partnership already has verified/locked Baseline data (e.g. P01–P11, C01–C05), both the Baseline Template and Baseline Import buttons are **automatically disabled** (`🔒 Terkunci`) to protect frozen data.
+  - If a partnership does not yet have verified Baseline data (e.g. P12, P13, or new partnerships), both the Baseline Template and Baseline Import buttons are **active**, enabling 1-click template download and import.
+  - Multi-mode Import Modal: dynamically adapts its interface, badges, and validation logic whether the user is importing Baseline elements or Scorecard evaluations.
+
+### Fixed
+- **PHP Runtime Warning Fix (`total_skor`):**
+  - Resolved `Warning: Undefined array key "total_skor" in import.php on line 546` by explicitly querying `(SELECT ROUND(SUM(nilai), 1) FROM indikator_skor WHERE mitra_id = m.id) as total_skor` and applying safe null checks.
+
 ## [2.3.2] - 2026-09-28
 
 ### Fixed
