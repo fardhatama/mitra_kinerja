@@ -374,22 +374,27 @@ function parseGate0Upload(string $tmpPath, string $origName): array {
         $sharedStrings = [];
         $ssXml = $zip->getFromName('xl/sharedStrings.xml');
         if ($ssXml) {
-            $xml = simplexml_load_string($ssXml);
-            foreach ($xml->si as $si) {
-                if (isset($si->t)) {
-                    $sharedStrings[] = (string)$si->t;
-                } else {
-                    $textParts = [];
-                    foreach ($si->r as $r) $textParts[] = (string)$r->t;
-                    $sharedStrings[] = implode('', $textParts);
+            $xml = @simplexml_load_string(cleanXmlString($ssXml));
+            if ($xml !== false && isset($xml->si)) {
+                foreach ($xml->si as $si) {
+                    if (isset($si->t)) {
+                        $sharedStrings[] = (string)$si->t;
+                    } else {
+                        $textParts = [];
+                        if (isset($si->r)) {
+                            foreach ($si->r as $r) $textParts[] = (string)($r->t ?? '');
+                        }
+                        $sharedStrings[] = implode('', $textParts);
+                    }
                 }
             }
         }
         $rows = [];
         $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml');
         if ($sheetXml) {
-            $xml = simplexml_load_string($sheetXml);
-            foreach ($xml->sheetData->row as $r) {
+            $xml = @simplexml_load_string(cleanXmlString($sheetXml));
+            if ($xml !== false && isset($xml->sheetData->row)) {
+                foreach ($xml->sheetData->row as $r) {
                 $rowMap = [];
                 $maxCol = 0;
                 foreach ($r->c as $c) {
@@ -422,6 +427,7 @@ function parseGate0Upload(string $tmpPath, string $origName): array {
                     }
                     $rows[] = $rowValues;
                 }
+            }
             }
         }
         $zip->close();

@@ -673,6 +673,21 @@ function formatLinkSumberBukti(?string $raw): string {
  * ============================================================ */
 
 /**
+ * Pembersih XML untuk mencegah warning SimpleXML / XPath namespace prefix.
+ * Menghapus prefix namespace (<x:row> -> <row>) dan atribut xmlns sehingga
+ * SimpleXML dapat membaca seluruh elemen Excel secara langsung dan aman.
+ */
+function cleanXmlString(string $xml): string {
+    // 1. Remove all xmlns attributes first
+    $xml = preg_replace('/\s*xmlns(?::[\w-]+)?="[^"]*"/i', '', $xml);
+    // 2. Remove namespace prefixes from tag names: <x:row> -> <row>, </x:row> -> </row>
+    $xml = preg_replace('/(<\/?)([\w-]+):([^>]*>)/', '$1$3', $xml);
+    // 3. Remove namespace prefixes from remaining attributes: r:id="..." -> id="..."
+    $xml = preg_replace('/\s+([\w-]+):([\w-]+)="/i', ' $2="', $xml);
+    return $xml;
+}
+
+/**
  * Universal ZIP archive reader that transparently uses PHP's ZipArchive when available,
  * or falls back to a built-in pure PHP PKZip parser using gzinflate() if php_zip extension is disabled.
  */
@@ -777,5 +792,135 @@ class RobustZipReader {
         $this->entries = [];
     }
 }
+
+/**
+ * Parsing seluruh sheet pada file workbook .xlsx secara aman,
+ * menggunakan RobustZipReader dan pembersih namespace XML sehingga
+ * tidak memicu warning SimpleXML / XPath pada PHP versi/setting manapun.
+ */
+function parseFullWorkbookXlsx(string $filePath): array {
+    $zip = new RobustZipReader();
+    if (!$zip->open($filePath)) return [];
+
+    // 1. Shared Strings
+    $sharedStrings = [];
+    $ssContent = $zip->getFromName('xl/sharedStrings.xml');
+    if ($ssContent) {
+        $cleanSs = cleanXmlString($ssContent);
+        $ssXml = @simplexml_load_string($cleanSs);
+        if ($ssXml !== false && isset($ssXml->si)) {
+            foreach ($ssXml->si as $si) {
+                if (isset($si->t)) {
+                    $sharedStrings[] = (string)$si->t;
+                } else {
+                    $parts = [];
+                    if (isset($si->r)) {
+                        foreach ($si->r as $r) {
+                            $parts[] = (string)($r->t ?? '');
+                        }
+                    }
+                    $sharedStrings[] = implode('', $parts);
+                }
+            }
+        }
+    }
+
+    // 2. Mapping Relationships & Sheets
+    $relsContent = $zip->getFromName('xl/_rels/workbook.xml.rels');
+    $relMap = [];
+    if ($relsContent) {
+        preg_match_all('/<Relationship[^>]+>/i', $relsContent, $rm);
+        foreach ($rm[0] as $tag) {
+            preg_match('/Id=\"([^\"]+)\"/i', $tag, $mId);
+            preg_match('/Target=\"([^\"]+)\"/i', $tag, $mTgt);
+            if (!empty($mId[1]) && !empty($mTgt[1])) {
+                $t = ltrim($mTgt[1], '/');
+                if (!str_starts_with($t, 'xl/')) $t = 'xl/' . $t;
+                $relMap[$mId[1]] = $t;
+            }
+        }
+    }
+
+    $wbContent = $zip->getFromName('xl/workbook.xml');
+    $sheetTargets = [];
+    if ($wbContent) {
+        $cleanWb = cleanXmlString($wbContent);
+        $wbXml = @simplexml_load_string($cleanWb);
+        if ($wbXml !== false && isset($wbXml->sheets->sheet)) {
+            foreach ($wbXml->sheets->sheet as $s) {
+                $sName = (string)$s['name'];
+                $rId = (string)($s['id'] ?? '');
+                if (!$rId) {
+                    foreach ($s->attributes() as $k => $v) {
+                        if (str_ends_with(strtolower($k), 'id')) {
+                            $rId = (string)$v;
+                            break;
+                        }
+                    }
+                }
+                if ($rId && isset($relMap[$rId])) {
+                    $sheetTargets[$sName] = $relMap[$rId];
+                }
+            }
+        }
+        if (empty($sheetTargets)) {
+            preg_match_all('/<[^>]*sheet[^>]+>/i', $wbContent, $sm);
+            foreach ($sm[0] as $tag) {
+                preg_match('/name=\"([^\"]+)\"/i', $tag, $mName);
+                preg_match('/(?:r:id|\bid)=\"([^\"]+)\"/i', $tag, $mRid);
+                if (!empty($mName[1]) && !empty($mRid[1]) && isset($relMap[$mRid[1]])) {
+                    $sheetTargets[htmlspecialchars_decode($mName[1])] = $relMap[$mRid[1]];
+                }
+            }
+        }
+    }
+
+    // 3. Ekstraksi Data Tiap Sheet
+    $result = [];
+    foreach ($sheetTargets as $sheetName => $targetFile) {
+        $sXmlContent = $zip->getFromName($targetFile);
+        if (!$sXmlContent) continue;
+        $cleanSheet = cleanXmlString($sXmlContent);
+        $sXml = @simplexml_load_string($cleanSheet);
+        if ($sXml === false || !isset($sXml->sheetData->row)) continue;
+
+        $rows = [];
+        foreach ($sXml->sheetData->row as $r) {
+            $rNum = (int)$r['r'];
+            $cells = [];
+            if (isset($r->c)) {
+                foreach ($r->c as $c) {
+                    $ref = (string)$c['r'];
+                    preg_match('/^([A-Z]+)/', $ref, $m);
+                    $colLetters = $m[1] ?? 'A';
+                    $colNum = 0;
+                    for ($ci = 0; $ci < strlen($colLetters); $ci++) {
+                        $colNum = $colNum * 26 + (ord($colLetters[$ci]) - ord('A') + 1);
+                    }
+
+                    $type = (string)($c['t'] ?? '');
+                    $val = (string)($c->v ?? '');
+
+                    if ($type === 's' && isset($sharedStrings[(int)$val])) {
+                        $cellVal = $sharedStrings[(int)$val];
+                    } elseif ($type === 'inlineStr' && isset($c->is->t)) {
+                        $cellVal = (string)$c->is->t;
+                    } else {
+                        $cellVal = $val;
+                    }
+                    $cells[$colNum] = trim($cellVal);
+                }
+            }
+            if (!empty($cells)) {
+                $rows[$rNum] = $cells;
+            }
+        }
+        $result[$sheetName] = $rows;
+    }
+
+    $zip->close();
+    return $result;
+}
+
 
 

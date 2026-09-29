@@ -28,105 +28,10 @@ $templateMap = [
     'C03' => ['file' => 'public/templates/import_naskah/02_Portofolio_Pengayaan/C03_Scorecard_Universitas_Ibnu_Sina.xlsx', 'label' => 'Portofolio Pengayaan (C03)'],
     'C04' => ['file' => 'public/templates/import_naskah/02_Portofolio_Pengayaan/C04_Scorecard_UNRIKA.xlsx', 'label' => 'Portofolio Pengayaan (C04)'],
     'C05' => ['file' => 'public/templates/import_naskah/02_Baseline_Final/FINAL_BASELINE_MITRA_KINERJA_AUDIT_FINAL_28_AGUSTUS_2026.xlsx', 'label' => 'Baseline Final Audit (C05)'],
+    'P11' => ['file' => 'public/templates/template_scorecard_v2_1.xlsx', 'label' => 'Scorecard Template V2.1 (P11)'],
+    'P12' => ['file' => 'public/templates/template_scorecard_v2_1.xlsx', 'label' => 'Scorecard Template V2.1 (P12)'],
+    'P13' => ['file' => 'public/templates/template_scorecard_v2_1.xlsx', 'label' => 'Scorecard Template V2.1 (P13)'],
 ];
-
-/**
- * Fungsi pembantu: Parse seluruh sheet pada file workbook .xlsx
- */
-function parseFullWorkbookXlsx(string $filePath): array {
-    $zip = new RobustZipReader();
-    if (!$zip->open($filePath)) return [];
-
-    // 1. Shared Strings
-    $sharedStrings = [];
-    $ssContent = $zip->getFromName('xl/sharedStrings.xml');
-    if ($ssContent) {
-        $ssXml = @simplexml_load_string($ssContent);
-        if ($ssXml !== false) {
-            foreach ($ssXml->xpath('//si|//x:si') as $si) {
-                $tParts = [];
-                foreach ($si->xpath('.//t|.//x:t') as $t) {
-                    $tParts[] = (string)$t;
-                }
-                $sharedStrings[] = implode('', $tParts);
-            }
-        }
-    }
-
-    // 2. Mapping Relationships & Sheets
-    $relsContent = $zip->getFromName('xl/_rels/workbook.xml.rels');
-    $relMap = [];
-    if ($relsContent) {
-        preg_match_all('/<Relationship[^>]+>/i', $relsContent, $rm);
-        foreach ($rm[0] as $tag) {
-            preg_match('/Id=\"([^\"]+)\"/i', $tag, $mId);
-            preg_match('/Target=\"([^\"]+)\"/i', $tag, $mTgt);
-            if (!empty($mId[1]) && !empty($mTgt[1])) {
-                $t = ltrim($mTgt[1], '/');
-                if (!str_starts_with($t, 'xl/')) $t = 'xl/' . $t;
-                $relMap[$mId[1]] = $t;
-            }
-        }
-    }
-
-    $wbContent = $zip->getFromName('xl/workbook.xml');
-    $sheetTargets = [];
-    if ($wbContent) {
-        preg_match_all('/<[^>]*sheet[^>]+>/i', $wbContent, $sm);
-        foreach ($sm[0] as $tag) {
-            preg_match('/name=\"([^\"]+)\"/i', $tag, $mName);
-            preg_match('/(?:r:id|\bid)=\"([^\"]+)\"/i', $tag, $mRid);
-            if (!empty($mName[1]) && !empty($mRid[1]) && isset($relMap[$mRid[1]])) {
-                $sheetTargets[htmlspecialchars_decode($mName[1])] = $relMap[$mRid[1]];
-            }
-        }
-    }
-
-    // 3. Ekstraksi Data Tiap Sheet
-    $result = [];
-    foreach ($sheetTargets as $sheetName => $targetFile) {
-        $sXmlContent = $zip->getFromName($targetFile);
-        if (!$sXmlContent) continue;
-        $sXml = @simplexml_load_string($sXmlContent);
-        if ($sXml === false) continue;
-
-        $rows = [];
-        foreach ($sXml->xpath('//row|//x:row') as $r) {
-            $rNum = (int)$r['r'];
-            $cells = [];
-            foreach ($r->xpath('./c|./x:c') as $c) {
-                $ref = (string)$c['r'];
-                preg_match('/^([A-Z]+)/', $ref, $m);
-                $colLetters = $m[1] ?? 'A';
-                $colNum = 0;
-                for ($ci = 0; $ci < strlen($colLetters); $ci++) {
-                    $colNum = $colNum * 26 + (ord($colLetters[$ci]) - ord('A') + 1);
-                }
-
-                $type = (string)$c['t'];
-                $vNodes = $c->xpath('.//v|.//x:v');
-                $rawVal = !empty($vNodes) ? (string)$vNodes[0] : '';
-
-                if ($type === 's' && isset($sharedStrings[(int)$rawVal])) {
-                    $cellVal = $sharedStrings[(int)$rawVal];
-                } elseif ($type === 'inlineStr') {
-                    $isNodes = $c->xpath('.//is//t|.//x:is//x:t');
-                    $cellVal = !empty($isNodes) ? (string)$isNodes[0] : '';
-                } else {
-                    $cellVal = $rawVal;
-                }
-                $cells[$colNum] = trim($cellVal);
-            }
-            if (!empty($cells)) {
-                $rows[$rNum] = $cells;
-            }
-        }
-        $result[$sheetName] = $rows;
-    }
-
-    $zip->close();
-    return $result;
-}
 
 // ── PROSES IMPORT WORKBOOK EXCEL ──────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'import_naskah') {
@@ -153,6 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                 $errors[] = 'Gagal membaca isi file Excel. Pastikan file tidak terkunci atau rusak.';
             } else {
                 $importType = trim($_POST['import_type'] ?? 'all');
+                $targetCode = strtoupper(trim($targetMitra['kode']));
 
                 // Temukan Sheet Baseline & Sheet Scorecard
                 $baseSheetName = '';
@@ -162,41 +68,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                 $kegSheetName = '';
                 $utlSheetName = '';
 
+                // 1. Deteksi Sheet Baseline
+                if ($importType !== 'scorecard') {
+                    // a. Cocokkan dengan kode naskah (misal: P01_DEKRANASDA, P02, dll)
+                    foreach (array_keys($parsedWb) as $sName) {
+                        $upper = strtoupper($sName);
+                        if (str_contains($upper, 'REKAP') || str_contains($upper, 'PANDUAN') || str_contains($upper, 'ANOMALI') || str_contains($upper, 'SINKRONISASI')) continue;
+                        if (str_contains($upper, $targetCode)) {
+                            $baseSheetName = $sName;
+                            break;
+                        }
+                    }
+                    // b. Cari sheet yang bernama BASELINE / SUMBER_BASELINE
+                    if (!$baseSheetName) {
+                        foreach (array_keys($parsedWb) as $sName) {
+                            $upper = strtoupper($sName);
+                            if (str_contains($upper, 'REKAP') || str_contains($upper, 'PANDUAN')) continue;
+                            if (str_contains($upper, 'SUMBER_BASELINE') || str_contains($upper, 'BASELINE')) {
+                                $baseSheetName = $sName;
+                                break;
+                            }
+                        }
+                    }
+                    // c. Jika file hanya memiliki 1 sheet
+                    if (!$baseSheetName && count($parsedWb) === 1) {
+                        $baseSheetName = array_key_first($parsedWb);
+                    }
+                    // d. Fallback: cari sheet yang memiliki angka 1..12 di kolom 1
+                    if (!$baseSheetName) {
+                        foreach ($parsedWb as $shName => $shRows) {
+                            $upper = strtoupper($shName);
+                            if (str_contains($upper, 'REKAP') || str_contains($upper, 'PANDUAN')) continue;
+                            for ($sr = 1; $sr <= 25; $sr++) {
+                                if (isset($shRows[$sr][1]) && ((string)$shRows[$sr][1] === '1' || $shRows[$sr][1] === 1)) {
+                                    $baseSheetName = $shName;
+                                    break 2;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2. Deteksi Sheet Scorecard
+                if ($importType !== 'baseline') {
+                    foreach (array_keys($parsedWb) as $sName) {
+                        $upper = strtoupper($sName);
+                        if (str_contains($upper, 'PENILAIAN') || str_contains($upper, 'SCORECARD')) {
+                            $scSheetName = $sName;
+                            break;
+                        }
+                    }
+                    if (!$scSheetName) {
+                        foreach ($parsedWb as $shName => $shRows) {
+                            for ($sr = 1; $sr <= 25; $sr++) {
+                                $c1 = strtoupper(trim((string)($shRows[$sr][1] ?? '')));
+                                if (str_starts_with($c1, 'I1')) {
+                                    $scSheetName = $shName;
+                                    break 2;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. Deteksi Sheet Rekomendasi, Identitas, Kegiatan
                 foreach (array_keys($parsedWb) as $sName) {
                     $upper = strtoupper($sName);
-                    if (str_contains($upper, 'SUMBER_BASELINE') || (str_contains($upper, 'BASELINE') && !str_contains($upper, 'REKAP') && !str_contains($upper, 'PANDUAN'))) {
-                        if (!$baseSheetName) $baseSheetName = $sName;
-                    }
-                    if (str_contains($upper, 'PENILAIAN') || str_contains($upper, 'SCORECARD')) {
-                        if (!$scSheetName) $scSheetName = $sName;
-                    }
                     if (str_contains($upper, 'REKOMENDASI')) $rekSheetName = $sName;
                     elseif (str_contains($upper, 'IDENTITAS') || str_contains($upper, 'PIC')) $picSheetName = $sName;
                     elseif (str_contains($upper, 'PELAKSANAAN') || str_contains($upper, 'KEGIATAN') || str_contains($upper, 'SUMBER_AKTUAL')) $kegSheetName = $sName;
                     elseif (str_contains($upper, 'USULAN') || str_contains($upper, 'TINDAK LANJUT')) $utlSheetName = $sName;
-                }
-
-                // Fallback deteksi sheet jika nama sheet bukan standar
-                if (!$baseSheetName && $importType !== 'scorecard') {
-                    foreach ($parsedWb as $shName => $shRows) {
-                        for ($sr = 1; $sr <= 25; $sr++) {
-                            if (isset($shRows[$sr][1]) && ((string)$shRows[$sr][1] === '1' || $shRows[$sr][1] === 1)) {
-                                $baseSheetName = $shName;
-                                break 2;
-                            }
-                        }
-                    }
-                }
-                if (!$scSheetName && $importType !== 'baseline') {
-                    foreach ($parsedWb as $shName => $shRows) {
-                        for ($sr = 1; $sr <= 25; $sr++) {
-                            $c1 = strtoupper(trim((string)($shRows[$sr][1] ?? '')));
-                            if (str_starts_with($c1, 'I1')) {
-                                $scSheetName = $shName;
-                                break 2;
-                            }
-                        }
-                    }
                 }
 
                 $updatedBaseline = 0;
@@ -225,19 +166,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         $elNum = (int)$col1;
                         if ($elNum < 1 || $elNum > 12) continue;
 
-                        $rawStatus = strtoupper(trim($row[6] ?? 'BELUM DIISI'));
-                        $fakta = trim($row[7] ?? '');
-                        $linkBukti = trim($row[8] ?? '');
-                        $catatan = trim($row[9] ?? '');
+                        $rawStatus = strtoupper(trim((string)($row[6] ?? 'BELUM DIISI')));
+                        $fakta = trim((string)($row[7] ?? ''));
+                        $linkBukti = trim((string)($row[8] ?? ''));
+                        $catatan = trim((string)($row[9] ?? ''));
 
-                        // Normalisasi status
-                        $validStatuses = ['TERVERIFIKASI', 'BELUM TERVERIFIKASI', 'BELUM TERSEDIA', 'TIDAK RELEVAN', 'BELUM DIISI'];
+                        // Normalisasi status secara cerdas
                         $finalStatus = 'BELUM DIISI';
-                        foreach ($validStatuses as $vs) {
-                            if (str_contains($rawStatus, $vs)) {
-                                $finalStatus = $vs;
-                                break;
-                            }
+                        if (str_contains($rawStatus, 'BELUM TERVERIFIKASI')) {
+                            $finalStatus = 'BELUM TERVERIFIKASI';
+                        } elseif (str_contains($rawStatus, 'BELUM TERSEDIA') || str_contains($rawStatus, 'TIDAK TERSEDIA') || str_contains($rawStatus, 'TIDAK ADA')) {
+                            $finalStatus = 'BELUM TERSEDIA';
+                        } elseif (str_contains($rawStatus, 'TIDAK RELEVAN') || str_contains($rawStatus, 'BUKAN')) {
+                            $finalStatus = 'TIDAK RELEVAN';
+                        } elseif (str_contains($rawStatus, 'TERVERIFIKASI') || str_contains($rawStatus, 'SESUAI') || str_contains($rawStatus, 'VERIFIED') || str_contains($rawStatus, 'ADA') || str_contains($rawStatus, 'SUDAH')) {
+                            $finalStatus = 'TERVERIFIKASI';
+                        } elseif (!empty($linkBukti) || !empty($fakta)) {
+                            $finalStatus = !empty($linkBukti) ? 'TERVERIFIKASI' : 'BELUM TERVERIFIKASI';
                         }
 
                         // Update atau insert ke baseline_elemen
@@ -645,8 +590,8 @@ require __DIR__ . '/includes/header.php';
                                 <span>⬇️</span> Unduh Template
                             </a>
                         <?php else: ?>
-                            <a href="public/templates/template_gate0_dalam_negeri.xlsx" download class="btn btn-outline btn-sm" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;padding:5px 9px;" title="Unduh Template">
-                                <span>⬇️</span> Template Umum
+                            <a href="public/templates/template_scorecard_v2_1.xlsx" download="Template_Scorecard_<?= h($m['kode']) ?>.xlsx" class="btn btn-outline btn-sm" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;padding:5px 9px;color:#047857;border-color:#a7f3d0;background:#ecfdf5;font-weight:600;" title="Unduh Template Scorecard (.xlsx)">
+                                <span>⬇️</span> Unduh Template
                             </a>
                         <?php endif; ?>
                     </td>

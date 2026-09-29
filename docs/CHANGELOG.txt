@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.6] - 2026-09-29
+
+### Fixed
+- **Perbaikan Template Unduh Scorecard & Integrasi Template Baseline Bu Kabag:**
+  - Resolved the bug where clicking "Unduh Template" on Scorecard for P11, P12, and P13 mistakenly downloaded the Gate 0 template: created official generic `public/templates/template_scorecard_v2_1.xlsx` (with sheets `PENILAIAN`, `KENDALI`, `REKOMENDASI`, `RUBRIK`, `SUMBER_BASELINE`, `SUMBER_AKTUAL`) and mapped it to all newly added partnerships.
+  - Aligned `public/templates/template_baseline_12_elemen.xlsx` as an exact structural and visual clone of Bu Kabag's audited baseline worksheet (`FINAL_BASELINE_MITRA_KINERJA_AUDIT_FINAL_28_AGUSTUS_2026.xlsx`).
+  - Added smart partner-code sheet matching in `import.php` to seamlessly extract data whether users upload Bu Kabag's 19-sheet workbook or the single-sheet baseline template.
+  - Enhanced baseline element status parser with flexible normalization (`TERVERIFIKASI`, `BELUM TERVERIFIKASI`, `BELUM TERSEDIA`, `TIDAK RELEVAN`, `BELUM DIISI`).
+
+## [2.3.5] - 2026-09-29
+
+### Fixed
+- **Eliminasi Total Warning `SimpleXMLElement::xpath(): Undefined namespace prefix`:**
+  - Removed fragile `xpath('//row|//x:row')` queries from spreadsheet parsing in favor of clean, direct SimpleXML object traversal (`$sXml->sheetData->row`).
+  - Added robust `cleanXmlString()` in `includes/functions.php` which automatically strips `xmlns` namespaces and tag/attribute prefixes (`x:`, `r:`) prior to parsing.
+  - Relocated and consolidated `parseFullWorkbookXlsx()` into `includes/functions.php` as a core reusable service.
+  - Verified 100% clean parsing without any warnings across all 28 project spreadsheets and Gate 0 upload handlers.
+
 ## [2.3.4] - 2026-09-29
 
 ### Fixed
