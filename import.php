@@ -34,8 +34,8 @@ $templateMap = [
  * Fungsi pembantu: Parse seluruh sheet pada file workbook .xlsx
  */
 function parseFullWorkbookXlsx(string $filePath): array {
-    $zip = new ZipArchive();
-    if ($zip->open($filePath) !== true) return [];
+    $zip = new RobustZipReader();
+    if (!$zip->open($filePath)) return [];
 
     // 1. Shared Strings
     $sharedStrings = [];

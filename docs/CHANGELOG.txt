@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.4] - 2026-09-29
+
+### Fixed
+- **Penyelesaian Error Fatal `Class "ZipArchive" not found` (`includes/functions.php`, `import.php`, `gate0.php`):**
+  - Added universal `RobustZipReader` class with built-in pure PHP PKZip parser using standard `gzinflate()`.
+  - Transparent dual-mode operation: uses PHP's native `ZipArchive` when available; automatically falls back to the pure-PHP PKZip extractor if the PHP `zip` extension is commented out or disabled in `php.ini` on Windows XAMPP environments.
+  - Replaced direct `new ZipArchive()` calls in both `import.php` and `gate0.php` with `RobustZipReader`, eliminating fatal crashes on teammate setups without requiring any server configuration changes.
+
 ## [2.3.3] - 2026-09-28
 
 ### Added

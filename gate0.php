@@ -369,8 +369,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'promo
 function parseGate0Upload(string $tmpPath, string $origName): array {
     $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
     if ($ext === 'xlsx') {
-        $zip = new ZipArchive();
-        if ($zip->open($tmpPath) !== true) return [];
+        $zip = new RobustZipReader();
+        if (!$zip->open($tmpPath)) return [];
         $sharedStrings = [];
         $ssXml = $zip->getFromName('xl/sharedStrings.xml');
         if ($ssXml) {

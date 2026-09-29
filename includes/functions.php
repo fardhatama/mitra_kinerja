@@ -668,3 +668,114 @@ function formatLinkSumberBukti(?string $raw): string {
     return nl2br(h($raw));
 }
 
+/* ============================================================
+ * ROBUST ZIP & EXCEL PARSING (FALLBACK UNTUK PHP TANPA EXT-ZIP)
+ * ============================================================ */
+
+/**
+ * Universal ZIP archive reader that transparently uses PHP's ZipArchive when available,
+ * or falls back to a built-in pure PHP PKZip parser using gzinflate() if php_zip extension is disabled.
+ */
+class RobustZipReader {
+    private ?ZipArchive $nativeZip = null;
+    protected array $entries = [];
+    private bool $isNative = false;
+
+    public function open(string $filename): bool {
+        $this->entries = [];
+        $this->nativeZip = null;
+        $this->isNative = false;
+
+        // 1. Try native ZipArchive if available
+        if (class_exists('ZipArchive')) {
+            $zip = new ZipArchive();
+            if ($zip->open($filename) === true) {
+                $this->nativeZip = $zip;
+                $this->isNative = true;
+                return true;
+            }
+        }
+
+        // 2. Pure PHP PKZip Fallback using End of Central Directory (EOCD)
+        $data = @file_get_contents($filename);
+        if ($data === false || strlen($data) < 22) {
+            return false;
+        }
+
+        $eocdPos = strrpos($data, "\x50\x4B\x05\x06");
+        if ($eocdPos === false) {
+            return false;
+        }
+
+        $eocd = substr($data, $eocdPos);
+        $totalEntries = unpack('v', substr($eocd, 10, 2))[1] ?? 0;
+        $cdOffset = unpack('V', substr($eocd, 16, 4))[1] ?? 0;
+
+        $pos = $cdOffset;
+        for ($i = 0; $i < $totalEntries; $i++) {
+            if ($pos + 46 > strlen($data) || substr($data, $pos, 4) !== "\x50\x4B\x01\x02") {
+                break;
+            }
+            $header = substr($data, $pos, 46);
+            $compMethod = unpack('v', substr($header, 10, 2))[1];
+            $compSize = unpack('V', substr($header, 20, 4))[1];
+            $uncompSize = unpack('V', substr($header, 24, 4))[1];
+            $fnLen = unpack('v', substr($header, 28, 2))[1];
+            $extraLen = unpack('v', substr($header, 30, 2))[1];
+            $commentLen = unpack('v', substr($header, 32, 2))[1];
+            $localOffset = unpack('V', substr($header, 42, 4))[1];
+
+            $entryName = substr($data, $pos + 46, $fnLen);
+            $pos += 46 + $fnLen + $extraLen + $commentLen;
+
+            // Read local header for actual data offset
+            if ($localOffset + 30 > strlen($data) || substr($data, $localOffset, 4) !== "\x50\x4B\x03\x04") {
+                continue;
+            }
+            $locFnLen = unpack('v', substr($data, $localOffset + 26, 2))[1];
+            $locExtraLen = unpack('v', substr($data, $localOffset + 28, 2))[1];
+            $dataOffset = $localOffset + 30 + $locFnLen + $locExtraLen;
+
+            $this->entries[$entryName] = [
+                'method' => $compMethod,
+                'compSize' => $compSize,
+                'uncompSize' => $uncompSize,
+                'offset' => $dataOffset,
+                'raw' => substr($data, $dataOffset, $compSize)
+            ];
+        }
+
+        return !empty($this->entries);
+    }
+
+    public function getFromName(string $name): ?string {
+        if ($this->isNative && $this->nativeZip) {
+            $content = $this->nativeZip->getFromName($name);
+            return ($content !== false) ? $content : null;
+        }
+
+        $cleanTarget = ltrim(str_replace('\\', '/', $name), '/');
+        foreach ($this->entries as $entryName => $entry) {
+            $cleanEntry = ltrim(str_replace('\\', '/', $entryName), '/');
+            if (strcasecmp($cleanEntry, $cleanTarget) === 0) {
+                if ($entry['method'] === 0) {
+                    return $entry['raw'];
+                } elseif ($entry['method'] === 8) {
+                    $uncompressed = @gzinflate($entry['raw']);
+                    return ($uncompressed !== false) ? $uncompressed : null;
+                }
+            }
+        }
+        return null;
+    }
+
+    public function close(): void {
+        if ($this->isNative && $this->nativeZip) {
+            $this->nativeZip->close();
+            $this->nativeZip = null;
+        }
+        $this->entries = [];
+    }
+}
+
+
