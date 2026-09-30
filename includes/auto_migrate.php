@@ -11,6 +11,24 @@ function ensureDatabaseSchema(PDO $pdo): void {
     $checked = true;
 
     try {
+        // 0. SELF-HEALING DATABASE BOOTSTRAP:
+        // Jika database baru/kosong tanpa tabel mitra_kinerja, otomatis lakukan bootstrap dari dump
+        try {
+            $checkMk = $pdo->query("SHOW TABLES LIKE 'mitra_kinerja'")->fetchAll();
+            if (empty($checkMk)) {
+                $dumpPath = __DIR__ . '/../database/mitra_kinerja_dump.sql';
+                if (file_exists($dumpPath)) {
+                    $sqlDump = file_get_contents($dumpPath);
+                    if (!empty($sqlDump)) {
+                        $pdo->exec($sqlDump);
+                        return; // Selesai bootstrap lengkap
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('Database bootstrap check error: ' . $e->getMessage());
+        }
+
         // 1. Pastikan seluruh tabel terstruktur ada
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS baseline_elemen (
@@ -175,7 +193,7 @@ function ensureDatabaseSchema(PDO $pdo): void {
 
                 $proposals = [
                     [
-                        1, 'PRA-2026-001', 'Dalam Negeri', 'PKS', 'Divisi Pelayanan Hukum dan HAM', 'Tim Kerja Sama & Fasilitasi Hukum',
+                        1, 'PRA-2026-001', 'Dalam Negeri', 'PKS', 'Divisi Pelayanan Hukum', 'Tim Kerja Sama & Fasilitasi Hukum',
                         'Universitas Maritim Raja Ali Haji (UMRAH)', 'Fasilitasi Sentra Riset Hukum Maritim & Pos Bantuan Hukum Masyarakat Pesisir',
                         'Mendekatkan akses keadilan dan pendampingan hukum pro-bono bagi masyarakat nelayan pesisir Kepulauan Riau',
                         'Penyuluhan hukum, riset kebijakan maritim, dan klinik konsultasi hukum keliling', 'Masyarakat nelayan tradisional dan sivitas akademika UMRAH',
@@ -188,12 +206,12 @@ function ensureDatabaseSchema(PDO $pdo): void {
                         'Singapore Academy of Law', 'Penguatan Kapasitas Penyelesaian Sengketa Komersial Lintas Batas',
                         'Benchmarking dan workshop mediasi hukum komersial lintas yurisdiksi Batam-Singapura',
                         'Pelatihan bersama kurator, mediator, dan pertukaran materi literasi hukum arbitrase', 'Aparatur Kanwil Kepri dan praktisi hukum wilayah perbatasan',
-                        '2027-01-15', '2028-01-14', $qJson, $tForeignJson, 'Konsultasi awal dengan Biro Kerja Sama Luar Negeri Kemenkumham Pusat sedang berjalan',
-                        'Menunggu surat rekomendasi / clearance dari Biro Hukerma Kemenkumham RI.', 'Biro Hukerma Kemenkumham RI & Ditjen AHU', 'Layak', 'Menunggu Persetujuan Pimpinan',
+                        '2027-01-15', '2028-01-14', $qJson, $tForeignJson, 'Konsultasi awal dengan Biro Kerja Sama Luar Negeri Kementerian Hukum Pusat sedang berjalan',
+                        'Menunggu surat rekomendasi / clearance dari Biro Hukerma Kementerian Hukum RI.', 'Biro Hukerma Kementerian Hukum RI & Ditjen AHU', 'Layak', 'Menunggu Persetujuan Pimpinan',
                         null, null, 0
                     ],
                     [
-                        3, 'PRA-DN-001', 'Dalam Negeri', 'PKS', 'Divisi Pelayanan Hukum dan HAM', 'Tim Kerja Sama & Fasilitasi Hukum',
+                        3, 'PRA-DN-001', 'Dalam Negeri', 'PKS', 'Divisi Pelayanan Hukum', 'Tim Kerja Sama & Fasilitasi Hukum',
                         'Universitas Maritim Raja Ali Haji (UMRAH)', 'Fasilitasi Sentra Riset Hukum Maritim dan Bantuan Hukum Nelayan Pesisir',
                         'Mendekatkan akses keadilan masyarakat nelayan pesisir',
                         'Penyuluhan hukum, riset kebijakan maritim, dan klinik konsultasi hukum keliling', 'Masyarakat nelayan tradisional dan sivitas akademika UMRAH',
@@ -211,7 +229,7 @@ function ensureDatabaseSchema(PDO $pdo): void {
                         'Disetujui. Sangat mendukung target Desa Sadar Hukum di Kepri.', '2026-09-23', 1
                     ],
                     [
-                        5, 'PRA-TEST-999', 'Dalam Negeri', 'PKS', 'Divisi Keimigrasian & Yankum', 'Tim Kerja Sama & Fasilitasi Hukum',
+                        5, 'PRA-TEST-999', 'Dalam Negeri', 'PKS', 'Divisi Pelayanan Hukum', 'Tim Kerja Sama & Fasilitasi Hukum',
                         'Politeknik Negeri Batam - Sentra KI', 'Inkubasi Paten dan Desain Industri Kampus Vokasi',
                         'Mendorong hilirisasi riset terapan kampus vokasi ke pendaftaran paten resmi',
                         'Inkubasi dan klinik paten dosen/mahasiswa vokasi', 'Civitas akademika Polibatam dan inventor lokal',

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.7] - 2026-09-29
+
+### Fixed
+- **Audit Holistik Multi-Tahap & Hardening Sistem:**
+  - **Self-Healing Database Bootstrap (`includes/auto_migrate.php`):** Added automatic database bootstrap check on PDO connection. If an empty or newly created database lacks `mitra_kinerja`, the application automatically loads and restores `database/mitra_kinerja_dump.sql`, eliminating empty table crashes on team environments.
+  - **Auto-Initialization Indikator Scorecard (`includes/data.php`):** Implemented fallback in `getMitraSummary()` that detects if any partnership lacks the 7 standard V2.1 scorecard indicators ($I_1$–$I_7$) and seeds them automatically, preventing empty scorecards.
+  - **Pencegahan Data Truncation pada `mitra_edit.php`:** Removed rigid `in_array` constraints that previously reset custom 27 September audit strings (`posisi_portofolio` & `rekomendasi`) to default values upon saving; added dynamic dropdown rendering for non-standard analytical positions.
+  - **Quote-Resilience pada Modal Trigger (`import.php` & `gate0.php`):** Upgraded inline `openImportModal` and `openDecisionModal` click handlers to use strict `json_encode` with `htmlspecialchars(..., ENT_QUOTES, 'UTF-8')`, completely preventing JS syntax breaks on partners with quotes or special characters.
+  - **Defensive Try/Catch pada Parse Workbook (`import.php`):** Wrapped `parseFullWorkbookXlsx()` in try/catch to catch any corrupt file read issues gracefully without uncaught fatal crashes.
+  - **Sinkronisasi Database Dump (`database/mitra_kinerja_dump.sql`):** Re-exported clean, self-contained dump with all 13 tables, demo accounts, baseline audits, proposals, and scorecard records.
+
 ## [2.3.6] - 2026-09-29
 
 ### Fixed

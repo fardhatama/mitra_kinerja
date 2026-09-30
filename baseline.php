@@ -19,7 +19,7 @@ $success = '';
 $b12Defs = BASELINE_12_DEFS;
 
 /* ── POST HANDLERS UNTUK DETAIL NASKAH ───────────────────── */
-if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($id > 0 && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $action = $_POST['action'] ?? '';
 
     // Ambil data mitra saat ini
@@ -44,7 +44,7 @@ if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->beginTransaction();
             try {
                 // Update kontrol naskah
-                $cutoffDate = $_POST['cutoff_date'] ?: null;
+                $cutoffDate = ($_POST['cutoff_date'] ?? '') ?: null;
                 $statusTanggal = $_POST['status_tanggal'] ?? $mitra['status_tanggal'];
                 $sumberBaseline = trim($_POST['sumber_baseline'] ?? '');
                 $pemeriksa = trim($_POST['baseline_pemeriksa'] ?? '');
@@ -88,7 +88,7 @@ if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 logAudit($id, $user['id'], 'UPDATE_BASELINE', 'Pembaruan 12 elemen Baseline FIX ' . $mitra['kode']);
                 $success = 'Data verifikasi 12 elemen Baseline FIX berhasil disimpan.';
             } catch (Throwable $e) {
-                $pdo->rollBack();
+                if ($pdo->inTransaction()) $pdo->rollBack();
                 $errors[] = 'Gagal menyimpan: ' . $e->getMessage();
             }
         }

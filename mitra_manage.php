@@ -22,7 +22,7 @@ $bidangOptions = [
 $mouOptions = $pdo->query("SELECT id, kode, nama_mitra, judul FROM mitra_kinerja WHERE jenis = 'MoU' ORDER BY kode")->fetchAll();
 
 /* ── MODAL QUICK UPLOAD SCAN PDF (dari Listing) ─────────── */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'upload_scan_pdf') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'upload_scan_pdf') {
     $targetMitraId = (int)($_POST['target_mitra_id'] ?? 0);
     if ($targetMitraId <= 0) {
         $errors[] = 'Pilih naskah yang akan diunggah berkas scan-nya.';
@@ -58,11 +58,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'uploa
 }
 
 /* ── TAMBAH RENCANA KERJA DARI EDIT FORM ─────────────────── */
-if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_rencana_kerja') {
+if ($id > 0 && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'add_rencana_kerja') {
     $judulRk = trim($_POST['judul_rencana'] ?? '');
     $ruangRk = trim($_POST['ruang_lingkup'] ?? '');
     $mulaiRk = $_POST['tanggal_mulai'] ?: date('Y-01-01');
-    $selesaiRk = $_POST['tanggal_selesai'] ?: date('Y-12-31');
+    $selesaiRk = ($_POST['tanggal_selesai'] ?? '') ?: date('Y-12-31');
     $statusRk = $_POST['status'] ?? 'Disetujui';
 
     if ($judulRk === '') {
@@ -82,7 +82,7 @@ if ($id > 0) {
     $mitra = $stmt->fetch();
     if (!$mitra) { http_response_code(404); die('Naskah tidak ditemukan.'); }
 
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST['action'])) {
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
         $namaMitra  = trim($_POST['nama_mitra'] ?? '');
         $judul      = trim($_POST['judul'] ?? '');
         $portofolio = $_POST['portofolio'] ?? $mitra['portofolio'];
@@ -315,7 +315,7 @@ if ($id > 0) {
 <?php exit; }
 
 /* ── LISTING + TAMBAH (tanpa ?id=) ─────────────────── */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST['action'])) {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
     $kode       = strtoupper(trim($_POST['kode'] ?? ''));
     $portofolio = $_POST['portofolio'] ?? 'Pilot Utama';
     $namaMitra  = trim($_POST['nama_mitra'] ?? '');

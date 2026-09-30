@@ -11,7 +11,7 @@ $errors = [];
 $success = '';
 
 // Handle create
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'create') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'create') {
     if (!$canEdit) { $errors[] = 'Tidak memiliki akses.'; }
     else {
         $mitraId = (int)($_POST['mitra_id'] ?? 0);
@@ -30,16 +30,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
                 } elseif ($_FILES['file_bukti']['size'] > 25 * 1024 * 1024) {
                     $errors[] = 'Ukuran file bukti melebihi batas maksimum 25MB.';
                 } else {
-                    $uploadDir = __DIR__ . '/public/uploads/tindak_lanjut/';
-                    if (!is_dir($uploadDir)) {
-                        mkdir($uploadDir, 0777, true);
+                    // Validasi keaslian file (magic bytes)
+                    $tmpPath = $_FILES['file_bukti']['tmp_name'];
+                    $magicOk = true;
+                    if ($ext === 'pdf') {
+                        $magicOk = function_exists('isPdfValid') ? isPdfValid($tmpPath) : (str_starts_with((string)file_get_contents($tmpPath, false, null, 0, 5), '%PDF-'));
+                    } elseif (in_array($ext, ['jpg', 'jpeg', 'png'], true)) {
+                        $magicOk = function_exists('isImageValid') ? isImageValid($tmpPath) : (@getimagesize($tmpPath) !== false);
                     }
-                    $cleanBase = preg_replace('/[^a-zA-Z0-9_\.-]/', '_', pathinfo($_FILES['file_bukti']['name'], PATHINFO_FILENAME));
-                    $targetFile = 'bukti_' . $mitraId . '_' . time() . '_' . $cleanBase . '.' . $ext;
-                    if (move_uploaded_file($_FILES['file_bukti']['tmp_name'], $uploadDir . $targetFile)) {
-                        $fileBukti = 'public/uploads/tindak_lanjut/' . $targetFile;
+                    if (!$magicOk) {
+                        $errors[] = 'File tidak lolos validasi keaslian (magic-byte). Pastikan file tidak rusak atau dimanipulasi.';
                     } else {
-                        $errors[] = 'Gagal menyimpan file bukti kegiatan di server.';
+                        $uploadDir = __DIR__ . '/public/uploads/tindak_lanjut/';
+                        if (!is_dir($uploadDir)) {
+                            mkdir($uploadDir, 0777, true);
+                        }
+                        $cleanBase = preg_replace('/[^a-zA-Z0-9_\.-]/', '_', pathinfo($_FILES['file_bukti']['name'], PATHINFO_FILENAME));
+                        $targetFile = 'bukti_' . $mitraId . '_' . time() . '_' . $cleanBase . '.' . $ext;
+                        if (move_uploaded_file($_FILES['file_bukti']['tmp_name'], $uploadDir . $targetFile)) {
+                            $fileBukti = 'public/uploads/tindak_lanjut/' . $targetFile;
+                        } else {
+                            $errors[] = 'Gagal menyimpan file bukti kegiatan di server.';
+                        }
                     }
                 }
             }
@@ -55,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
 }
 
 // Handle status update
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_status') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'update_status') {
     if (!$canEdit) { $errors[] = 'Tidak memiliki akses.'; }
     else {
         $tlId = (int)($_POST['tl_id'] ?? 0);

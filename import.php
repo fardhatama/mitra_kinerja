@@ -34,7 +34,7 @@ $templateMap = [
 ];
 
 // ── PROSES IMPORT WORKBOOK EXCEL ──────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'import_naskah') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'import_naskah') {
     $targetId = (int)($_POST['mitra_id'] ?? 0);
     $stmtM = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
     $stmtM->execute([$targetId]);
@@ -53,7 +53,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
         } elseif ($fileInfo['size'] > 25 * 1024 * 1024) {
             $errors[] = 'Ukuran file melebihi batas maksimum 25 MB.';
         } else {
-            $parsedWb = parseFullWorkbookXlsx($fileInfo['tmp_name']);
+            try {
+                $parsedWb = parseFullWorkbookXlsx($fileInfo['tmp_name']);
+            } catch (Throwable $e) {
+                error_log('parseFullWorkbookXlsx error: ' . $e->getMessage());
+                $parsedWb = [];
+            }
             if (empty($parsedWb)) {
                 $errors[] = 'Gagal membaca isi file Excel. Pastikan file tidak terkunci atau rusak.';
             } else {
@@ -559,7 +564,7 @@ require __DIR__ . '/includes/header.php';
                                 <span>🔒</span> Terkunci
                             </button>
                         <?php else: ?>
-                            <button type="button" class="btn btn-sm" onclick="openImportModal(<?= $m['id'] ?>, '<?= h($m['kode']) ?>', '<?= h(addslashes($m['nama_mitra'])) ?>', 'baseline')" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;padding:5px 12px;background:#4f46e5;color:#ffffff;border:none;border-radius:4px;font-weight:600;cursor:pointer;" title="Import Data Baseline">
+                            <button type="button" class="btn btn-sm" onclick="openImportModal(<?= (int)$m['id'] ?>, <?= htmlspecialchars(json_encode((string)$m['kode']), ENT_QUOTES, 'UTF-8') ?>, <?= htmlspecialchars(json_encode((string)$m['nama_mitra']), ENT_QUOTES, 'UTF-8') ?>, 'baseline')" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;padding:5px 12px;background:#4f46e5;color:#ffffff;border:none;border-radius:4px;font-weight:600;cursor:pointer;" title="Import Data Baseline">
                                 <span>📥</span> Import
                             </button>
                         <?php endif; ?>
@@ -598,7 +603,7 @@ require __DIR__ . '/includes/header.php';
 
                     <!-- 6. SCORECARD: AKSI IMPORT -->
                     <td style="padding:12px 14px;text-align:center;vertical-align:middle;">
-                        <button type="button" class="btn btn-primary btn-sm" onclick="openImportModal(<?= $m['id'] ?>, '<?= h($m['kode']) ?>', '<?= h(addslashes($m['nama_mitra'])) ?>', 'scorecard')" style="font-size:11.5px;display:inline-flex;align-items:center;gap:4px;padding:5px 12px;font-weight:600;" title="Import Data Scorecard">
+                        <button type="button" class="btn btn-primary btn-sm" onclick="openImportModal(<?= (int)$m['id'] ?>, <?= htmlspecialchars(json_encode((string)$m['kode']), ENT_QUOTES, 'UTF-8') ?>, <?= htmlspecialchars(json_encode((string)$m['nama_mitra']), ENT_QUOTES, 'UTF-8') ?>, 'scorecard')" style="font-size:11.5px;display:inline-flex;align-items:center;gap:4px;padding:5px 12px;font-weight:600;" title="Import Data Scorecard">
                             <span>📥</span> Import
                         </button>
                     </td>

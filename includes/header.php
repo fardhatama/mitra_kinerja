@@ -1,7 +1,7 @@
 <?php
 /** Dipanggil setelah auth.php di-require dan $pageTitle sudah di-set. */
 $user = currentUser();
-$currentPage = basename($_SERVER['PHP_SELF'], '.php');
+$currentPage = basename($_SERVER['PHP_SELF'] ?? '', '.php');
 
 /* ── Ikon SVG line-art (putih, 20×20 viewBox) ─────────────── */
 $icons = [

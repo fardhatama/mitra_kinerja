@@ -10,7 +10,7 @@ $id = (int)($_GET['id'] ?? 0);
 
 // Jika pemeriksa membuka detail validasi, arahkan langsung ke form penilaian (mitra_edit.php)
 if ($id > 0 && $userRole === 'pemeriksa') {
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         http_response_code(403);
         die('Akses ditolak: Hanya validator dan administrator yang berwenang menetapkan keputusan validasi.');
     }
@@ -141,7 +141,7 @@ $errors = [];
 $saved = false;
 $summary = getMitraSummary($pdo, $mitra);
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if (!in_array($userRole, ['admin', 'validator'], true)) {
         http_response_code(403);
         die('Akses ditolak: Hanya validator dan administrator yang berwenang menetapkan keputusan validasi.');

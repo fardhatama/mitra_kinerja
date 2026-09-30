@@ -19,7 +19,7 @@ if (!$mitra) {
 $errors = [];
 $saved = false;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if (!$canEdit) {
         http_response_code(403);
         die('Role Anda tidak dapat mengubah data ini.');
@@ -30,15 +30,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // --- A. Identitas, kontrol, posisi & rekomendasi ---
         $statusTanggal = in_array($_POST['status_tanggal'] ?? '', ['TERVERIFIKASI','BELUM TERVERIFIKASI'], true)
             ? $_POST['status_tanggal'] : 'BELUM TERVERIFIKASI';
-        $posisiPortofolio = in_array($_POST['posisi_portofolio'] ?? '', ['BELUM DAPAT DITENTUKAN','AKTIF','OUTPUT TERSEDIA','OUTCOME TERBENTUK','BERDAMPAK'], true)
-            ? $_POST['posisi_portofolio'] : 'BELUM DAPAT DITENTUKAN';
-        $rekomendasi = in_array($_POST['rekomendasi'] ?? '', ['BELUM DITENTUKAN','LANJUT','PERBAIKI','PERPANJANG','REPLIKASI','HENTIKAN'], true)
-            ? $_POST['rekomendasi'] : 'BELUM DITENTUKAN';
+        $posisiPortofolio = trim($_POST['posisi_portofolio'] ?? '') ?: 'BELUM DAPAT DITENTUKAN';
+        $rekomendasi = trim($_POST['rekomendasi'] ?? '') ?: 'BELUM DITENTUKAN';
 
         $stmtU = $pdo->prepare('UPDATE mitra_kinerja SET pemeriksa_id = ?, tanggal_review = ?, status_tanggal = ?, posisi_portofolio = ?, rekomendasi = ? WHERE id = ?');
         $stmtU->execute([
             $user['id'],
-            $_POST['tanggal_review'] !== '' ? $_POST['tanggal_review'] : null,
+            ($_POST['tanggal_review'] ?? '') !== '' ? $_POST['tanggal_review'] : null,
             $statusTanggal,
             $posisiPortofolio,
             $rekomendasi,
@@ -369,16 +367,26 @@ $monev = $summary['monev'];
         <div class="field">
             <label>Posisi Portofolio</label>
             <select name="posisi_portofolio" <?= $canEdit ? '' : 'disabled' ?>>
-                <?php foreach (['BELUM DAPAT DITENTUKAN','AKTIF','OUTPUT TERSEDIA','OUTCOME TERBENTUK','BERDAMPAK'] as $opt): ?>
-                <option value="<?= $opt ?>" <?= $summary['posisi_portofolio'] === $opt ? 'selected' : '' ?>><?= $opt ?></option>
+                <?php
+                $posOpts = ['BELUM DAPAT DITENTUKAN','AKTIF','OUTPUT TERSEDIA','OUTCOME TERBENTUK','BERDAMPAK'];
+                if (!empty($summary['posisi_portofolio']) && !in_array($summary['posisi_portofolio'], $posOpts, true)) {
+                    $posOpts[] = $summary['posisi_portofolio'];
+                }
+                foreach ($posOpts as $opt): ?>
+                <option value="<?= h($opt) ?>" <?= $summary['posisi_portofolio'] === $opt ? 'selected' : '' ?>><?= h($opt) ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
         <div class="field">
             <label>Rekomendasi Tindak Lanjut</label>
             <select name="rekomendasi" <?= $canEdit ? '' : 'disabled' ?>>
-                <?php foreach (['BELUM DITENTUKAN','LANJUT','PERBAIKI','PERPANJANG','REPLIKASI','HENTIKAN'] as $opt): ?>
-                <option value="<?= $opt ?>" <?= $summary['rekomendasi'] === $opt ? 'selected' : '' ?>><?= $opt ?></option>
+                <?php
+                $rekOpts = ['BELUM DITENTUKAN','LANJUT','PERBAIKI','PERPANJANG','REPLIKASI','HENTIKAN'];
+                if (!empty($summary['rekomendasi']) && !in_array($summary['rekomendasi'], $rekOpts, true)) {
+                    $rekOpts[] = $summary['rekomendasi'];
+                }
+                foreach ($rekOpts as $opt): ?>
+                <option value="<?= h($opt) ?>" <?= $summary['rekomendasi'] === $opt ? 'selected' : '' ?>><?= h($opt) ?></option>
                 <?php endforeach; ?>
             </select>
         </div>

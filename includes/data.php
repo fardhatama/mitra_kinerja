@@ -22,6 +22,25 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
     $stmt->execute([$mitra['id']]);
     $indikatorRows = $stmt->fetchAll();
 
+    // Self-healing: jika naskah belum memiliki 7 indikator standar V2.1, inisialisasi otomatis
+    if (empty($indikatorRows)) {
+        $defs = [
+            ['I1', 'Relevansi Ruang Lingkup', 10],
+            ['I2', 'Realisasi Program Kerja Tahunan', 15],
+            ['I3', 'Kemanfaatan bagi Penerima Layanan', 15],
+            ['I4', 'Dampak terhadap Pelaksanaan Kebijakan & Layanan Kanwil', 20],
+            ['I5', 'Keberlanjutan & Kelembagaan Kerja Sama', 20],
+            ['I6', 'Kepatuhan Tata Kelola & Pelaporan Berkala', 10],
+            ['I7', 'Kontribusi terhadap Pembangunan Zona Integritas', 10],
+        ];
+        $stmtIns = $pdo->prepare('INSERT INTO indikator_skor (mitra_id, kode_indikator, deskripsi, bobot, referensi_baseline, status_pemeriksaan) VALUES (?, ?, ?, ?, \'Baseline awal\', \'BELUM DITELAAH\') ON DUPLICATE KEY UPDATE id=id');
+        foreach ($defs as $d) {
+            $stmtIns->execute([$mitra['id'], $d[0], $d[1], $d[2]]);
+        }
+        $stmt->execute([$mitra['id']]);
+        $indikatorRows = $stmt->fetchAll();
+    }
+
     $stmt = $pdo->prepare('SELECT * FROM early_warning WHERE mitra_id = ? ORDER BY dimensi');
     $stmt->execute([$mitra['id']]);
     $warningRows = $stmt->fetchAll();

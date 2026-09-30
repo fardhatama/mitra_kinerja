@@ -147,14 +147,14 @@ function ringkasanIndikator(array $indikatorRows): array {
         $st = $row['status_pemeriksaan'] ?? 'BELUM DITELAAH';
         if (in_array($st, ['DAPAT DINILAI', 'BUKTI CUKUP', 'BUKTI MEMADAI'], true)) {
             $dapatDinilaiCount++;
-            $bobotDinilai += (int)($row['bobot'] ?? BOBOT_INDIKATOR[$row['kode_indikator']] ?? 0);
+            $bobotDinilai += (int)($row['bobot'] ?? BOBOT_INDIKATOR[$row['kode_indikator'] ?? ''] ?? 0);
         } elseif ($st === 'BELUM DAPAT DINILAI') {
             $bdnCount++;
         } elseif (in_array($st, ['BUKTI BELUM CUKUP', 'BUKTI BELUM MEMADAI'], true)) {
             $buktiKurangCount++;
         }
 
-        if ($row['skor'] !== null) {
+        if (($row['skor'] ?? null) !== null) {
             $skorTerisi++;
             $nilaiBerjalan += (float)($row['nilai'] ?? 0);
         }
@@ -191,7 +191,7 @@ function ringkasanIndikator(array $indikatorRows): array {
 function hitungPosisiPortofolio(array $indikatorRows): string {
     $scores = [];
     foreach ($indikatorRows as $r) {
-        $scores[$r['kode_indikator']] = $r['skor'];
+        if (isset($r['kode_indikator'])) { $scores[$r['kode_indikator']] = $r['skor'] ?? null; }
     }
 
     if (($scores['I5'] ?? null) !== null && $scores['I5'] >= 3) {

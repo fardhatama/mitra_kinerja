@@ -104,7 +104,7 @@ const GATE0_TRIGGERS = [
 ];
 
 /* ── 1. TAMBAH USULAN PRA-PKS ────────────────────────────── */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'create') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'create') {
     if (!$canEdit) {
         $errors[] = 'Anda tidak memiliki hak akses untuk menambah usulan.';
     } else {
@@ -118,8 +118,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         $tujuanSingkat  = trim($_POST['tujuan_singkat'] ?? '');
         $ruangLingkup   = trim($_POST['ruang_lingkup'] ?? '');
         $penerimaManfaat = trim($_POST['penerima_manfaat'] ?? '');
-        $mulai          = $_POST['perkiraan_mulai'] ?: null;
-        $selesai        = $_POST['perkiraan_selesai'] ?: null;
+        $mulai          = ($_POST['perkiraan_mulai'] ?? '') ?: null;
+        $selesai        = ($_POST['perkiraan_selesai'] ?? '') ?: null;
 
         // Ambil 18 pertanyaan uji & bukti
         $pertanyaanUji = [];
@@ -172,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         $catatanVerif   = trim($_POST['catatan_verifikasi'] ?? '');
         $gapPenutupan   = trim($_POST['gap_penyempurnaan'] ?? '');
         $unitReviu      = trim($_POST['unit_review_tambahan'] ?? '');
-        $batasWaktu     = $_POST['batas_waktu_penyempurnaan'] ?: null;
+        $batasWaktu     = ($_POST['batas_waktu_penyempurnaan'] ?? '') ?: null;
 
         if ($nomorUsulan === '' || $calonMitra === '' || $judulRencana === '') {
             $errors[] = 'Nomor Usulan, Calon Mitra, dan Judul Rencana wajib diisi.';
@@ -204,7 +204,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
 }
 
 /* ── 2. KEPUTUSAN PIMPINAN ────────────────────────────────── */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'decision') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'decision') {
     if (!$canDecide) {
         $errors[] = 'Hanya pimpinan atau admin yang berhak memberikan keputusan Gate 0.';
     } else {
@@ -223,7 +223,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'decis
 }
 
 /* ── 3. PROMOSI OTOMATIS KE PKS AKTIF ────────────────────── */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'promote') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'promote') {
     if (!$canEdit) {
         $errors[] = 'Akses ditolak.';
     } else {
@@ -358,7 +358,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'promo
                 $pdo->commit();
                 $success = 'Usulan ' . htmlspecialchars($pra['nomor_usulan']) . ' berhasil dipromosikan menjadi PKS baru dengan kode ' . $newKode . '!';
             } catch (Throwable $e) {
-                $pdo->rollBack();
+                if ($pdo->inTransaction()) $pdo->rollBack();
                 $errors[] = 'Gagal mempromosikan usulan: ' . $e->getMessage();
             }
         }
@@ -451,7 +451,7 @@ function parseGate0Upload(string $tmpPath, string $origName): array {
 }
 
 /* ── 5. IMPORT EXCEL (.xlsx) & CSV ────────────────────────── */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'import_csv') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'import_csv') {
     if (!$canEdit) {
         $errors[] = 'Akses ditolak.';
     } elseif (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
@@ -557,7 +557,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                 $noUsulan = $getV(['Nomor Usulan', 'no_usulan'], 'PRA-DN-' . rand(100, 999));
                 $tipe     = in_array($getV(['Tipe Kerja Sama', 'tipe_kerjasama']), ['Dalam Negeri', 'Luar Negeri']) ? $getV(['Tipe Kerja Sama', 'tipe_kerjasama']) : 'Dalam Negeri';
                 $jenis    = in_array($getV(['Jenis Naskah', 'jenis_naskah']), ['MoU', 'PKS', 'Lainnya']) ? $getV(['Jenis Naskah', 'jenis_naskah']) : 'PKS';
-                $unit     = $getV(['Unit Pemrakarsa', 'unit_pemrakarsa'], 'Divisi Pelayanan Hukum dan HAM');
+                $unit     = $getV(['Unit Pemrakarsa', 'unit_pemrakarsa'], 'Divisi Pelayanan Hukum');
                 $pj       = $getV(['Penanggung Jawab Usulan', 'penanggung_jawab_usulan'], 'Kabid Pelayanan Hukum');
                 $mitra    = $getV(['Calon Mitra', 'calon_mitra'], 'Mitra Kerja Sama');
                 $judul    = $getV(['Judul Rencana Kerja Sama', 'judul_rencana'], 'Kerja Sama Pelayanan Hukum');
@@ -1145,7 +1145,7 @@ require __DIR__ . '/includes/header.php';
                             <a href="gate0.php?view=print&id=<?= $u['id'] ?>" target="_blank" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 7px;">🖨️ PDF</a>
                             
                             <?php if ($canDecide && $u['status_persetujuan'] === 'Menunggu Persetujuan Pimpinan'): ?>
-                            <button onclick="openDecisionModal(<?= $u['id'] ?>, '<?= addslashes(h($u['nomor_usulan'])) ?>', '<?= addslashes(h($u['calon_mitra'])) ?>')" class="btn btn-warning btn-sm" style="font-size:11px;padding:3px 7px;">⚖️ Putusan</button>
+                            <button onclick="openDecisionModal(<?= (int)$u['id'] ?>, <?= htmlspecialchars(json_encode((string)$u['nomor_usulan']), ENT_QUOTES, 'UTF-8') ?>, <?= htmlspecialchars(json_encode((string)$u['calon_mitra']), ENT_QUOTES, 'UTF-8') ?>)" class="btn btn-warning btn-sm" style="font-size:11px;padding:3px 7px;">⚖️ Putusan</button>
                             <?php endif; ?>
 
                             <?php if ($u['status_persetujuan'] === 'Disetujui Pimpinan'): ?>
