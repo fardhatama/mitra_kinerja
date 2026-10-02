@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.1] - 2026-10-02
+
+### Fixed
+- **Rekonsiliasi Paritas Data 1:1 Database vs Dokumen Referensi Audit:**
+  - **Sinkronisasi Scorecard P03 (Pemkot Tanjungpinang):** Menyelaraskan kembali indikator $I_1$–$I_7$ dan total skor ke 57.50 (`SIAP DIVALIDASI`) serta narasi telaah bukti sesuai buku kerja resmi 27 September 2026.
+  - **Pemulihan 12 Elemen Baseline P01 (Dekranasda Kepri):** Mengisi dan mengunci data baseline awal dari lembar audit resmi 28 Agustus 2026 (`FINAL_BASELINE_MITRA_KINERJA_AUDIT_FINAL_28_AGUSTUS_2026.xlsx`) dengan link P2MA dan catatan audit.
+  - **Koreksi Tanggal Perjanjian P12 (Polibatam Sentra KI):** Memperbaiki nilai tanggal mulai dan berakhir dari `0000-00-00` menjadi `2026-09-01` s.d. `2029-08-31` sesuai usulan Gate 0 `PRA-TEST-999`.
+  - **Pembaruan Klasifikasi Bidang Substantif & Naskah Induk:** Menetapkan bidang substantif Kekayaan Intelektual (`KI`) untuk P01, P04, dan P12, serta Pelayanan Hukum (`P3H`) untuk P02 dan P11, sekaligus menautkan `pks_induk_id` P11 ke P06 (UMRAH) dan P12 ke P08 (Polibatam).
+  - **Re-ekspor Database Dump Bersih:** Memperbarui `database/mitra_kinerja_dump.sql` dengan dataset rekonsiliasi final 100% konsisten.
+
 ## [2.3.9] - 2026-10-01
 
 ### Fixed
