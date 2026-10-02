@@ -168,14 +168,20 @@ function ringkasanIndikator(array $indikatorRows): array {
     $skorLengkap = ($cekOkCount === $n);
     $cekLengkapOk = ($cekOkCount === $n);
 
-    if ($kelengkapan < 100) {
-        $kategori = 'BELUM LENGKAP';
+    // V3: Nilai Final HANYA dihitung jika seluruh 7 indikator berstatus DAPAT DINILAI.
+    // Jika belum lengkap, nilai = null (tampil strip '-').
+    $allEvaluable = ($dapatDinilaiCount === $n);
+    $nilaiFinal = $allEvaluable ? round($nilaiBerjalan, 2) : null;
+
+    if (!$allEvaluable) {
+        $kategori = 'DALAM PROSES';
     } else {
         $kategori = kategoriDariNilai($nilaiBerjalan);
     }
 
     return [
         'nilai_berjalan'    => round($nilaiBerjalan, 2),
+        'nilai_final'       => $nilaiFinal,
         'bobot_dinilai'     => $bobotDinilai,
         'kelengkapan'       => $kelengkapan,
         'skor_lengkap'      => $skorLengkap,
@@ -184,6 +190,7 @@ function ringkasanIndikator(array $indikatorRows): array {
         'dapat_dinilai_n'   => $dapatDinilaiCount,
         'bdn_n'             => $bdnCount,
         'bukti_kurang_n'    => $buktiKurangCount,
+        'all_evaluable'     => $allEvaluable,
     ];
 }
 
@@ -229,25 +236,24 @@ function hitungRekomendasi(float $nilai, string $warningStatus, string $posisiPo
     return 'PERBAIKI';
 }
 
-/** Kategori nilai: 75-100 PRODUKTIF, 50-<75 BERJALAN, 25-<50 PERLU AKTIVASI, <25 KRITIS. */
+/** Kategori Kinerja V3: KUAT ≥80, CUKUP/PERLU PENGUATAN 60-79, PERLU PERBAIKAN 40-59, KRITIS <40. */
 function kategoriDariNilai(float $nilai): string {
-    if ($nilai >= 75) return 'PRODUKTIF';
-    if ($nilai >= 50) return 'BERJALAN';
-    if ($nilai >= 25) return 'PERLU AKTIVASI';
+    if ($nilai >= 80) return 'KUAT';
+    if ($nilai >= 60) return 'CUKUP/PERLU PENGUATAN';
+    if ($nilai >= 40) return 'PERLU PERBAIKAN';
     return 'KRITIS';
 }
 
 /**
- * Status Scorecard. Persis rumus H21.
- *   - skor belum 7/7 terisi            -> BELUM LENGKAP
- *   - skor 7/7 tapi Cek belum semua OK -> PERLU DILENGKAPI
- *   - Cek 7/7 OK, validasi DISETUJUI   -> FINAL/TERVALIDASI
- *   - Cek 7/7 OK, validasi PERLU PERBAIKAN -> PERLU PERBAIKAN
- *   - Cek 7/7 OK, validasi lainnya     -> SIAP DIVALIDASI
+ * Status Scorecard V3. Hierarki prioritas:
+ *   BUKTI BELUM MEMADAI > SIAP DIVALIDASI > MASA IMPLEMENTASI AWAL > BELUM DINILAI > DALAM PENILAIAN.
  */
-function hitungStatusScorecard(bool $skorLengkap, bool $cekLengkapOk, string $statusValidasi): string {
-    if (!$skorLengkap) return 'BELUM LENGKAP';
-    if (!$cekLengkapOk) return 'PERLU DILENGKAPI';
+function hitungStatusScorecard(bool $skorLengkap, bool $cekLengkapOk, string $statusValidasi, int $buktiKurangN = 0, int $bdnN = 0, int $dapatDinilaiN = 0): string {
+    // V3: if any indicator has BUKTI BELUM MEMADAI, that status takes priority
+    if ($buktiKurangN > 0) return 'BUKTI BELUM MEMADAI';
+    if (!$skorLengkap && $dapatDinilaiN === 0 && $bdnN === 0) return 'BELUM DINILAI';
+    if (!$skorLengkap) return 'DALAM PENILAIAN';
+    if (!$cekLengkapOk) return 'DALAM PENILAIAN';
     if ($statusValidasi === 'DISETUJUI') return 'FINAL/TERVALIDASI';
     if ($statusValidasi === 'PERLU PERBAIKAN') return 'PERLU PERBAIKAN';
     return 'SIAP DIVALIDASI';
@@ -503,14 +509,18 @@ function cekUsulanIntervensi(array $pemicuRows, string $hasilUji, ?string $upaya
     return 'TIDAK PERLU USULAN PIMPINAN';
 }
 
-/** Warna badge untuk kategori nilai, dipakai di dashboard/list. */
+/** Warna badge untuk kategori kinerja V3, dipakai di dashboard/list. */
 function warnaKategori(string $kategori): string {
     return match ($kategori) {
+        'KUAT' => 'success',
+        'CUKUP/PERLU PENGUATAN' => 'primary',
+        'PERLU PERBAIKAN' => 'warning',
+        'KRITIS' => 'danger',
+        'BELUM FINAL', 'DALAM PROSES' => 'orange',
+        // Legacy fallback
         'PRODUKTIF' => 'success',
         'BERJALAN' => 'primary',
         'PERLU AKTIVASI' => 'warning',
-        'KRITIS' => 'danger',
-        'BELUM FINAL' => 'orange',
         default => 'secondary',
     };
 }
@@ -598,8 +608,8 @@ const ASPEK_LABELS = [
 /** Map kategori scorecard ke status efektivitas untuk dashboard. */
 function statusEfektivitas(string $kategori): string {
     return match ($kategori) {
-        'PRODUKTIF', 'BERJALAN' => 'Efektif',
-        'PERLU AKTIVASI', 'BELUM LENGKAP', 'BELUM FINAL' => 'Perlu Perhatian',
+        'KUAT', 'CUKUP/PERLU PENGUATAN', 'PRODUKTIF', 'BERJALAN' => 'Efektif',
+        'PERLU PERBAIKAN', 'DALAM PROSES', 'BELUM LENGKAP', 'BELUM FINAL', 'PERLU AKTIVASI' => 'Perlu Perhatian',
         'KRITIS' => 'Berisiko',
         default => 'Perlu Perhatian',
     };

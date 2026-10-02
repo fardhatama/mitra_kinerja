@@ -1,12 +1,13 @@
 <?php
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/data.php';
+require_once __DIR__ . '/includes/functions.php';
 requireLogin();
 
 $pdo = getDB();
 $user = currentUser();
 $role = $user['role'];
-$canEdit = in_array($role, ['admin', 'pemeriksa'], true);
+$canEdit = in_array($role, ['admin', 'pemeriksa', 'pengampu'], true);
 $isAdmin = ($role === 'admin');
 
 $id = (int)($_GET['id'] ?? 0);
@@ -18,24 +19,259 @@ $success = '';
 /* ── DEFINISI 12 ELEMEN BASELINE FIX (DEFINED IN INCLUDES/FUNCTIONS.PHP) ─────── */
 $b12Defs = BASELINE_12_DEFS;
 
-/* ── POST HANDLERS UNTUK DETAIL NASKAH ───────────────────── */
-if ($id > 0 && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+/* ── POST HANDLERS ───────────────────────────────────────── */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $action = $_POST['action'] ?? '';
+    $targetId = (int)($_POST['mitra_id'] ?? $id);
 
-    // Ambil data mitra saat ini
-    $stmt = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
-    $stmt->execute([$id]);
-    $mitra = $stmt->fetch();
-
-    if (!$mitra) {
-        header('Location: baseline.php');
-        exit;
+    // Ambil data mitra terkait
+    $targetMitra = null;
+    $isTargetLocked = false;
+    if ($targetId > 0) {
+        $stmt = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
+        $stmt->execute([$targetId]);
+        $targetMitra = $stmt->fetch();
+        if ($targetMitra) {
+            $isTargetLocked = ($targetMitra['baseline_status'] === 'TERVERIFIKASI / DIKUNCI');
+        }
     }
 
-    $isLocked = ($mitra['baseline_status'] === 'TERVERIFIKASI / DIKUNCI');
+    // 0. Import Data Baseline (12 Elemen) dari Berkas Spreadsheet (.xlsx)
+    if ($action === 'import_baseline') {
+        if (!$targetMitra) {
+            $errors[] = 'Data mitra tidak ditemukan.';
+        } elseif (!$canEdit) {
+            $errors[] = 'Akses ditolak: Anda tidak memiliki hak akses untuk mengimpor baseline.';
+        } elseif ($isTargetLocked && !$isAdmin) {
+            $errors[] = 'Baseline FIX untuk mitra ' . $targetMitra['kode'] . ' telah dikunci. Buka kunci terlebih dahulu untuk mengimpor ulang data.';
+        } elseif (!isset($_FILES['excel_file']) || $_FILES['excel_file']['error'] !== UPLOAD_ERR_OK) {
+            $errors[] = 'Pilih berkas spreadsheet Excel (.xlsx) yang valid.';
+        } else {
+            $fileInfo = $_FILES['excel_file'];
+            $ext = strtolower(pathinfo($fileInfo['name'], PATHINFO_EXTENSION));
 
-    // 1. Simpan Perubahan Elemen Baseline
-    if ($action === 'save_baseline') {
+            if ($ext !== 'xlsx') {
+                $errors[] = 'Format berkas tidak didukung. Harap unggah file spreadsheet Excel dengan ekstensi .xlsx.';
+            } elseif ($fileInfo['size'] > 25 * 1024 * 1024) {
+                $errors[] = 'Ukuran berkas melebihi batas maksimum 25 MB.';
+            } else {
+                try {
+                    $parsedWb = parseFullWorkbookXlsx($fileInfo['tmp_name']);
+                } catch (Throwable $e) {
+                    error_log('parseFullWorkbookXlsx error: ' . $e->getMessage());
+                    $parsedWb = [];
+                }
+
+                if (empty($parsedWb)) {
+                    $errors[] = 'Gagal membaca isi berkas Excel. Pastikan berkas tidak terkunci password atau rusak.';
+                } else {
+                    $targetCode = strtoupper(trim($targetMitra['kode']));
+                    $baseSheetName = '';
+
+                    // 1. Deteksi Sheet Baseline
+                    // a. Cocokkan dengan kode naskah (misal: P01_DEKRANASDA, P02, dll)
+                    foreach (array_keys($parsedWb) as $sName) {
+                        $upper = strtoupper($sName);
+                        if (str_contains($upper, 'REKAP') || str_contains($upper, 'PANDUAN') || str_contains($upper, 'ANOMALI') || str_contains($upper, 'SINKRONISASI')) continue;
+                        if (str_contains($upper, $targetCode)) {
+                            $baseSheetName = $sName;
+                            break;
+                        }
+                    }
+                    // b. Cari sheet yang bernama BASELINE / SUMBER_BASELINE / BASELINE_12_ELEMEN
+                    if (!$baseSheetName) {
+                        foreach (array_keys($parsedWb) as $sName) {
+                            $upper = strtoupper($sName);
+                            if (str_contains($upper, 'REKAP') || str_contains($upper, 'PANDUAN')) continue;
+                            if (str_contains($upper, 'BASELINE') || str_contains($upper, 'SUMBER_BASELINE')) {
+                                $baseSheetName = $sName;
+                                break;
+                            }
+                        }
+                    }
+                    // c. Jika file hanya memiliki 1 sheet
+                    if (!$baseSheetName && count($parsedWb) === 1) {
+                        $baseSheetName = array_key_first($parsedWb);
+                    }
+                    // d. Fallback: cari sheet yang memiliki angka 1..12 di kolom 1
+                    if (!$baseSheetName) {
+                        foreach ($parsedWb as $shName => $shRows) {
+                            $upper = strtoupper($shName);
+                            if (str_contains($upper, 'REKAP') || str_contains($upper, 'PANDUAN')) continue;
+                            for ($sr = 1; $sr <= 25; $sr++) {
+                                if (isset($shRows[$sr][1]) && ((string)$shRows[$sr][1] === '1' || $shRows[$sr][1] === 1)) {
+                                    $baseSheetName = $shName;
+                                    break 2;
+                                }
+                            }
+                        }
+                    }
+
+                    if (!$baseSheetName || empty($parsedWb[$baseSheetName])) {
+                        $errors[] = 'Sheet baseline 12 elemen tidak ditemukan di dalam berkas Excel.';
+                    } else {
+                        $baseRows = $parsedWb[$baseSheetName];
+
+                        // Baca metadata pemeriksa & cut-off jika ada
+                        $pemeriksaVal = trim((string)($baseRows[5][8] ?? $baseRows[5][7] ?? $baseRows[5][3] ?? ''));
+                        $cutoffVal = trim((string)($baseRows[8][8] ?? $baseRows[8][7] ?? $baseRows[8][2] ?? ''));
+                        if (!empty($cutoffVal) && preg_match('/(\d{4}-\d{2}-\d{2})/', $cutoffVal, $mCut)) {
+                            $cutoffDate = $mCut[1];
+                        } elseif (is_numeric($cutoffVal) && (int)$cutoffVal > 30000) {
+                            $cutoffDate = gmdate('Y-m-d', ((int)$cutoffVal - 25569) * 86400);
+                        } else {
+                            $cutoffDate = null;
+                        }
+
+                        $updatedBaseline = 0;
+                        $fileNaskahExtracted = null;
+
+                        $pdo->beginTransaction();
+                        try {
+                            for ($r = 4; $r <= 35; $r++) {
+                                if (!isset($baseRows[$r])) continue;
+                                $row = $baseRows[$r];
+                                $col1 = trim((string)($row[1] ?? ''));
+                                if (!is_numeric($col1)) continue;
+                                $elNum = (int)$col1;
+                                if ($elNum < 1 || $elNum > 12) continue;
+
+                                $rawStatus = strtoupper(trim((string)($row[6] ?? 'BELUM DIISI')));
+                                $fakta = trim((string)($row[7] ?? ''));
+                                $linkBukti = trim((string)($row[8] ?? ''));
+                                $catatan = trim((string)($row[9] ?? ''));
+
+                                // Normalisasi status secara cerdas
+                                $finalStatus = 'BELUM DIISI';
+                                if (str_contains($rawStatus, 'BELUM TERVERIFIKASI')) {
+                                    $finalStatus = 'BELUM TERVERIFIKASI';
+                                } elseif (str_contains($rawStatus, 'BELUM TERSEDIA') || str_contains($rawStatus, 'TIDAK TERSEDIA') || str_contains($rawStatus, 'TIDAK ADA')) {
+                                    $finalStatus = 'BELUM TERSEDIA';
+                                } elseif (str_contains($rawStatus, 'TIDAK RELEVAN') || str_contains($rawStatus, 'BUKAN')) {
+                                    $finalStatus = 'TIDAK RELEVAN';
+                                } elseif (str_contains($rawStatus, 'TERVERIFIKASI') || str_contains($rawStatus, 'SESUAI') || str_contains($rawStatus, 'VERIFIED') || str_contains($rawStatus, 'ADA') || str_contains($rawStatus, 'SUDAH')) {
+                                    $finalStatus = 'TERVERIFIKASI';
+                                } elseif (!empty($linkBukti) || !empty($fakta)) {
+                                    $finalStatus = !empty($linkBukti) ? 'TERVERIFIKASI' : 'BELUM TERVERIFIKASI';
+                                }
+
+                                $def = BASELINE_12_DEFS[$elNum];
+                                $stmtE = $pdo->prepare('INSERT INTO baseline_elemen (
+                                    mitra_id, nomor_elemen, kelompok, nama_elemen, yang_diperiksa, sumber_bukti_minimum,
+                                    status, fakta_pemeriksaan, link_sumber_bukti, catatan
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                ON DUPLICATE KEY UPDATE
+                                    status = VALUES(status),
+                                    fakta_pemeriksaan = VALUES(fakta_pemeriksaan),
+                                    link_sumber_bukti = VALUES(link_sumber_bukti),
+                                    catatan = VALUES(catatan)');
+                                $stmtE->execute([
+                                    $targetId, $elNum,
+                                    $def['kelompok'], $def['nama'], $def['yang_diperiksa'], $def['sumber_minimum'],
+                                    $finalStatus, $fakta, $linkBukti, $catatan
+                                ]);
+                                $updatedBaseline++;
+
+                                // Elemen 1 PDF / naskah
+                                if ($elNum === 1 && !empty($linkBukti)) {
+                                    if (preg_match('/^https?:\/\/[^\s]+/i', $linkBukti, $mUrl)) {
+                                        $fileNaskahExtracted = $mUrl[0];
+                                    } elseif (str_starts_with($linkBukti, 'public/uploads/')) {
+                                        $fileNaskahExtracted = $linkBukti;
+                                    }
+                                }
+                            }
+
+                            // Cek kelengkapan pengisian untuk status baseline
+                            $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM baseline_elemen WHERE mitra_id = ? AND status != 'BELUM DIISI'");
+                            $stmtCount->execute([$targetId]);
+                            $filledCount = (int)$stmtCount->fetchColumn();
+
+                            // Update ringkasan status baseline pada mitra_kinerja
+                            $updateSqlParts = [];
+                            $updateParams = [];
+
+                            if ($filledCount >= 12) {
+                                $updateSqlParts[] = "baseline_status = 'TERVERIFIKASI / DIKUNCI'";
+                                $updateSqlParts[] = "baseline_locked_at = NOW()";
+                                $updateSqlParts[] = "baseline_locked_by = ?";
+                                $updateParams[] = $user['id'];
+                            } else {
+                                $updateSqlParts[] = "baseline_status = 'DALAM PROSES'";
+                            }
+
+                            if (!empty($pemeriksaVal) && !str_starts_with($pemeriksaVal, '[')) {
+                                $updateSqlParts[] = "baseline_pemeriksa = ?";
+                                $updateParams[] = $pemeriksaVal;
+                            }
+                            if (!empty($cutoffDate)) {
+                                $updateSqlParts[] = "cutoff_date = ?";
+                                $updateParams[] = $cutoffDate;
+                            }
+                            if (!empty($fileNaskahExtracted)) {
+                                $updateSqlParts[] = "file_naskah = ?";
+                                $updateParams[] = $fileNaskahExtracted;
+                            }
+
+                            if (!empty($updateSqlParts)) {
+                                $updateParams[] = $targetId;
+                                $pdo->prepare('UPDATE mitra_kinerja SET ' . implode(', ', $updateSqlParts) . ' WHERE id = ?')->execute($updateParams);
+                            }
+
+                            // Deteksi PIC sheet jika ada
+                            foreach (array_keys($parsedWb) as $sName) {
+                                $upper = strtoupper($sName);
+                                if (str_contains($upper, 'IDENTITAS') || str_contains($upper, 'PIC')) {
+                                    $picRows = $parsedWb[$sName];
+                                    $picInternalFound = '';
+                                    $picMitraFound = '';
+                                    foreach ($picRows as $pRow) {
+                                        $label = strtolower(trim($pRow[1] ?? ''));
+                                        $val = trim($pRow[2] ?? '');
+                                        if (str_contains($label, 'pic mitra') || (str_contains($label, 'nama') && str_contains($label, 'mitra'))) {
+                                            if (!empty($val)) $picMitraFound = $val;
+                                        } elseif (str_contains($label, 'pic internal') || str_contains($label, 'pengampu')) {
+                                            if (!empty($val)) $picInternalFound = $val;
+                                        }
+                                    }
+                                    if ($picInternalFound || $picMitraFound) {
+                                        $uSql = 'UPDATE mitra_kinerja SET ';
+                                        $uParams = [];
+                                        if ($picInternalFound) { $uSql .= 'pic_internal = ?, '; $uParams[] = $picInternalFound; }
+                                        if ($picMitraFound) { $uSql .= 'pic_mitra = ?, '; $uParams[] = $picMitraFound; }
+                                        $uSql = rtrim($uSql, ', ') . ' WHERE id = ?';
+                                        $uParams[] = $targetId;
+                                        $pdo->prepare($uSql)->execute($uParams);
+                                    }
+                                    break;
+                                }
+                            }
+
+                            $pdo->commit();
+                            logAudit($targetId, $user['id'], 'IMPORT_BASELINE', "Import 12 elemen Baseline FIX mitra {$targetMitra['kode']} dari Excel ({$fileInfo['name']})");
+                            $success = "Data Baseline FIX untuk mitra {$targetMitra['kode']} berhasil diimpor ({$updatedBaseline} elemen diperbarui).";
+                        } catch (Throwable $e) {
+                            if ($pdo->inTransaction()) $pdo->rollBack();
+                            $errors[] = 'Gagal menyimpan hasil import: ' . $e->getMessage();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Detail Handlers untuk ID tertentu
+    elseif ($id > 0) {
+        $mitra = $targetMitra;
+        $isLocked = $isTargetLocked;
+
+        if (!$mitra) {
+            header('Location: baseline.php');
+            exit;
+        }
+
+        // 1. Simpan Perubahan Elemen Baseline
+        if ($action === 'save_baseline') {
         if (!$canEdit) {
             $errors[] = 'Akses ditolak: Hanya admin dan pemeriksa yang dapat mengubah baseline.';
         } elseif ($isLocked) {
@@ -261,6 +497,7 @@ if ($id > 0 && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
     }
 }
+}
 
 /* ── VIEW ROUTER ─────────────────────────────────────────── */
 
@@ -445,8 +682,16 @@ if ($id > 0) {
             <h1 style="margin:0;font-size:20px;"><?= h($mitra['kode']) ?> — Baseline FIX (Kondisi Awal)</h1>
             <div class="muted" style="font-size:13px;"><?= h($mitra['nama_mitra']) ?> &bull; <?= h($mitra['judul']) ?></div>
         </div>
-        <div style="display:flex;gap:8px;">
+        <div style="display:flex;gap:8px;align-items:center;">
             <a href="baseline.php" class="btn btn-outline btn-sm">&larr; Daftar Baseline</a>
+            <a href="public/templates/template_baseline_12_elemen.xlsx" download="Template_Baseline_<?= h($mitra['kode']) ?>.xlsx" class="btn btn-outline btn-sm" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;color:#4338ca;border-color:#c7d2fe;background:#eef2ff;" title="Unduh Formulir Template Baseline (.xlsx)">
+                <span>📥</span> Unduh Template (.xlsx)
+            </a>
+            <?php if ($canEdit && (!$isLocked || $isAdmin)): ?>
+            <button type="button" onclick="openImportModal(<?= $id ?>, <?= htmlspecialchars(json_encode((string)$mitra['kode']), ENT_QUOTES, 'UTF-8') ?>, <?= htmlspecialchars(json_encode((string)$mitra['nama_mitra']), ENT_QUOTES, 'UTF-8') ?>)" class="btn btn-sm" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;background:#4f46e5;color:#fff;border:none;border-radius:4px;cursor:pointer;" title="Import Data Baseline">
+                <span>📤</span> Import Baseline (.xlsx)
+            </button>
+            <?php endif; ?>
             <a href="mitra_edit.php?id=<?= $id ?>" class="btn btn-outline btn-sm">Buka Scorecard &rarr;</a>
             <a href="baseline.php?view=print&id=<?= $id ?>" target="_blank" class="btn btn-primary btn-sm">🖨️ Cetak / PDF</a>
         </div>
@@ -836,6 +1081,56 @@ if ($id > 0) {
         </div>
     </div>
 
+    <!-- Modal Import Baseline (.xlsx) Detail View -->
+    <div id="modalImportBaseline" class="modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.6);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;padding:20px;">
+        <div style="background:#ffffff;border-radius:12px;max-width:540px;width:100%;box-shadow:0 20px 25px -5px rgba(0,0,0,0.2), 0 10px 10px -5px rgba(0,0,0,0.1);overflow:hidden;margin:auto;">
+            <div style="padding:16px 20px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;background:#f8fafc;">
+                <div style="font-size:16px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:8px;">
+                    <span>📋</span> Import Data Baseline FIX (12 Elemen)
+                </div>
+                <button type="button" onclick="closeImportModal()" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer;line-height:1;">&times;</button>
+            </div>
+
+            <form method="post" enctype="multipart/form-data">
+                <input type="hidden" name="action" value="import_baseline">
+                <input type="hidden" name="mitra_id" id="modalImportMitraId" value="<?= $id ?>">
+
+                <div style="padding:20px;">
+                    <div style="margin-bottom:16px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;">
+                        <div style="font-size:11px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;">Target Naskah Kerja Sama:</div>
+                        <div id="modalImportMitraKodeNama" style="font-size:14px;font-weight:700;color:#1e3a8a;margin-top:2px;">[<?= h($mitra['kode']) ?>] <?= h($mitra['nama_mitra']) ?></div>
+                    </div>
+
+                    <div style="margin-bottom:18px;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#334155;margin-bottom:6px;">
+                            Pilih Berkas Spreadsheet Excel (.xlsx) <span style="color:#ef4444;">*</span>
+                        </label>
+                        <input type="file" name="excel_file" accept=".xlsx" required style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;background:#f8fafc;">
+                        <div style="font-size:11.5px;color:#64748b;margin-top:4px;">
+                            Format didukung: <strong>.xlsx</strong> (Maks. 25 MB). Gunakan template resmi <code>template_baseline_12_elemen.xlsx</code>.
+                        </div>
+                    </div>
+
+                    <div style="font-size:12.5px;color:#475569;background:#f1f5f9;padding:12px 14px;border-radius:6px;line-height:1.5;">
+                        <div style="font-weight:600;margin-bottom:4px;color:#1e293b;">Data yang akan otomatis diperbarui:</div>
+                        &bull; <strong>12 Elemen Baseline:</strong> Status pemeriksaan, fakta audit, dan tautan bukti.<br>
+                        &bull; <strong>Kontrol Naskah:</strong> Tanggal cut-off dan nama pemeriksa jika terisi di file.<br>
+                        &bull; <strong>Tautan Naskah Resmi:</strong> Tautan naskah P2MA resmi pada Elemen 1 otomatis terhubung.
+                    </div>
+                </div>
+
+                <div style="padding:14px 20px;border-top:1px solid #e2e8f0;background:#f8fafc;display:flex;justify-content:flex-end;gap:10px;">
+                    <button type="button" onclick="closeImportModal()" class="btn btn-outline" style="font-size:12.5px;padding:7px 14px;">
+                        Batal
+                    </button>
+                    <button type="submit" class="btn" style="background:#4f46e5;color:#ffffff;font-size:12.5px;padding:7px 18px;font-weight:600;border:none;border-radius:4px;cursor:pointer;">
+                        📥 Mulai Proses Import
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
     function openUploadModal(elemenNo, label) {
         document.getElementById('modalSingleElemen').value = elemenNo;
@@ -864,6 +1159,27 @@ if ($id > 0) {
         }
         document.getElementById('modalUpdatePic').style.display = 'block';
     }
+
+    function openImportModal(id, kode, nama) {
+        var idEl = document.getElementById('modalImportMitraId');
+        if (idEl) idEl.value = id;
+        var nameEl = document.getElementById('modalImportMitraKodeNama');
+        if (nameEl) nameEl.textContent = '[' + kode + '] ' + nama;
+        var modal = document.getElementById('modalImportBaseline');
+        if (modal) modal.style.display = 'flex';
+    }
+
+    function closeImportModal() {
+        var modal = document.getElementById('modalImportBaseline');
+        if (modal) modal.style.display = 'none';
+    }
+
+    window.addEventListener('click', function(e) {
+        var modal = document.getElementById('modalImportBaseline');
+        if (e.target === modal) {
+            closeImportModal();
+        }
+    });
     </script>
 
     <?php
@@ -905,6 +1221,9 @@ require __DIR__ . '/includes/header.php';
     <a href="dashboard.php" class="btn btn-outline btn-sm">&larr; Dashboard</a>
 </div>
 
+<?php if ($success): ?><div class="alert alert-info" style="margin-bottom:16px;"><?= h($success) ?></div><?php endif; ?>
+<?php foreach ($errors as $e): ?><div class="alert alert-warning" style="margin-bottom:16px;"><?= h($e) ?></div><?php endforeach; ?>
+
 <!-- KPI Cards -->
 <div class="kpi-grid" style="margin-bottom:20px;grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));">
     <div class="kpi-card">
@@ -935,7 +1254,7 @@ require __DIR__ . '/includes/header.php';
                 <th>Jenis</th>
                 <th>Masa Berlaku</th>
                 <th>Cut-off</th>
-                <th>Status Baseline</th>
+                <th style="min-width:210px;text-align:center;">📋 DATA BASELINE (12 ELEMEN)</th>
                 <th>Kelengkapan 12 Elemen</th>
                 <th>Aksi</th>
             </tr>
@@ -962,10 +1281,26 @@ require __DIR__ . '/includes/header.php';
                 <td><span class="badge badge-primary" style="font-size:10px;"><?= h($m['jenis']) ?></span></td>
                 <td><?= formatTanggal($m['tanggal_mulai']) ?> s.d.<br><?= formatTanggal($m['tanggal_berakhir']) ?></td>
                 <td><?= $m['cutoff_date'] ? formatTanggal($m['cutoff_date']) : '-' ?></td>
-                <td>
-                    <span class="badge badge-<?= $bBadge ?>" style="font-size:11px;">
-                        <?= $b['is_locked'] ? '🔒 Dikunci' : h($b['status']) ?>
-                    </span>
+                <td style="text-align:center;vertical-align:middle;">
+                    <div style="margin-bottom:6px;">
+                        <span class="badge badge-<?= $bBadge ?>" style="font-size:10.5px;">
+                            <?= $b['is_locked'] ? '🔒 Dikunci' : h($b['status']) ?>
+                        </span>
+                    </div>
+                    <div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;">
+                        <a href="public/templates/template_baseline_12_elemen.xlsx" download="Template_Baseline_<?= h($m['kode']) ?>.xlsx" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 8px;display:inline-flex;align-items:center;gap:3px;color:#4338ca;border-color:#c7d2fe;background:#eef2ff;" title="Unduh Formulir Template Baseline (.xlsx)">
+                            <span>📥</span> Unduh Template
+                        </a>
+                        <?php if ($canEdit && (!$b['is_locked'] || $isAdmin)): ?>
+                        <button type="button" class="btn btn-sm" onclick="openImportModal(<?= (int)$m['id'] ?>, <?= htmlspecialchars(json_encode((string)$m['kode']), ENT_QUOTES, 'UTF-8') ?>, <?= htmlspecialchars(json_encode((string)$m['nama_mitra']), ENT_QUOTES, 'UTF-8') ?>)" style="font-size:10.5px;padding:3px 8px;display:inline-flex;align-items:center;gap:3px;background:#4f46e5;color:#fff;border:none;border-radius:4px;cursor:pointer;" title="Import Data Baseline">
+                            <span>📤</span> Import
+                        </button>
+                        <?php else: ?>
+                        <button type="button" class="btn btn-sm" disabled style="font-size:10.5px;padding:3px 8px;color:#94a3b8;background:#f8fafc;border:1px solid #e2e8f0;cursor:not-allowed;" title="<?= $b['is_locked'] ? 'Baseline telah dikunci' : 'Akses terbatas' ?>">
+                            <span>🔒</span> Terkunci
+                        </button>
+                        <?php endif; ?>
+                    </div>
                 </td>
                 <td>
                     <div style="font-size:11.5px;font-weight:600;margin-bottom:2px;">
@@ -987,5 +1322,78 @@ require __DIR__ . '/includes/header.php';
     </table>
     </div>
 </div>
+
+<!-- Modal Import Baseline (.xlsx) Overview View -->
+<div id="modalImportBaseline" class="modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.6);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:#ffffff;border-radius:12px;max-width:540px;width:100%;box-shadow:0 20px 25px -5px rgba(0,0,0,0.2), 0 10px 10px -5px rgba(0,0,0,0.1);overflow:hidden;margin:auto;">
+        <div style="padding:16px 20px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;background:#f8fafc;">
+            <div style="font-size:16px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:8px;">
+                <span>📋</span> Import Data Baseline FIX (12 Elemen)
+            </div>
+            <button type="button" onclick="closeImportModal()" style="background:none;border:none;font-size:20px;color:#94a3b8;cursor:pointer;line-height:1;">&times;</button>
+        </div>
+
+        <form method="post" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="import_baseline">
+            <input type="hidden" name="mitra_id" id="modalImportMitraId" value="0">
+
+            <div style="padding:20px;">
+                <div style="margin-bottom:16px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;">
+                    <div style="font-size:11px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px;">Target Naskah Kerja Sama:</div>
+                    <div id="modalImportMitraKodeNama" style="font-size:14px;font-weight:700;color:#1e3a8a;margin-top:2px;">-</div>
+                </div>
+
+                <div style="margin-bottom:18px;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#334155;margin-bottom:6px;">
+                        Pilih Berkas Spreadsheet Excel (.xlsx) <span style="color:#ef4444;">*</span>
+                    </label>
+                    <input type="file" name="excel_file" accept=".xlsx" required style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;background:#f8fafc;">
+                    <div style="font-size:11.5px;color:#64748b;margin-top:4px;">
+                        Format didukung: <strong>.xlsx</strong> (Maks. 25 MB). Gunakan template resmi <code>template_baseline_12_elemen.xlsx</code>.
+                    </div>
+                </div>
+
+                <div style="font-size:12.5px;color:#475569;background:#f1f5f9;padding:12px 14px;border-radius:6px;line-height:1.5;">
+                    <div style="font-weight:600;margin-bottom:4px;color:#1e293b;">Data yang akan otomatis diperbarui:</div>
+                    &bull; <strong>12 Elemen Baseline:</strong> Status pemeriksaan, fakta audit, dan tautan bukti.<br>
+                    &bull; <strong>Kontrol Naskah:</strong> Tanggal cut-off dan nama pemeriksa jika terisi di file.<br>
+                    &bull; <strong>Tautan Naskah Resmi:</strong> Tautan naskah P2MA resmi pada Elemen 1 otomatis terhubung.
+                </div>
+            </div>
+
+            <div style="padding:14px 20px;border-top:1px solid #e2e8f0;background:#f8fafc;display:flex;justify-content:flex-end;gap:10px;">
+                <button type="button" onclick="closeImportModal()" class="btn btn-outline" style="font-size:12.5px;padding:7px 14px;">
+                    Batal
+                </button>
+                <button type="submit" class="btn" style="background:#4f46e5;color:#ffffff;font-size:12.5px;padding:7px 18px;font-weight:600;border:none;border-radius:4px;cursor:pointer;">
+                    📥 Mulai Proses Import
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openImportModal(id, kode, nama) {
+    var idEl = document.getElementById('modalImportMitraId');
+    if (idEl) idEl.value = id;
+    var nameEl = document.getElementById('modalImportMitraKodeNama');
+    if (nameEl) nameEl.textContent = '[' + kode + '] ' + nama;
+    var modal = document.getElementById('modalImportBaseline');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeImportModal() {
+    var modal = document.getElementById('modalImportBaseline');
+    if (modal) modal.style.display = 'none';
+}
+
+window.addEventListener('click', function(e) {
+    var modal = document.getElementById('modalImportBaseline');
+    if (e.target === modal) {
+        closeImportModal();
+    }
+});
+</script>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

@@ -459,30 +459,30 @@ require __DIR__ . '/includes/header.php';
         </div>
     </div>
 
-    <div class="table-responsive" style="overflow-x:auto;">
-        <table class="table" style="width:100%;margin:0;border-collapse:collapse;font-size:13px;">
+    <div class="table-wrap" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;">
+        <table class="table" style="width:100%;min-width:960px;margin:0;border-collapse:collapse;font-size:12.5px;">
             <thead>
                 <tr style="background:#f1f5f9;color:#334155;text-align:left;border-bottom:1px solid #cbd5e1;">
-                    <th rowspan="2" style="padding:12px 14px;width:65px;text-align:center;vertical-align:middle;">Kode</th>
-                    <th rowspan="2" style="padding:12px 14px;width:105px;vertical-align:middle;">Portofolio</th>
-                    <th rowspan="2" style="padding:12px 14px;min-width:240px;vertical-align:middle;">Mitra &amp; Judul Kerja Sama</th>
-                    <th rowspan="2" style="padding:12px 14px;width:80px;text-align:center;vertical-align:middle;">Bidang</th>
-                    <th colspan="3" style="padding:10px 12px;text-align:center;background:#eef2ff;color:#3730a3;border-left:1px solid #cbd5e1;border-right:1px solid #cbd5e1;font-weight:700;">
+                    <th rowspan="2" style="padding:10px 8px;width:55px;text-align:center;vertical-align:middle;">Kode</th>
+                    <th rowspan="2" style="padding:10px 8px;width:90px;vertical-align:middle;">Portofolio</th>
+                    <th rowspan="2" style="padding:10px 10px;vertical-align:middle;">Mitra &amp; Judul Kerja Sama</th>
+                    <th rowspan="2" style="padding:10px 8px;width:70px;text-align:center;vertical-align:middle;">Bidang</th>
+                    <th colspan="3" style="padding:8px 8px;text-align:center;background:#eef2ff;color:#3730a3;border-left:1px solid #cbd5e1;border-right:1px solid #cbd5e1;font-weight:700;">
                         📋 DATA BASELINE (12 ELEMEN)
                     </th>
-                    <th colspan="3" style="padding:10px 12px;text-align:center;background:#ecfdf5;color:#065f46;font-weight:700;">
+                    <th colspan="3" style="padding:8px 8px;text-align:center;background:#ecfdf5;color:#065f46;font-weight:700;">
                         📊 DATA SCORECARD (V2.1)
                     </th>
                 </tr>
-                <tr style="background:#f8fafc;color:#475569;border-bottom:2px solid #cbd5e1;font-size:12px;">
+                <tr style="background:#f8fafc;color:#475569;border-bottom:2px solid #cbd5e1;font-size:11.5px;">
                     <!-- Baseline Sub-Columns -->
-                    <th style="padding:8px 10px;text-align:center;border-left:1px solid #cbd5e1;width:115px;">Status Baseline</th>
-                    <th style="padding:8px 10px;text-align:center;width:125px;">Template Excel</th>
-                    <th style="padding:8px 10px;text-align:center;border-right:1px solid #cbd5e1;width:115px;">Aksi Import</th>
+                    <th style="padding:6px 6px;text-align:center;border-left:1px solid #cbd5e1;width:100px;">Status Baseline</th>
+                    <th style="padding:6px 6px;text-align:center;width:105px;">Template Excel</th>
+                    <th style="padding:6px 6px;text-align:center;border-right:1px solid #cbd5e1;width:85px;">Aksi Import</th>
                     <!-- Scorecard Sub-Columns -->
-                    <th style="padding:8px 10px;text-align:center;width:125px;">Status &amp; Nilai</th>
-                    <th style="padding:8px 10px;text-align:center;width:125px;">Template Excel</th>
-                    <th style="padding:8px 10px;text-align:center;width:115px;">Aksi Import</th>
+                    <th style="padding:6px 6px;text-align:center;width:100px;">Status &amp; Nilai</th>
+                    <th style="padding:6px 6px;text-align:center;width:105px;">Template Excel</th>
+                    <th style="padding:6px 6px;text-align:center;width:85px;">Aksi Import</th>
                 </tr>
             </thead>
             <tbody>
@@ -591,7 +591,7 @@ require __DIR__ . '/includes/header.php';
                     <!-- 5. SCORECARD: TEMPLATE EXCEL -->
                     <td style="padding:12px 14px;text-align:center;vertical-align:middle;">
                         <?php if ($tInfo && file_exists(__DIR__ . '/' . $tInfo['file'])): ?>
-                            <a href="<?= h($tInfo['file']) ?>" download class="btn btn-outline btn-sm" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;padding:5px 9px;color:#047857;border-color:#a7f3d0;background:#ecfdf5;font-weight:600;" title="Unduh Template Scorecard (.xlsx)">
+                            <a href="<?= h($tInfo['file']) ?>" download="Template_Scorecard_<?= h($m['kode']) ?>.xlsx" class="btn btn-outline btn-sm" style="font-size:11px;display:inline-flex;align-items:center;gap:4px;padding:5px 9px;color:#047857;border-color:#a7f3d0;background:#ecfdf5;font-weight:600;" title="Unduh Template Scorecard (.xlsx)">
                                 <span>⬇️</span> Unduh Template
                             </a>
                         <?php else: ?>

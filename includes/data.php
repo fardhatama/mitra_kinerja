@@ -22,16 +22,16 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
     $stmt->execute([$mitra['id']]);
     $indikatorRows = $stmt->fetchAll();
 
-    // Self-healing: jika naskah belum memiliki 7 indikator standar V2.1, inisialisasi otomatis
+    // Self-healing: jika naskah belum memiliki 7 indikator standar V3 Result-Chain, inisialisasi otomatis
     if (empty($indikatorRows)) {
         $defs = [
-            ['I1', 'Relevansi Ruang Lingkup', 10],
-            ['I2', 'Realisasi Program Kerja Tahunan', 15],
-            ['I3', 'Kemanfaatan bagi Penerima Layanan', 15],
-            ['I4', 'Dampak terhadap Pelaksanaan Kebijakan & Layanan Kanwil', 20],
-            ['I5', 'Keberlanjutan & Kelembagaan Kerja Sama', 20],
-            ['I6', 'Kepatuhan Tata Kelola & Pelaporan Berkala', 10],
-            ['I7', 'Kontribusi terhadap Pembangunan Zona Integritas', 10],
+            ['I1', 'Pengelolaan & RTL', 10],
+            ['I2', 'Implementasi', 15],
+            ['I3', 'Output', 15],
+            ['I4', 'Outcome', 20],
+            ['I5', 'Dampak', 20],
+            ['I6', 'Evidence & Data', 10],
+            ['I7', 'Risiko & Keberlanjutan', 10],
         ];
         $stmtIns = $pdo->prepare('INSERT INTO indikator_skor (mitra_id, kode_indikator, deskripsi, bobot, referensi_baseline, status_pemeriksaan) VALUES (?, ?, ?, ?, \'Baseline awal\', \'BELUM DITELAAH\') ON DUPLICATE KEY UPDATE id=id');
         foreach ($defs as $d) {
@@ -55,7 +55,7 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
 
     $stmt = $pdo->prepare('SELECT * FROM intervensi_usulan WHERE mitra_id = ?');
     $stmt->execute([$mitra['id']]);
-    $usulan = $stmt->fetch() ?: ['upaya_dilakukan' => null, 'keputusan_diminta' => null];
+    $usulan = $stmt->fetch() ?: ['upaya_dilakukan' => null, 'keputusan_diminta' => null, 'uraian_kendala' => null];
 
     // --- Baseline FIX 12 Elemen ---
     $baselineRows = [];
@@ -101,7 +101,7 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
     $warning = warningTertinggi($statusList);
     $hasilUji = hasilUjiIntervensi($pemicuRows, $warning['status']);
     $cekUsulan = cekUsulanIntervensi($pemicuRows, $hasilUji, $usulan['upaya_dilakukan'], $usulan['keputusan_diminta']);
-    $calculatedStatus = hitungStatusScorecard($ringkasan['skor_lengkap'], $ringkasan['cek_lengkap_ok'], $validasi['status']);
+    $calculatedStatus = hitungStatusScorecard($ringkasan['skor_lengkap'], $ringkasan['cek_lengkap_ok'], $validasi['status'], $ringkasan['bukti_kurang_n'], $ringkasan['bdn_n'], $ringkasan['dapat_dinilai_n']);
     if (!empty($mitra['status_scorecard']) && in_array($mitra['status_scorecard'], ['MASA IMPLEMENTASI AWAL', 'FINAL', 'FINAL/TERVALIDASI'], true)) {
         $statusScorecard = $mitra['status_scorecard'];
     } else {
@@ -180,6 +180,8 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
         'validasi'          => $validasi,
         'usulan'            => $usulan,
         'nilai_berjalan'    => $ringkasan['nilai_berjalan'],
+        'nilai_final'       => $ringkasan['nilai_final'],
+        'all_evaluable'     => $ringkasan['all_evaluable'],
         'bobot_dinilai'     => $ringkasan['bobot_dinilai'],
         'kelengkapan'       => $ringkasan['kelengkapan'],
         'skor_lengkap'      => $ringkasan['skor_lengkap'],

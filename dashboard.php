@@ -92,28 +92,28 @@ foreach ($all as $s) {
             <div class="muted" style="font-size:12px;">Ringkasan efektivitas, capaian hasil, dan tindak lanjut portofolio</div>
         </div>
     </div>
-    <div class="kpi-grid" style="margin-top:14px;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));">
-        <div class="kpi-card" style="background:#fff;">
+    <div class="kpi-grid" style="margin-top:14px;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));">
+        <div class="kpi-card kpi-card-vertical" style="background:#fff;">
             <div class="kpi-value" style="color:#2563eb;"><?= $stats['aktifCount'] ?> / <?= $stats['total'] ?></div>
             <div class="kpi-label">Kerja Sama Aktif</div>
-            <div class="kpi-sub" style="font-size:11px;color:#64748b;">Implementasi berjalan</div>
+            <div class="kpi-sub">Implementasi berjalan</div>
         </div>
-        <div class="kpi-card" style="background:#fff;">
+        <div class="kpi-card kpi-card-vertical" style="background:#fff;">
             <div class="kpi-value" style="color:#0891b2;"><?= $stats['outputOutcomeCount'] ?></div>
             <div class="kpi-label">Output &amp; Outcome</div>
-            <div class="kpi-sub" style="font-size:11px;color:#64748b;">Menghasilkan produk/manfaat</div>
+            <div class="kpi-sub">Menghasilkan produk/manfaat</div>
         </div>
-        <div class="kpi-card" style="background:#fff;">
+        <div class="kpi-card kpi-card-vertical" style="background:#fff;">
             <div class="kpi-value" style="color:#16a34a;"><?= $stats['berdampakCount'] ?></div>
             <div class="kpi-label">Berdampak</div>
-            <div class="kpi-sub" style="font-size:11px;color:#64748b;">Mendukung pelayanan hukum</div>
+            <div class="kpi-sub">Mendukung pelayanan hukum</div>
         </div>
-        <div class="kpi-card" style="background:#fff;">
-            <div class="kpi-value" style="font-size:15px;color:#ca8a04;">
+        <div class="kpi-card kpi-card-vertical" style="background:#fff;">
+            <div class="kpi-value" style="font-size:18px;color:#ca8a04;">
                 <?= $stats['rekomendasiCount']['LANJUT'] + $stats['rekomendasiCount']['PERPANJANG'] + $stats['rekomendasiCount']['REPLIKASI'] ?> Lanjut / <?= $stats['rekomendasiCount']['HENTIKAN'] ?> Henti
             </div>
             <div class="kpi-label">Rekomendasi</div>
-            <div class="kpi-sub" style="font-size:11px;color:#64748b;"><?= $stats['rekomendasiCount']['PERBAIKI'] ?> perlu perbaikan</div>
+            <div class="kpi-sub"><?= $stats['rekomendasiCount']['PERBAIKI'] ?> perlu perbaikan</div>
         </div>
     </div>
 </div>
@@ -142,8 +142,8 @@ foreach ($all as $s) {
         <div class="kpi-data">
             <div class="kpi-number"><?= $stats['efektif'] ?></div>
             <div class="kpi-label">Efektif</div>
-            <div class="kpi-progress"><div class="bar" style="width:<?= $stats['pilotCount'] > 0 ? round($stats['efektif']/$stats['pilotCount']*100) : 0 ?>%;background:#16a34a;"></div></div>
-            <div class="kpi-sub"><?= $stats['pilotCount'] > 0 ? round($stats['efektif']/$stats['pilotCount']*100) : 0 ?>%</div>
+            <div class="kpi-progress"><div class="bar" style="width:<?= $stats['total'] > 0 ? round($stats['efektif']/$stats['total']*100) : 0 ?>%;background:#16a34a;"></div></div>
+            <div class="kpi-sub"><?= $stats['total'] > 0 ? round($stats['efektif']/$stats['total']*100) : 0 ?>% dari total</div>
         </div>
     </div>
     <div class="kpi-card">
@@ -151,8 +151,8 @@ foreach ($all as $s) {
         <div class="kpi-data">
             <div class="kpi-number"><?= $stats['perluPerhatian'] ?></div>
             <div class="kpi-label">Perlu Perhatian</div>
-            <div class="kpi-progress"><div class="bar" style="width:<?= $stats['pilotCount'] > 0 ? round($stats['perluPerhatian']/$stats['pilotCount']*100) : 0 ?>%;background:#ca8a04;"></div></div>
-            <div class="kpi-sub"><?= $stats['pilotCount'] > 0 ? round($stats['perluPerhatian']/$stats['pilotCount']*100) : 0 ?>%</div>
+            <div class="kpi-progress"><div class="bar" style="width:<?= $stats['total'] > 0 ? round($stats['perluPerhatian']/$stats['total']*100) : 0 ?>%;background:#ca8a04;"></div></div>
+            <div class="kpi-sub"><?= $stats['total'] > 0 ? round($stats['perluPerhatian']/$stats['total']*100) : 0 ?>% dari total</div>
         </div>
     </div>
     <div class="kpi-card">
@@ -160,8 +160,8 @@ foreach ($all as $s) {
         <div class="kpi-data">
             <div class="kpi-number"><?= $stats['berisiko'] ?></div>
             <div class="kpi-label">Berisiko</div>
-            <div class="kpi-progress"><div class="bar" style="width:<?= $stats['pilotCount'] > 0 ? round($stats['berisiko']/$stats['pilotCount']*100) : 0 ?>%;background:#dc2626;"></div></div>
-            <div class="kpi-sub"><?= $stats['pilotCount'] > 0 ? round($stats['berisiko']/$stats['pilotCount']*100) : 0 ?>%</div>
+            <div class="kpi-progress"><div class="bar" style="width:<?= $stats['total'] > 0 ? round($stats['berisiko']/$stats['total']*100) : 0 ?>%;background:#dc2626;"></div></div>
+            <div class="kpi-sub"><?= $stats['total'] > 0 ? round($stats['berisiko']/$stats['total']*100) : 0 ?>% dari total</div>
         </div>
     </div>
 </div>
@@ -169,13 +169,13 @@ foreach ($all as $s) {
 <!-- Charts Row -->
 <div class="charts-row">
     <div class="chart-card">
-        <h3>Status Efektivitas Naskah Pilot</h3>
+        <h3>Status Efektivitas Kerja Sama</h3>
         <div class="donut-wrap">
             <canvas id="donutChart" width="160" height="160"></canvas>
             <div class="donut-legend">
-                <div class="leg-item"><span class="leg-dot" style="background:#16a34a;"></span> Efektif <span class="leg-count"><?= $stats['efektif'] ?></span> <span class="leg-pct"><?= $stats['pilotCount'] > 0 ? round($stats['efektif']/$stats['pilotCount']*100) : 0 ?>%</span></div>
-                <div class="leg-item"><span class="leg-dot" style="background:#ca8a04;"></span> Perlu Perhatian <span class="leg-count"><?= $stats['perluPerhatian'] ?></span> <span class="leg-pct"><?= $stats['pilotCount'] > 0 ? round($stats['perluPerhatian']/$stats['pilotCount']*100) : 0 ?>%</span></div>
-                <div class="leg-item"><span class="leg-dot" style="background:#dc2626;"></span> Berisiko <span class="leg-count"><?= $stats['berisiko'] ?></span> <span class="leg-pct"><?= $stats['pilotCount'] > 0 ? round($stats['berisiko']/$stats['pilotCount']*100) : 0 ?>%</span></div>
+                <div class="leg-item"><span class="leg-dot" style="background:#16a34a;"></span> Efektif <span class="leg-count"><?= $stats['efektif'] ?></span> <span class="leg-pct"><?= $stats['total'] > 0 ? round($stats['efektif']/$stats['total']*100) : 0 ?>%</span></div>
+                <div class="leg-item"><span class="leg-dot" style="background:#ca8a04;"></span> Perlu Perhatian <span class="leg-count"><?= $stats['perluPerhatian'] ?></span> <span class="leg-pct"><?= $stats['total'] > 0 ? round($stats['perluPerhatian']/$stats['total']*100) : 0 ?>%</span></div>
+                <div class="leg-item"><span class="leg-dot" style="background:#dc2626;"></span> Berisiko <span class="leg-count"><?= $stats['berisiko'] ?></span> <span class="leg-pct"><?= $stats['total'] > 0 ? round($stats['berisiko']/$stats['total']*100) : 0 ?>%</span></div>
             </div>
         </div>
     </div>
@@ -389,7 +389,7 @@ foreach ($all as $s) {
 </button>
 <?php endif; ?>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="public/js/chart.umd.min.js"></script>
 <script>
 (function(){
     var ctx1 = document.getElementById('donutChart').getContext('2d');

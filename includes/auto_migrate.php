@@ -8,6 +8,20 @@
 function ensureDatabaseSchema(PDO $pdo): void {
     static $checked = false;
     if ($checked) return;
+
+    // ── 0. FAST-PATH HEALTH CHECK (Sub-millisecond) ─────────────────────────
+    // Jika database sudah aktif, memiliki mitra_kinerja, bidang, dan pra_pks,
+    // langsung return tanpa menjalankan DDL / ALTER TABLE apa pun.
+    try {
+        $fastCheck = $pdo->query("SELECT m.bidang, m.evaluasi_per_tahun, p.id FROM mitra_kinerja m, pra_pks p LIMIT 1");
+        if ($fastCheck !== false && $fastCheck->fetch() !== false) {
+            $checked = true;
+            return;
+        }
+    } catch (Throwable $e) {
+        // Skema belum lengkap atau database baru, lanjutkan ke migrasi di bawah
+    }
+
     $checked = true;
 
     try {
@@ -20,7 +34,9 @@ function ensureDatabaseSchema(PDO $pdo): void {
                 if (file_exists($dumpPath)) {
                     $sqlDump = file_get_contents($dumpPath);
                     if (!empty($sqlDump)) {
+                        $pdo->exec("SET FOREIGN_KEY_CHECKS=0");
                         $pdo->exec($sqlDump);
+                        $pdo->exec("SET FOREIGN_KEY_CHECKS=1");
                         return; // Selesai bootstrap lengkap
                     }
                 }
@@ -117,29 +133,67 @@ function ensureDatabaseSchema(PDO $pdo): void {
             ) ENGINE=InnoDB;
         ");
 
-            // Add missing columns to mitra_kinerja safely
-            $alterQueries = [
-                "ALTER TABLE users MODIFY COLUMN role ENUM('admin','pemeriksa','validator','pimpinan','pengampu','pic') NOT NULL",
-                "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS bidang ENUM('AHU', 'KI', 'P3H', 'PPL', 'Keuangan', 'Humas', 'SDM') NULL DEFAULT 'AHU' AFTER jenis",
-                "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS pks_induk_id INT NULL AFTER jenis",
-                "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS baseline_status ENUM('BELUM DIISI', 'DALAM PROSES', 'TERVERIFIKASI / DIKUNCI') NOT NULL DEFAULT 'BELUM DIISI' AFTER status_tanggal",
-                "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS baseline_locked_at DATETIME NULL AFTER baseline_status",
-                "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS baseline_locked_by INT NULL AFTER baseline_locked_at",
-                "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS baseline_pemeriksa VARCHAR(255) NULL AFTER baseline_locked_by",
-                "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS baseline_catatan_ringkasan TEXT NULL AFTER baseline_pemeriksa",
-                "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS pic_internal VARCHAR(255) NULL AFTER sumber_baseline",
-                "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS pic_mitra VARCHAR(255) NULL AFTER pic_internal",
-                "ALTER TABLE mitra_kinerja ADD COLUMN IF NOT EXISTS evaluasi_per_tahun INT NOT NULL DEFAULT 4 AFTER status_tanggal",
-                "ALTER TABLE tindak_lanjut ADD COLUMN IF NOT EXISTS file_bukti VARCHAR(255) NULL AFTER status",
-                "ALTER TABLE mitra_kinerja MODIFY COLUMN status_scorecard VARCHAR(50) NOT NULL DEFAULT 'BELUM LENGKAP'",
-                "ALTER TABLE mitra_kinerja MODIFY COLUMN posisi_portofolio VARCHAR(150) NOT NULL DEFAULT 'BELUM DAPAT DITENTUKAN'",
-                "ALTER TABLE mitra_kinerja MODIFY COLUMN rekomendasi TEXT NULL",
-                "ALTER TABLE indikator_skor ADD COLUMN IF NOT EXISTS kondisi_baseline TEXT NULL AFTER referensi_baseline",
-                "ALTER TABLE indikator_skor ADD COLUMN IF NOT EXISTS kondisi_saat_ini TEXT NULL AFTER kondisi_baseline"
+        // ── 3. CEK DAN TAMBAH KOLOM YANG KURANG SECARA EFISIEN ──────────────
+        try {
+            $colsMk = $pdo->query("SHOW COLUMNS FROM mitra_kinerja")->fetchAll(PDO::FETCH_COLUMN);
+            $colsMkMap = array_flip($colsMk);
+
+            $neededColsMk = [
+                'bidang' => "ALTER TABLE mitra_kinerja ADD COLUMN bidang ENUM('AHU', 'KI', 'P3H', 'PPL', 'Keuangan', 'Humas', 'SDM') NULL DEFAULT 'AHU' AFTER jenis",
+                'pks_induk_id' => "ALTER TABLE mitra_kinerja ADD COLUMN pks_induk_id INT NULL AFTER jenis",
+                'baseline_status' => "ALTER TABLE mitra_kinerja ADD COLUMN baseline_status ENUM('BELUM DIISI', 'DALAM PROSES', 'TERVERIFIKASI / DIKUNCI') NOT NULL DEFAULT 'BELUM DIISI' AFTER status_tanggal",
+                'baseline_locked_at' => "ALTER TABLE mitra_kinerja ADD COLUMN baseline_locked_at DATETIME NULL AFTER baseline_status",
+                'baseline_locked_by' => "ALTER TABLE mitra_kinerja ADD COLUMN baseline_locked_by INT NULL AFTER baseline_locked_at",
+                'baseline_pemeriksa' => "ALTER TABLE mitra_kinerja ADD COLUMN baseline_pemeriksa VARCHAR(255) NULL AFTER baseline_locked_by",
+                'baseline_catatan_ringkasan' => "ALTER TABLE mitra_kinerja ADD COLUMN baseline_catatan_ringkasan TEXT NULL AFTER baseline_pemeriksa",
+                'pic_internal' => "ALTER TABLE mitra_kinerja ADD COLUMN pic_internal VARCHAR(255) NULL AFTER sumber_baseline",
+                'pic_mitra' => "ALTER TABLE mitra_kinerja ADD COLUMN pic_mitra VARCHAR(255) NULL AFTER pic_internal",
+                'pic_focal_point' => "ALTER TABLE mitra_kinerja ADD COLUMN pic_focal_point VARCHAR(255) NULL AFTER pic_mitra",
+                'evaluasi_per_tahun' => "ALTER TABLE mitra_kinerja ADD COLUMN evaluasi_per_tahun INT NOT NULL DEFAULT 4 AFTER status_tanggal",
             ];
-            foreach ($alterQueries as $q) {
-                try { $pdo->exec($q); } catch (Throwable $e) {}
+
+            foreach ($neededColsMk as $cName => $sqlAlter) {
+                if (!isset($colsMkMap[$cName])) {
+                    try { $pdo->exec($sqlAlter); } catch (Throwable $e) {}
+                }
             }
+        } catch (Throwable $e) {}
+
+        // Tindak lanjut file_bukti
+        try {
+            $colsTl = $pdo->query("SHOW COLUMNS FROM tindak_lanjut")->fetchAll(PDO::FETCH_COLUMN);
+            if (!in_array('file_bukti', $colsTl, true)) {
+                $pdo->exec("ALTER TABLE tindak_lanjut ADD COLUMN file_bukti VARCHAR(255) NULL AFTER status");
+            }
+        } catch (Throwable $e) {}
+
+        // Intervensi usulan uraian_kendala
+        try {
+            $colsIu = $pdo->query("SHOW COLUMNS FROM intervensi_usulan")->fetchAll(PDO::FETCH_COLUMN);
+            if (!in_array('uraian_kendala', $colsIu, true)) {
+                $pdo->exec("ALTER TABLE intervensi_usulan ADD COLUMN uraian_kendala TEXT NULL AFTER upaya_dilakukan");
+            }
+        } catch (Throwable $e) {}
+
+        // Indikator skor kondisi_baseline & kondisi_saat_ini
+        try {
+            $colsIs = $pdo->query("SHOW COLUMNS FROM indikator_skor")->fetchAll(PDO::FETCH_COLUMN);
+            $colsIsMap = array_flip($colsIs);
+            if (!isset($colsIsMap['kondisi_baseline'])) {
+                $pdo->exec("ALTER TABLE indikator_skor ADD COLUMN kondisi_baseline TEXT NULL AFTER referensi_baseline");
+            }
+            if (!isset($colsIsMap['kondisi_saat_ini'])) {
+                $pdo->exec("ALTER TABLE indikator_skor ADD COLUMN kondisi_saat_ini TEXT NULL AFTER kondisi_baseline");
+            }
+        } catch (Throwable $e) {}
+
+        // Users role enum check
+        try {
+            $roleCol = $pdo->query("SHOW COLUMNS FROM users LIKE 'role'")->fetch();
+            if ($roleCol && (!str_contains($roleCol['Type'] ?? '', 'pengampu') || !str_contains($roleCol['Type'] ?? '', 'pic'))) {
+                $pdo->exec("ALTER TABLE users MODIFY COLUMN role ENUM('admin','pemeriksa','validator','pimpinan','pengampu','pic') NOT NULL");
+            }
+        } catch (Throwable $e) {}
 
         // 3. Pastikan row validasi ada untuk tiap naskah
         try {
@@ -159,8 +213,9 @@ function ensureDatabaseSchema(PDO $pdo): void {
             foreach ($demoAccounts as $da) {
                 $stmtU = $pdo->prepare("SELECT id FROM users WHERE username = ?");
                 $stmtU->execute([$da[1]]);
-                if (!$stmtU->fetch()) {
-                    $h = password_hash($da[2], PASSWORD_BCRYPT);
+                $uRow = $stmtU->fetch();
+                $h = password_hash($da[2], PASSWORD_BCRYPT);
+                if (!$uRow) {
                     $pdo->prepare("INSERT INTO users (nama, username, password_hash, role, aktif) VALUES (?, ?, ?, ?, 1)")
                         ->execute([$da[0], $da[1], $h, $da[3]]);
                 }

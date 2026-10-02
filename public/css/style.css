@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;500;600;700&display=swap');
-
 :root {
     --navy: #0f2b46;
     --navy-dark: #0a1f33;
@@ -36,7 +34,6 @@ a:hover { text-decoration: underline; }
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    padding-bottom: 44px; /* ruang untuk footer fixed */
 }
 .app-layout-main {
     display: flex;
@@ -49,9 +46,9 @@ a:hover { text-decoration: underline; }
     color: #fff;
     display: flex; flex-direction: column;
     position: fixed;
-    top: var(--header-h); /* SEBELUMNYA: top: 0; — sekarang mulai di bawah header, bukan di belakang/atasnya */
+    top: var(--header-h);
     left: 0;
-    bottom: 44px;
+    bottom: 0;
     z-index: 100;
     overflow: hidden;
     background:
@@ -176,21 +173,22 @@ a:hover { text-decoration: underline; }
 }
 .header-user .btn-logout:hover { background: rgba(255,255,255,.15); color: #fff; text-decoration: none; }
 
-/* Page Body — offset from sidebar, beri ruang untuk footer fixed */
+/* Page Body — offset from sidebar */
 .page-body {
-    padding: 24px 28px 68px;
+    padding: 24px 28px 40px;
     flex: 1;
     max-width: 100%;
     overflow-x: hidden;
     min-width: 0;
     margin-left: var(--sidebar-w);
 }
-/* Footer — FIXED di bawah viewport, selalu terlihat */
+/* Footer — diposisikan di akhir konten secara wajar */
 .app-footer {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    z-index: 90;
-    padding: 12px 28px;
+    position: relative;
+    margin-top: auto;
+    margin-left: var(--sidebar-w);
+    z-index: 10;
+    padding: 14px 28px;
     border-top: 1px solid var(--border);
     display: flex;
     align-items: center;
@@ -198,10 +196,9 @@ a:hover { text-decoration: underline; }
     flex-wrap: wrap;
     gap: 8px;
     font-size: 12.5px;
-    color: var(--text);
+    color: var(--text-muted);
     background: #fff;
     min-height: 44px;
-    box-shadow: 0 -2px 8px rgba(0,0,0,.04);
 }
 .app-footer .footer-left strong,
 .app-footer .footer-brand { font-weight: 600; color: #0f172a; }
@@ -279,12 +276,43 @@ a:hover { text-decoration: underline; }
 .login-hint { margin-top: 18px; font-size: 12px; color: var(--text-muted); text-align: center; }
 
 /* ============ DASHBOARD COMPONENTS ============ */
-.kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
 .kpi-card {
     background: #fff; border-radius: 14px; padding: 18px 20px;
     border: 1px solid var(--border);
     display: flex; align-items: flex-start; gap: 14px;
     min-width: 0;
+}
+.kpi-card-vertical, .kpi-grid .kpi-card {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+    gap: 4px !important;
+    min-width: 0;
+}
+.kpi-card-vertical .kpi-value, .kpi-grid .kpi-card .kpi-value {
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1.1;
+    margin: 0;
+}
+.kpi-card-vertical .kpi-label, .kpi-grid .kpi-card .kpi-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-top: 4px;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: break-word;
+}
+.kpi-card-vertical .kpi-sub, .kpi-grid .kpi-card .kpi-sub {
+    font-size: 11.5px;
+    color: #64748b;
+    margin-top: 2px;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: break-word;
 }
 .kpi-card .kpi-icon {
     width: 50px; height: 50px; border-radius: 50%;
@@ -307,7 +335,7 @@ a:hover { text-decoration: underline; }
 .kpi-icon-yellow { background: #d4a72c; }
 .kpi-icon-red { background: #dc2626; }
 
-.charts-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+.charts-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 24px; }
 .chart-card { background: #fff; border-radius: 12px; border: 1px solid var(--border); padding: 20px; }
 .chart-card h3 { font-size: 14px; font-weight: 700; margin: 0 0 16px; color: var(--navy); }
 
@@ -520,8 +548,9 @@ tr:hover td { background: #fafbfc; }
 @media (max-width: 768px) {
     .sidebar { display: none; }
     .app-content { margin-left: 0; }
-    .page-body { margin-left: 0; padding-bottom: 68px; }
-    .app-layout { padding-bottom: 56px; }
+    .page-body { margin-left: 0; padding-bottom: 40px; }
+    .app-footer { margin-left: 0; }
+    .app-layout { padding-bottom: 0; }
     .kpi-row { grid-template-columns: 1fr 1fr; }
     .action-card { flex: 1 1 100%; }
     .app-hero { flex-direction: column; align-items: flex-start; gap: 12px; padding-left: 28px; }

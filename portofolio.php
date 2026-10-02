@@ -39,6 +39,14 @@ require __DIR__ . '/includes/header.php';
             <option value="Humas">Humas</option>
             <option value="SDM">SDM</option>
         </select>
+        <select id="fKategori">
+            <option value="">Semua Kategori</option>
+            <option value="KUAT">Kuat</option>
+            <option value="CUKUP/PERLU PENGUATAN">Cukup/Perlu Penguatan</option>
+            <option value="PERLU PERBAIKAN">Perlu Perbaikan</option>
+            <option value="KRITIS">Kritis</option>
+            <option value="DALAM PROSES">Dalam Proses</option>
+        </select>
         <select id="fPosisi">
             <option value="">Semua Posisi</option>
             <option value="BERDAMPAK">Berdampak</option>
@@ -59,14 +67,17 @@ require __DIR__ . '/includes/header.php';
             <option value="">Semua Status</option>
             <option value="FINAL/TERVALIDASI">Final/Tervalidasi</option>
             <option value="SIAP DIVALIDASI">Siap Divalidasi</option>
-            <option value="BELUM LENGKAP">Belum Lengkap</option>
+            <option value="DALAM PENILAIAN">Dalam Penilaian</option>
+            <option value="BELUM DINILAI">Belum Dinilai</option>
+            <option value="BUKTI BELUM MEMADAI">Bukti Belum Memadai</option>
             <option value="PERLU PERBAIKAN">Perlu Perbaikan</option>
+            <option value="MASA IMPLEMENTASI AWAL">Masa Implementasi Awal</option>
         </select>
     </div>
     <div class="table-wrap">
     <table id="tblPortofolio">
         <thead>
-            <tr><th>Kode</th><th>Portofolio</th><th>Mitra</th><th>Bidang</th><th>Berlaku s.d.</th><th>Nilai</th><th>Kelengkapan</th><th>Posisi</th><th>Rekomendasi</th><th>Status</th><th>Warning</th><th>Aksi</th></tr>
+            <tr><th>Kode</th><th>Portofolio</th><th>Mitra</th><th>Bidang</th><th>Berlaku s.d.</th><th>Nilai</th><th>Kategori</th><th>Kelengkapan</th><th>Posisi</th><th>Rekomendasi</th><th>Status</th><th>Warning</th><th>Aksi</th></tr>
         </thead>
         <tbody>
         <?php foreach ($all as $s): $m = $s['mitra']; ?>
@@ -76,10 +87,18 @@ require __DIR__ . '/includes/header.php';
                 <td><?= h($m['nama_mitra']) ?></td>
                 <td><span class="badge badge-secondary" style="font-size:11px;font-weight:600;"><?= h($m['bidang'] ?? 'AHU') ?></span><br><span class="muted" style="font-size:10px;"><?= h($m['jenis']) ?></span></td>
                 <td><?= formatTanggal($m['tanggal_berakhir']) ?></td>
-                <td><?= $s['nilai_berjalan'] > 0 ? number_format($s['nilai_berjalan'], 2) : '-' ?></td>
+                <td><?= $s['nilai_final'] !== null ? number_format($s['nilai_final'], 2) : '<span class="badge badge-' . warnaKategori('DALAM PROSES') . '">Dalam Proses</span>' ?></td>
+                <td><span class="badge badge-<?= warnaKategori($s['kategori']) ?>"><?= h($s['kategori']) ?></span></td>
                 <td><?= $s['kelengkapan'] ?>%</td>
-                <td><span class="badge badge-secondary" style="font-size:11px;"><?= h($s['posisi_portofolio']) ?></span></td>
-                <td><span class="badge badge-warning" style="font-size:11px;"><?= h($s['rekomendasi']) ?></span></td>
+                <td><span class="badge badge-secondary" style="font-size:11px;max-width:180px;white-space:normal;display:inline-block;line-height:1.25;text-align:left;"><?= h($s['posisi_portofolio']) ?></span></td>
+                <td>
+                    <?php 
+                    $rekHead = explode("\n", trim($s['rekomendasi'] ?? '-'))[0] ?: '-';
+                    ?>
+                    <span class="badge badge-warning" style="font-size:11px;max-width:210px;white-space:normal;display:inline-block;line-height:1.25;text-align:left;" title="<?= h($s['rekomendasi']) ?>">
+                        <?= h(singkat($rekHead, 45)) ?>
+                    </span>
+                </td>
                 <td><?= h($s['status_scorecard']) ?></td>
                 <td><span class="badge badge-<?= warnaWarning($s['warning']['status']) ?>"><?= h($s['warning']['label']) ?></span></td>
                 <td>
@@ -103,6 +122,7 @@ function applyFilters() {
     var q = (document.getElementById('fSearch').value || '').toLowerCase().trim();
     var p = document.getElementById('fPortofolio').value;
     var b = document.getElementById('fBidang').value;
+    var k = document.getElementById('fKategori') ? document.getElementById('fKategori').value : '';
     var pos = document.getElementById('fPosisi').value;
     var rek = document.getElementById('fRekomendasi').value;
     var s = document.getElementById('fStatus').value;
@@ -110,15 +130,19 @@ function applyFilters() {
         var matchQ = !q || tr.textContent.toLowerCase().indexOf(q) !== -1;
         var matchP = !p || tr.dataset.portofolio === p;
         var matchB = !b || tr.dataset.bidang === b;
+        var matchK = !k || tr.dataset.kategori === k;
         var matchPos = !pos || tr.dataset.posisi === pos;
         var matchRek = !rek || tr.dataset.rekomendasi === rek;
         var matchS = !s || tr.dataset.status === s;
-        tr.style.display = (matchQ && matchP && matchB && matchPos && matchRek && matchS) ? '' : 'none';
+        tr.style.display = (matchQ && matchP && matchB && matchK && matchPos && matchRek && matchS) ? '' : 'none';
     });
 }
 document.getElementById('fSearch').addEventListener('input', applyFilters);
 document.getElementById('fPortofolio').addEventListener('change', applyFilters);
 document.getElementById('fBidang').addEventListener('change', applyFilters);
+if (document.getElementById('fKategori')) {
+    document.getElementById('fKategori').addEventListener('change', applyFilters);
+}
 document.getElementById('fPosisi').addEventListener('change', applyFilters);
 document.getElementById('fRekomendasi').addEventListener('change', applyFilters);
 document.getElementById('fStatus').addEventListener('change', applyFilters);
