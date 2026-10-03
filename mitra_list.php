@@ -37,7 +37,12 @@ require __DIR__ . '/includes/header.php';
                 <td><?= formatTanggal($m['tanggal_berakhir']) ?></td>
                 <td><?= $s['kelengkapan'] ?>%</td>
                 <td><span class="badge badge-secondary" style="font-size:11px;"><?= h($s['posisi_portofolio']) ?></span></td>
-                <td><span class="badge badge-warning" style="font-size:11px;"><?= h($s['rekomendasi']) ?></span></td>
+                <?php
+                $rekRaw = trim((string)($s['rekomendasi'] ?? ''));
+                $rekFirstLine = str_contains($rekRaw, "\n") ? explode("\n", $rekRaw)[0] : $rekRaw;
+                $rekDisplay = singkat($rekFirstLine, 35);
+                ?>
+                <td><span class="badge badge-warning" style="font-size:11px;" title="<?= h($rekRaw) ?>"><?= h($rekDisplay) ?></span></td>
                 <td><?= h($s['status_scorecard']) ?></td>
                 <td>
                     <?php
@@ -53,7 +58,7 @@ require __DIR__ . '/includes/header.php';
                         <?php if (in_array($user['role'], ['admin','validator'], true)): ?>
                         <a href="mitra_validasi.php?id=<?= $m['id'] ?>" class="btn btn-primary btn-sm">Validasi</a>
                         <?php elseif ($user['role'] === 'pemeriksa'): ?>
-                        <a href="mitra_validasi.php" class="btn btn-outline btn-sm">Penilaian</a>
+                        <a href="mitra_validasi.php?id=<?= $m['id'] ?>" class="btn btn-outline btn-sm">Penilaian</a>
                         <?php endif; ?>
                     </div>
                 </td>

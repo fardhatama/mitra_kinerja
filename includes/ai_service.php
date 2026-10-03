@@ -3,6 +3,7 @@
  * Service AI Analysis — Google Gemini Integration
  */
 
+require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/ai_config.php';
 
 /**
@@ -13,7 +14,7 @@ function generateInsightPayload(PDO $pdo, array $all, array $stats): array {
     $problemMitra = [];
     foreach ($all as $s) {
         $kategori = $s['kategori'] ?? 'BELUM LENGKAP';
-        if (in_array($kategori, ['KRITIS', 'PERLU AKTIVASI'])) {
+        if (in_array($kategori, ['KRITIS', 'PERLU PERBAIKAN'], true)) {
             $problemMitra[] = [
                 'kode' => $s['mitra']['kode'],
                 'nama' => $s['mitra']['nama_mitra'],
@@ -23,22 +24,31 @@ function generateInsightPayload(PDO $pdo, array $all, array $stats): array {
         }
     }
     
-    // Ambil naskah dengan skor rendah (< 60)
+    // Ambil naskah dengan skor rendah (< 60) dan urutkan dari terendah
     $lowScore = array_filter($all, function($s) {
         return ($s['nilai_berjalan'] ?? 0) > 0 && $s['nilai_berjalan'] < 60;
     });
+    usort($lowScore, function($a, $b) {
+        return ($a['nilai_berjalan'] ?? 0) <=> ($b['nilai_berjalan'] ?? 0);
+    });
     
-    // Hitung aspek terlemah
+    // Hitung aspek terlemah (berdasarkan persentase capaian terhadap bobot, izinkan nilai 0)
     $aspekTerlemah = null;
-    $minRata = 100;
-    foreach ($stats['aspekRataRata'] as $kode => $rata) {
-        if ($rata > 0 && $rata < $minRata) {
-            $minRata = $rata;
-            $aspekTerlemah = [
-                'kode' => $kode,
-                'label' => ASPEK_LABELS[$kode] ?? $kode,
-                'rata' => $rata,
-            ];
+    $minPersen = null;
+    if (!empty($stats['aspekRataRata'])) {
+        foreach ($stats['aspekRataRata'] as $kode => $rata) {
+            $bobot = (float)(BOBOT_INDIKATOR[$kode] ?? 10);
+            $persen = $bobot > 0 ? ($rata / $bobot) * 100 : 0.0;
+            if ($minPersen === null || $persen < $minPersen) {
+                $minPersen = $persen;
+                $aspekTerlemah = [
+                    'kode' => $kode,
+                    'label' => ASPEK_LABELS[$kode] ?? $kode,
+                    'rata' => $rata,
+                    'bobot' => $bobot,
+                    'persen' => round($persen, 1),
+                ];
+            }
         }
     }
     
@@ -92,6 +102,16 @@ function generateInsightPayload(PDO $pdo, array $all, array $stats): array {
  * Panggil Google Gemini API
  */
 function callGeminiAPI(string $prompt): ?string {
+    if (empty(GEMINI_API_KEY) || GEMINI_API_KEY === 'ISI_API_KEY_ANDA_DI_SINI') {
+        error_log("Gemini: API key not configured, skipping.");
+        return null;
+    }
+    
+    if (!function_exists('curl_init')) {
+        error_log("Gemini API Error: cURL extension is not installed.");
+        return null;
+    }
+    
     $url = GEMINI_API_URL . GEMINI_MODEL . ':generateContent?key=' . GEMINI_API_KEY;
     
     $payload = json_encode([
@@ -174,6 +194,11 @@ function callGroqAPI(string $prompt): ?string {
         return null;
     }
     
+    if (!function_exists('curl_init')) {
+        error_log("Groq API Error: cURL extension is not installed.");
+        return null;
+    }
+    
     $url = GROQ_API_URL;
     
     $payload = json_encode([
@@ -243,6 +268,11 @@ function callGroqAPI(string $prompt): ?string {
 function callOpenRouterAPI(string $prompt): ?string {
     if (OPENROUTER_API_KEY === '') {
         error_log("OpenRouter: API key not configured, skipping.");
+        return null;
+    }
+    
+    if (!function_exists('curl_init')) {
+        error_log("OpenRouter API Error: cURL extension is not installed.");
         return null;
     }
     
@@ -348,7 +378,7 @@ function saveInsightCache(array $payload, string $insight, string $provider = ''
         'insight' => $insight,
     ];
     
-    return file_put_contents(AI_CACHE_FILE, json_encode($data, JSON_PRETTY_PRINT)) !== false;
+    return file_put_contents(AI_CACHE_FILE, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX) !== false;
 }
 
 /**
@@ -356,6 +386,11 @@ function saveInsightCache(array $payload, string $insight, string $provider = ''
  * Return: ['text' => '...', 'provider' => 'Gemini'] atau null
  */
 function generateNewInsight(array $payload): ?array {
+    if (!function_exists('curl_init')) {
+        error_log("AI Insight: cURL extension tidak tersedia di server.");
+        return null;
+    }
+
     $prompt = sprintf(AI_PROMPT_TEMPLATE, json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     
     // 1️⃣ Gemini (gratis, primary)

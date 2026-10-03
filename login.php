@@ -8,8 +8,10 @@ if (currentUser()) {
 
 $error = '';
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
-    $username = trim($_POST['username'] ?? '');
-    $password = $_POST['password'] ?? '';
+    $rawUser = isset($_POST['username']) && is_string($_POST['username']) ? $_POST['username'] : '';
+    $rawPass = isset($_POST['password']) && is_string($_POST['password']) ? $_POST['password'] : '';
+    $username = trim($rawUser);
+    $password = $rawPass;
     if ($username === '' || $password === '') {
         $error = 'Username dan password wajib diisi.';
     } elseif (attemptLogin($username, $password)) {
@@ -44,6 +46,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             <button type="submit">Masuk</button>
         </form>
         
+        <?php if (defined('APP_ENV') && APP_ENV === 'development'): ?>
         <div style="margin-top:16px;padding:12px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;font-size:12px;color:#475569;">
             <div style="font-weight:700;margin-bottom:8px;color:#1e293b;display:flex;align-items:center;gap:6px;">
                 <span>🔑</span> Akun Demo Pengujian (Klik untuk isi cepat):
@@ -57,15 +60,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 <button type="button" class="btn-demo" onclick="fillLogin('pimpinan','pimpinan123')">Pimpinan</button>
             </div>
         </div>
+        <?php endif; ?>
 
         <div class="login-hint" style="margin-top:10px;">Hubungi admin jika lupa kata sandi.</div>
     </div>
 </div>
+<?php if (defined('APP_ENV') && APP_ENV === 'development'): ?>
 <script>
 function fillLogin(u, p) {
     document.getElementById('username').value = u;
     document.getElementById('password').value = p;
 }
 </script>
+<?php endif; ?>
 </body>
 </html>

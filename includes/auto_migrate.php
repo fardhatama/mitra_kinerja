@@ -13,11 +13,10 @@ function ensureDatabaseSchema(PDO $pdo): void {
     // Jika database sudah aktif, memiliki mitra_kinerja, bidang, dan pra_pks,
     // langsung return tanpa menjalankan DDL / ALTER TABLE apa pun.
     try {
-        $fastCheck = $pdo->query("SELECT m.bidang, m.evaluasi_per_tahun, p.id FROM mitra_kinerja m, pra_pks p LIMIT 1");
-        if ($fastCheck !== false && $fastCheck->fetch() !== false) {
-            $checked = true;
-            return;
-        }
+        $pdo->query("SELECT bidang, evaluasi_per_tahun FROM mitra_kinerja LIMIT 1");
+        $pdo->query("SELECT id FROM pra_pks LIMIT 1");
+        $checked = true;
+        return;
     } catch (Throwable $e) {
         // Skema belum lengkap atau database baru, lanjutkan ke migrasi di bawah
     }

@@ -184,16 +184,20 @@ foreach ($all as $s) {
         <div class="gauge-wrap">
             <canvas id="gaugeChart" width="220" height="130"></canvas>
             <div class="gauge-center"><?= number_format($stats['rataRataNilai'], 1, ',', '.') ?></div>
-            <div class="gauge-subtitle"><?= $stats['rataRataNilai'] >= 75 ? 'Baik' : 'Perlu Perbaikan' ?></div>
+            <div class="gauge-subtitle"><?= kategoriDariNilai($stats['rataRataNilai']) ?></div>
         </div>
     </div>
     <div class="chart-card">
         <h3>Sebaran Nilai per Aspek</h3>
-        <?php foreach (ASPEK_LABELS as $kode => $label): $val = $stats['aspekRataRata'][$kode] ?? 0; ?>
+        <?php foreach (ASPEK_LABELS as $kode => $label): 
+            $val = $stats['aspekRataRata'][$kode] ?? 0;
+            $maxWeight = BOBOT_INDIKATOR[$kode] ?? 100;
+            $pct = $maxWeight > 0 ? min(100, round(($val / $maxWeight) * 100)) : 0;
+        ?>
         <div class="hbar-item">
             <span class="hbar-label"><?= $label ?></span>
-            <div class="hbar-track"><div class="hbar-fill" style="width:<?= $val ?>%;background:linear-gradient(90deg,#2563eb,#60a5fa);"></div></div>
-            <span class="hbar-val"><?= $val ?></span>
+            <div class="hbar-track"><div class="hbar-fill" style="width:<?= $pct ?>%;background:linear-gradient(90deg,#2563eb,#60a5fa);"></div></div>
+            <span class="hbar-val"><?= is_float($val) && $val != (int)$val ? number_format($val, 1) : $val ?></span>
         </div>
         <?php endforeach; ?>
     </div>
@@ -214,7 +218,7 @@ foreach ($all as $s) {
                     <td><?= h(singkat($m['judul'] ?? '-', 40)) ?></td>
                     <td><?= h($m['nama_mitra']) ?></td>
                     <td><?= formatTanggal($m['tanggal_berakhir']) ?></td>
-                    <td><strong><?= $s['nilai_berjalan'] > 0 ? number_format($s['nilai_berjalan'], 0) : '-' ?></strong></td>
+                    <td><strong><?= $s['nilai_final'] !== null ? number_format($s['nilai_final'], 1) : '-' ?></strong></td>
                     <td><span class="badge badge-<?= warnaEfektivitas($ef) ?>"><?= $ef ?></span></td>
                     <td><a href="mitra_edit.php?id=<?= $m['id'] ?>" class="btn btn-outline btn-sm">Detail</a></td>
                 </tr>
@@ -397,7 +401,7 @@ foreach ($all as $s) {
 
     var ctx2 = document.getElementById('gaugeChart').getContext('2d');
     var val = <?= $stats['rataRataNilai'] ?>;
-    var clr = val >= 75 ? '#16a34a' : (val >= 50 ? '#ca8a04' : '#dc2626');
+    var clr = val >= 80 ? '#16a34a' : (val >= 60 ? '#2563eb' : (val >= 40 ? '#ca8a04' : '#dc2626'));
     new Chart(ctx2, { type:'doughnut', data:{ labels:['Skor',''], datasets:[{ data:[val, 100-val], backgroundColor:[clr,'#e9ecef'], borderWidth:0 }] }, options:{ rotation:-90, circumference:180, cutout:'72%', plugins:{ legend:{display:false}, tooltip:{enabled:false} }, responsive:false } });
 })();
 
@@ -465,10 +469,15 @@ function showError(msg){
     aiErrorEl.querySelector('.ai-error-msg').innerHTML = msg;
 }
 function formatInsight(text){
+    if (!text) return '';
+    // Escape HTML characters before converting markdown bold to prevent DOM XSS
+    var div = document.createElement('div');
+    div.textContent = text;
+    var safeText = div.innerHTML;
     // Convert markdown-like bold **text** to <strong>
-    text = text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+    safeText = safeText.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
     // Split into paragraphs
-    var paras = text.split(/\n\n|\n/).filter(function(p){ return p.trim(); });
+    var paras = safeText.split(/\n\n|\n/).filter(function(p){ return p.trim(); });
     return paras.map(function(p){ return '<p>'+p+'</p>'; }).join('');
 }
 

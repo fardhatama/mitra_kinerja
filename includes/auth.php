@@ -8,9 +8,12 @@ require_once __DIR__ . '/functions.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     if (!headers_sent()) {
+        $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
         session_set_cookie_params([
             'lifetime' => 0,
             'path'     => '/',
+            'secure'   => $isHttps,
             'httponly' => true,
             'samesite' => 'Lax'
         ]);
@@ -18,8 +21,55 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-function currentUser(): ?array {
-    return $_SESSION['user'] ?? null;
+function currentUser(bool $forceRefresh = false): ?array {
+    static $cachedUser = null;
+    static $hasChecked = false;
+
+    if ($forceRefresh) {
+        $cachedUser = null;
+        $hasChecked = false;
+        return null;
+    }
+
+    if ($hasChecked) {
+        return $cachedUser;
+    }
+
+    if (empty($_SESSION['user']) || !is_array($_SESSION['user']) || empty($_SESSION['user']['id'])) {
+        $hasChecked = true;
+        $cachedUser = null;
+        return null;
+    }
+
+    // BUG-08: Re-check user status from DB to ensure session is still valid/active.
+    // If user is inactive or deleted, log them out immediately.
+    try {
+        $pdo = getDB();
+        $stmt = $pdo->prepare('SELECT id, nama, username, role, aktif FROM users WHERE id = ? LIMIT 1');
+        $stmt->execute([(int)$_SESSION['user']['id']]);
+        $dbUser = $stmt->fetch();
+
+        if (!$dbUser || empty($dbUser['aktif'])) {
+            doLogout();
+            $hasChecked = true;
+            $cachedUser = null;
+            return null;
+        }
+
+        // Keep session data synchronized with latest DB state
+        $_SESSION['user']['nama'] = $dbUser['nama'];
+        $_SESSION['user']['username'] = $dbUser['username'];
+        $_SESSION['user']['role'] = $dbUser['role'];
+        $_SESSION['user']['aktif'] = (int)$dbUser['aktif'];
+
+        $cachedUser = $_SESSION['user'];
+        $hasChecked = true;
+        return $cachedUser;
+    } catch (Throwable $e) {
+        $hasChecked = true;
+        $cachedUser = $_SESSION['user'];
+        return $cachedUser;
+    }
 }
 
 function requireLogin(): void {
@@ -60,8 +110,8 @@ function attemptLogin(string $username, string $password): bool {
     $isValid = false;
     if ($user && !empty($user['aktif']) && password_verify($password, $user['password_hash'])) {
         $isValid = true;
-    } elseif (isset($demoUsers[$username]) && $password === $username . '123') {
-        // Auto-heal demo account jika password cocok username123
+    } elseif (defined('APP_ENV') && APP_ENV === 'development' && isset($demoUsers[$username]) && $password === $username . '123') {
+        // Auto-heal demo account jika password cocok username123 (hanya di mode development)
         $demo = $demoUsers[$username];
         $newHash = password_hash($password, PASSWORD_BCRYPT);
         if ($user) {
@@ -91,19 +141,30 @@ function attemptLogin(string $username, string $password): bool {
         session_regenerate_id(true);
         unset($user['password_hash']);
         $_SESSION['user'] = $user;
-        logAudit(null, $user['id'], 'LOGIN', 'Login berhasil');
+        currentUser(true);
+        logAudit(null, (int)$user['id'], 'LOGIN', 'Login berhasil');
         return true;
     }
     return false;
 }
 
 function doLogout(): void {
-    $user = currentUser();
-    if ($user) {
-        logAudit(null, $user['id'], 'LOGOUT', 'Logout');
+    $user = $_SESSION['user'] ?? null;
+    if ($user && is_array($user) && !empty($user['id'])) {
+        logAudit(null, (int)$user['id'], 'LOGOUT', 'Logout');
     }
     $_SESSION = [];
-    session_destroy();
+    currentUser(true);
+    if (ini_get("session.use_cookies") && !headers_sent()) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $params["path"], $params["domain"],
+            $params["secure"], $params["httponly"]
+        );
+    }
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_destroy();
+    }
 }
 
 function logAudit(?int $mitraId, ?int $userId, string $aksi, string $detail = ''): void {
@@ -114,4 +175,37 @@ function logAudit(?int $mitraId, ?int $userId, string $aksi, string $detail = ''
     } catch (Throwable $e) {
         // Jangan sampai kegagalan audit log mengganggu alur utama aplikasi.
     }
+}
+
+/**
+ * CSRF Protection Helpers
+ */
+function csrfToken(): string {
+    if (empty($_SESSION['csrf_token']) || !is_string($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+function csrf_token(): string {
+    return csrfToken();
+}
+
+function csrfField(): string {
+    return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars(csrfToken(), ENT_QUOTES, 'UTF-8') . '">';
+}
+
+function csrf_field(): string {
+    return csrfField();
+}
+
+function verifyCsrfToken(?string $token): bool {
+    if (empty($_SESSION['csrf_token']) || !is_string($_SESSION['csrf_token']) || !is_string($token) || $token === '') {
+        return false;
+    }
+    return hash_equals($_SESSION['csrf_token'], $token);
+}
+
+function verify_csrf_token(?string $token): bool {
+    return verifyCsrfToken($token);
 }

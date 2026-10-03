@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.2] - 2026-10-04
+
+### Fixed
+- **Audit Forensik Menyeluruh, Hardening Keamanan, dan Perbaikan 149 Cacat Sistem (v2.4.2):**
+  - **Keamanan & Autentikasi (`includes/auth.php`, `login.php`, `logout.php`, `users_list.php`):**
+    - Membatasi auto-healing akun demo hanya pada lingkungan `development`.
+    - Menambahkan validasi tipe data `is_string()` untuk mencegah `TypeError` pada PHP 8.x saat menerima parameter array.
+    - Mengimplementasikan token CSRF pada modul manajemen pengguna (`users_list.php`) dan perutean logout aman.
+    - Memperbaiki validasi status sesi aktif pengguna pada database (`currentUser()`), sehingga akun yang dinonaktifkan langsung keluar.
+  - **Integritas Database & Konfigurasi (`config/database.php`, `config/env.php`, `includes/auto_migrate.php`):**
+    - Mengaktifkan `PDO::MYSQL_ATTR_MULTI_STATEMENTS => true` untuk eksekusi skrip migrasi multi-pernyataan.
+    - Menetapkan kode respons HTTP 500 saat koneksi database gagal.
+    - Memperbaiki deteksi subnet LAN IP RFC 1918 (172.16.x - 172.31.x) untuk mencegah kebocoran mode debug pada IP publik.
+    - Mengeliminasi query Cartesian cross-join pada pengecekan cepat skema (`ensureDatabaseSchema`).
+    - Menambahkan kolom `pic_focal_point` dan `uraian_kendala` pada `database/schema.sql`.
+  - **Logika Penilaian & Agregasi Scorecard V3 (`includes/functions.php`, `includes/data.php`, `scorecard.php`, `mitra_edit.php`):**
+    - Memperbaiki hierarki rekomendasi sehingga status `PERPANJANG` dapat tercapai sebelum evaluasi umum `E2`.
+    - Memperbaiki kalkulasi status evaluasi agar naskah yang belum dinilai tidak keliru berstatus `SIAP DIVALIDASI`.
+    - Menetapkan zona waktu sistem secara baku ke `Asia/Jakarta` (WIB) untuk mencegah deviasi tanggal.
+    - Memperbaiki pembulatan dini pada `aspekRataRata` dan menyelaraskan rentang pengukur gauge chart dengan standar V3.
+    - Mencegah manipulasi data evaluasi yang telah disetujui validator/pimpinan (`is_locked` tamper-proofing).
+    - Membungkus proses import file Scorecard ke dalam transaksi database atomik (PDO transaction).
+  - **Gate 0 & Baseline 12 Elemen (`gate0.php`, `baseline.php`, `import.php`):**
+    - Memperbaiki pemetaan jenis naskah 'Lainnya' menjadi 'PKS' saat usulan dipromosikan.
+    - Mengonversi format tanggal serial Excel menjadi format tanggal SQL valid (`Y-m-d`).
+    - Memperbaiki normalisasi status audit agar frasa "BELUM ADA" dan "TIDAK SESUAI" tidak keliru menjadi "TERVERIFIKASI".
+    - Mencegah duplikasi data PIC berkelanjutan saat pembaruan modal.
+    - Menambahkan overlay backdrop pada seluruh modal Gate 0 untuk mencegah klik tidak sengaja di latar belakang.
+  - **Early Warning, Tindak Lanjut & Antarmuka (`early_warning.php`, `tindak_lanjut.php`, `public/css/style.css`, `public/js/searchable_dropdown.js`):**
+    - Memperbaiki filter jadwal evaluasi agar memuat tenggat yang telah lewat/jatuh tempo.
+    - Menambahkan verifikasi magic-byte header ZIP/OpenXML untuk berkas Office (`.docx`, `.xlsx`).
+    - Memperbaiki penanganan tombol Enter dan blur pada komponen dropdown pencarian agar form tidak terkirim tanpa sengaja.
+    - Menambahkan direktif `@media print` `print-color-adjust: exact` dan merapikan tata letak tanda tangan eksekutif pada laporan cetak/PDF.
+
 ## [2.4.1] - 2026-10-02
 
 ### Fixed

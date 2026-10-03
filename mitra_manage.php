@@ -24,8 +24,13 @@ $mouOptions = $pdo->query("SELECT id, kode, nama_mitra, judul FROM mitra_kinerja
 /* ── MODAL QUICK UPLOAD SCAN PDF (dari Listing) ─────────── */
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'upload_scan_pdf') {
     $targetMitraId = (int)($_POST['target_mitra_id'] ?? 0);
-    if ($targetMitraId <= 0) {
-        $errors[] = 'Pilih naskah yang akan diunggah berkas scan-nya.';
+    // Bug 10.2: Verifikasi target_mitra_id benar-benar ada di database sebelum memproses file
+    $stmtM = $pdo->prepare('SELECT kode FROM mitra_kinerja WHERE id = ?');
+    $stmtM->execute([$targetMitraId]);
+    $kodeMitra = $stmtM->fetchColumn();
+
+    if ($targetMitraId <= 0 || !$kodeMitra) {
+        $errors[] = 'Naskah kerja sama yang dipilih tidak ditemukan dalam sistem.';
     } elseif (!isset($_FILES['scan_pdf']) || $_FILES['scan_pdf']['error'] !== UPLOAD_ERR_OK) {
         $errors[] = 'Pilih file scan berkas dalam format PDF yang valid.';
     } else {
@@ -33,10 +38,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
         if ($ext !== 'pdf' || !isPdfValid($_FILES['scan_pdf']['tmp_name'])) {
             $errors[] = 'File naskah wajib berformat .PDF asli (dokumen hasil scan fisik bertanda tangan, bukan hasil ketik atau berkas palsu).';
         } else {
-            $stmtM = $pdo->prepare('SELECT kode FROM mitra_kinerja WHERE id = ?');
-            $stmtM->execute([$targetMitraId]);
-            $kodeMitra = $stmtM->fetchColumn() ?: 'NASKAH';
-
             $targetName = 'scan_naskah_' . $kodeMitra . '_' . time() . '.pdf';
             $targetPath = __DIR__ . '/public/uploads/' . $targetName;
             if (move_uploaded_file($_FILES['scan_pdf']['tmp_name'], $targetPath)) {
@@ -51,6 +52,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                 logAudit($targetMitraId, $user['id'], 'UPLOAD_SCAN', 'Upload scan naskah PDF: ' . $kodeMitra);
                 $success = 'Berkas scan naskah PDF untuk ' . $kodeMitra . ' berhasil diunggah dan disinkronkan ke Identitas Baseline.';
             } else {
+                // Bug 5.5: Tambahkan pesan error jika move_uploaded_file gagal
                 $errors[] = 'Gagal menyimpan berkas scan naskah di server.';
             }
         }
@@ -89,6 +91,10 @@ if ($id > 0) {
         $bidang     = $_POST['bidang'] ?? ($mitra['bidang'] ?? 'AHU');
         $jenis      = $_POST['jenis'] ?? $mitra['jenis'];
         $pksIndukId = !empty($_POST['pks_induk_id']) ? (int)$_POST['pks_induk_id'] : null;
+        // Bug 5.4: Cegah referensi diri sendiri sebagai PKS Induk
+        if ($pksIndukId === $id) {
+            $pksIndukId = null;
+        }
         $mulai      = $_POST['tanggal_mulai'] ?: null;
         $berakhir   = $_POST['tanggal_berakhir'] ?: null;
         $statusTgl  = $_POST['status_tanggal'] ?? $mitra['status_tanggal'];
@@ -100,6 +106,7 @@ if ($id > 0) {
 
         // Upload File Naskah (Khusus PDF Scanned)
         $fileNaskah = $mitra['file_naskah'] ?? null;
+        $newFileUploaded = false;
         if (isset($_FILES['file_naskah']) && $_FILES['file_naskah']['error'] === UPLOAD_ERR_OK) {
             $ext = strtolower(pathinfo($_FILES['file_naskah']['name'], PATHINFO_EXTENSION));
             if ($ext === 'pdf' && isPdfValid($_FILES['file_naskah']['tmp_name'])) {
@@ -107,6 +114,10 @@ if ($id > 0) {
                 $targetPath = __DIR__ . '/public/uploads/' . $targetName;
                 if (move_uploaded_file($_FILES['file_naskah']['tmp_name'], $targetPath)) {
                     $fileNaskah = 'public/uploads/' . $targetName;
+                    $newFileUploaded = true;
+                } else {
+                    // Bug 5.5: Cek hasil move_uploaded_file
+                    $errors[] = 'Gagal menyimpan berkas scan naskah di server.';
                 }
             } else {
                 $errors[] = 'File naskah wajib berformat .PDF asli (hasil scan fisik bertanda tangan, bukan hasil ketik atau berkas palsu).';
@@ -122,6 +133,9 @@ if ($id > 0) {
                 $targetPath = __DIR__ . '/public/uploads/' . $targetName;
                 if (move_uploaded_file($_FILES['foto_kerjasama']['tmp_name'], $targetPath)) {
                     $fotoKerjasama = 'public/uploads/' . $targetName;
+                } else {
+                    // Bug 5.5: Cek hasil move_uploaded_file
+                    $errors[] = 'Gagal menyimpan berkas foto kerja sama di server.';
                 }
             } else {
                 $errors[] = 'Foto dokumentasi wajib berformat gambar valid (JPG, PNG, atau WebP).';
@@ -133,8 +147,8 @@ if ($id > 0) {
         } elseif (empty($errors)) {
             $stmtU = $pdo->prepare('UPDATE mitra_kinerja SET nama_mitra=?, judul=?, portofolio=?, bidang=?, jenis=?, pks_induk_id=?, tanggal_mulai=?, tanggal_berakhir=?, status_tanggal=?, cutoff_date=?, sumber_baseline=?, pic_internal=?, pic_mitra=?, evaluasi_per_tahun=?, file_naskah=?, foto_kerjasama=? WHERE id=?');
             $stmtU->execute([$namaMitra, $judul, $portofolio, $bidang, $jenis, $pksIndukId, $mulai, $berakhir, $statusTgl, $cutoff, $sumber, $picInternal, $picMitra, $evaluasiPerTahun, $fileNaskah, $fotoKerjasama, $id]);
-            if ($fileNaskah) {
-                // Sinkronkan ke Baseline Elemen 1 (Identitas naskah)
+            // Bug 5.6: Hanya perbarui status baseline elemen 1 ke TERVERIFIKASI jika berkas baru benar-benar diunggah
+            if ($newFileUploaded && $fileNaskah) {
                 $stmtB = $pdo->prepare("UPDATE baseline_elemen SET link_sumber_bukti = ?, status = 'TERVERIFIKASI' WHERE mitra_id = ? AND nomor_elemen = 1");
                 $stmtB->execute([$fileNaskah, $id]);
             }
@@ -191,6 +205,7 @@ if ($id > 0) {
         <select name="pks_induk_id">
             <option value="">- Tidak ada (Bukan Turunan) -</option>
             <?php foreach ($mouOptions as $mou): ?>
+            <?php if ((int)$mou['id'] === $id) continue; // Bug 5.4: Hindari memilih diri sendiri sebagai induk ?>
             <option value="<?= $mou['id'] ?>" <?= (int)($mitra['pks_induk_id'] ?? 0) === (int)$mou['id'] ? 'selected' : '' ?>><?= h($mou['kode']) ?> &mdash; <?= h(singkat($mou['nama_mitra'], 35)) ?></option>
             <?php endforeach; ?>
         </select>
@@ -338,6 +353,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
             $targetPath = __DIR__ . '/public/uploads/' . $targetName;
             if (move_uploaded_file($_FILES['file_naskah_pdf']['tmp_name'], $targetPath)) {
                 $fileNaskah = 'public/uploads/' . $targetName;
+            } else {
+                // Bug 5.5: Cek hasil move_uploaded_file
+                $errors[] = 'Gagal menyimpan berkas scan naskah PDF ke server.';
             }
         } else {
             $errors[] = 'File naskah wajib berformat .PDF asli (hasil scan fisik bertanda tangan, bukan hasil ketik atau berkas palsu).';
@@ -347,10 +365,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
     if ($kode === '' || $namaMitra === '') {
         $errors[] = 'Kode dan Nama Mitra wajib diisi.';
     } elseif (empty($errors)) {
+        // Bug 5.1: Bungkus pembuatan mitra multi-tabel dalam transaksi database PDO
+        $pdo->beginTransaction();
         try {
             $pksInduk = !empty($_POST['pks_induk_id']) ? (int)$_POST['pks_induk_id'] : null;
-            $stmt = $pdo->prepare('INSERT INTO mitra_kinerja (kode, portofolio, nama_mitra, judul, bidang, jenis, pks_induk_id, tanggal_mulai, tanggal_berakhir, status_tanggal, evaluasi_per_tahun, pic_internal, pic_mitra, file_naskah) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-            $stmt->execute([$kode, $portofolio, $namaMitra, $judul, $bidang, $jenis, $pksInduk, $mulai, $berakhir, $statusTgl, $evaluasiPerTahun, $picInternal, $picMitra, $fileNaskah]);
+            // Bug 10.4: Set default cutoff_date (tanggal mulai atau hari ini) agar EWS Masa Berlaku berfungsi
+            $cutoff = !empty($_POST['cutoff_date']) ? $_POST['cutoff_date'] : ($mulai ?: date('Y-m-d'));
+
+            $stmt = $pdo->prepare('INSERT INTO mitra_kinerja (kode, portofolio, nama_mitra, judul, bidang, jenis, pks_induk_id, tanggal_mulai, tanggal_berakhir, status_tanggal, cutoff_date, evaluasi_per_tahun, pic_internal, pic_mitra, file_naskah) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+            $stmt->execute([$kode, $portofolio, $namaMitra, $judul, $bidang, $jenis, $pksInduk, $mulai, $berakhir, $statusTgl, $cutoff, $evaluasiPerTahun, $picInternal, $picMitra, $fileNaskah]);
             $mid = $pdo->lastInsertId();
 
             // Simpan Rencana Kerja Tahunan Awal jika diisi
@@ -364,7 +387,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
                 $stmtRK->execute([$mid, $rkJudul, $rkRuang, $rkMulai, $rkSelesai, 'Disetujui']);
             }
 
-            // Inisialisasi 7 Indikator V2.1
+            // Bug 10.3: Inisialisasi Siklus Monev Berkala saat mitra baru dibuat
+            $keb = hitungKebutuhanScorecard($mulai, $berakhir, $evaluasiPerTahun);
+            if (!empty($keb['milestones'])) {
+                foreach ($keb['milestones'] as $ms) {
+                    $statusSiklus = !empty($ms['is_past']) ? 'Perlu Penilaian Segera' : 'Menunggu';
+                    $pdo->prepare('INSERT INTO siklus_monev (mitra_id, siklus_ke, nama_siklus, tanggal_target_evaluasi, status_siklus) VALUES (?, ?, ?, ?, ?)')
+                        ->execute([$mid, $ms['siklus_ke'], $ms['nama'], $ms['target_tgl'], $statusSiklus]);
+                }
+            }
+
+            // Inisialisasi 7 Indikator V2.1 / V3
             $v2Defaults = [
                 ['I1', 'Kejelasan Pengelolaan & Rencana Tindak Lanjut', 10],
                 ['I2', 'Implementasi / Tindak Lanjut', 15],
@@ -388,14 +421,36 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
                     ->execute([$mid, $n, $d['kelompok'], $d['nama'], $d['yang_diperiksa'], $d['sumber_minimum'], $linkInit, $statusInit]);
             }
 
-            foreach (['Masa berlaku','Aktivitas/tenggat','Data/eviden','PIC'] as $d) { $pdo->prepare("INSERT INTO early_warning (mitra_id,dimensi,status,progres) VALUES (?,?,'V0','BELUM MULAI')")->execute([$mid,$d]); }
-            $pemicu = ['Keterlambatan pelaksanaan','Perubahan kebijakan','Pengurangan anggaran','Konflik kepentingan','Risiko hukum'];
-            foreach ($pemicu as $i => $t) { $pdo->prepare('INSERT INTO intervensi_pimpinan (mitra_id,no_pemicu,pemicu_teks) VALUES (?,?,?)')->execute([$mid,$i+1,$t]); }
+            foreach (['Masa berlaku','Aktivitas/tenggat','Data/eviden','PIC'] as $d) {
+                $pdo->prepare("INSERT INTO early_warning (mitra_id,dimensi,status,progres) VALUES (?,?,'V0','BELUM MULAI')")->execute([$mid,$d]);
+            }
+
+            // Bug 10.1: Gunakan teks 5 pemicu standar saat seeding intervensi_pimpinan
+            $pemicu = [
+                'Perlu keputusan perpanjangan/addendum/evaluasi/pengakhiran',
+                'Hambatan lintas unit di luar kewenangan PIC/unit',
+                'Butuh anggaran/SDM/fasilitas di luar kewenangan unit',
+                'Komitmen material mitra tidak dipenuhi',
+                'Ada risiko hukum, reputasi, atau strategis yang material'
+            ];
+            foreach ($pemicu as $i => $t) {
+                $pdo->prepare('INSERT INTO intervensi_pimpinan (mitra_id,no_pemicu,pemicu_teks,jawaban) VALUES (?,?,?, \'BELUM DIPASTIKAN\')')->execute([$mid, $i+1, $t]);
+            }
+
             $pdo->prepare("INSERT INTO validasi (mitra_id, status) VALUES (?, 'BELUM')")->execute([$mid]);
+
+            // Bug 5.2: Panggil syncStatusScorecard agar status terinisialisasi dengan benar (menjadi 'BELUM DINILAI')
+            syncStatusScorecard($pdo, $mid);
+
+            $pdo->commit();
+
             logAudit($mid, $user['id'], 'CREATE_MITRA', 'Naskah baru: '.$kode);
             $success = 'Naskah '.$kode.' berhasil ditambahkan.';
-        } catch (PDOException $e) {
-            $errors[] = str_contains($e->getMessage(),'Duplicate') ? 'Kode sudah ada.' : 'Gagal membuat: ' . $e->getMessage();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $errors[] = str_contains($e->getMessage(),'Duplicate') ? 'Kode sudah ada.' : 'Gagal membuat naskah: ' . $e->getMessage();
         }
     }
 }
@@ -500,12 +555,31 @@ require __DIR__ . '/includes/header.php';
             <div class="muted" style="font-size:11px;margin-top:2px;">Berapa kali kegiatan evaluasi rencana kerja dilakukan per tahun (default: 4). Contoh: 36 bulan durasi &amp; 4 kali/tahun &rarr; 9 kali target evaluasi.</div>
         </div>
         <div class="field"><label>Status Tanggal</label><select name="status_tanggal"><option>BELUM TERVERIFIKASI</option><option>TERVERIFIKASI</option></select></div>
+        <div class="field"><label>Tanggal Cut-off Baseline</label><input type="date" name="cutoff_date"><div class="muted" style="font-size:11px;margin-top:2px;">Tanggal acuan cutoff baseline &amp; EWS masa berlaku (default: tanggal mulai).</div></div>
         
         <div class="field"><label>PIC Internal</label><input type="text" name="pic_internal" placeholder="Nama & kontak PIC Kanwil"></div>
         <div class="field"><label>PIC Mitra</label><input type="text" name="pic_mitra" placeholder="Nama & kontak PIC Mitra"></div>
 
-        <!-- Upload Scan Naskah PDF -->
+        <!-- Bug 5.3: Input Rencana Kerja Tahunan Awal pada form tambah naskah -->
+        <div class="field" style="grid-column:1/-1;border-top:1px dashed #cbd5e1;padding-top:12px;margin-top:6px;">
+            <label style="font-weight:600;color:#1e40af;">Rencana Kerja Tahunan Awal (Opsional)</label>
+            <div class="muted" style="font-size:11px;margin-bottom:6px;">Jika sudah ada rencana kerja tahunan/program aksi awal, dapat langsung didaftarkan di sini.</div>
+        </div>
         <div class="field" style="grid-column:1/-1;">
+            <label>Judul Rencana Kerja Tahunan</label>
+            <input type="text" name="rencana_judul" placeholder="Contoh: Rencana Aksi Sosialisasi Kekayaan Intelektual 2026">
+        </div>
+        <div class="field">
+            <label>Tahun Rencana Kerja</label>
+            <input type="number" name="rencana_tahun" value="<?= date('Y') ?>" min="2020" max="2050">
+        </div>
+        <div class="field">
+            <label>Ruang Lingkup Rencana Kerja</label>
+            <input type="text" name="rencana_ruang_lingkup" placeholder="Fokus kegiatan tahun berjalan">
+        </div>
+
+        <!-- Upload Scan Naskah PDF -->
+        <div class="field" style="grid-column:1/-1;border-top:1px dashed #cbd5e1;padding-top:12px;margin-top:6px;">
             <label>Upload Scan Naskah Asli (.PDF)</label>
             <input type="file" name="file_naskah_pdf" accept=".pdf">
             <div class="muted" style="font-size:11px;margin-top:2px;">Khusus dokumen resmi fisik hasil scan bertanda tangan para pihak (bukan naskah ketik/draft).</div>

@@ -11,14 +11,13 @@ require_once __DIR__ . '/includes/data.php';
 require_once __DIR__ . '/includes/ai_service.php';
 requireLogin();
 
+$user = currentUser();
+
 // Set timezone ke WIB
 date_default_timezone_set('Asia/Jakarta');
 
 header('Content-Type: application/json; charset=utf-8');
 
-$pdo = getDB();
-$all = getAllMitraSummary($pdo);
-$stats = getDashboardStats($all);
 $forceRefresh = (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST');
 
 if (!defined('AI_ENABLED') || !AI_ENABLED) {
@@ -44,7 +43,7 @@ if (!$geminiOk && !$openrouterOk && !$groqOk) {
     exit;
 }
 
-// Coba ambil dari cache dulu
+// Coba ambil dari cache dulu SEBELUM query database yang berat
 if (!$forceRefresh) {
     $cached = getCachedInsight();
     if ($cached) {
@@ -60,8 +59,28 @@ if (!$forceRefresh) {
     }
 }
 
-// Generate payload
+if (!function_exists('curl_init')) {
+    $errorResp = [
+        'success' => false,
+        'error' => 'CURL_MISSING',
+        'message' => 'Gagal mengambil analisis dari AI.',
+        'detail' => 'cURL extension tidak tersedia di server.',
+    ];
+    if (($user['role'] ?? '') === 'admin') {
+        $errorResp['debug_url'] = 'ai_debug.php';
+    }
+    echo json_encode($errorResp);
+    exit;
+}
+
+// Ambil data dari database untuk generate payload
+$pdo = getDB();
+$all = getAllMitraSummary($pdo);
+$stats = getDashboardStats($all);
 $payload = generateInsightPayload($pdo, $all, $stats);
+
+// Lepas session lock sebelum external AI network call
+session_write_close();
 
 // Panggil AI — triple fallback: Gemini → OpenRouter → Groq
 $aiResult = generateNewInsight($payload);
@@ -81,15 +100,14 @@ if ($aiResult) {
 } else {
     $errorDetail = 'Semua provider gagal (Gemini, OpenRouter, Groq).';
     
-    if (!function_exists('curl_init')) {
-        $errorDetail = 'cURL extension tidak tersedia di server.';
-    }
-    
-    echo json_encode([
+    $errorResp = [
         'success' => false,
         'error' => 'API_ERROR',
         'message' => 'Gagal mengambil analisis dari AI.',
         'detail' => $errorDetail,
-        'debug_url' => 'ai_debug.php',
-    ]);
+    ];
+    if (($user['role'] ?? '') === 'admin') {
+        $errorResp['debug_url'] = 'ai_debug.php';
+    }
+    echo json_encode($errorResp);
 }

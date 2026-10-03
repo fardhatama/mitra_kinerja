@@ -60,10 +60,15 @@ require __DIR__ . '/includes/header.php';
                 <td><?= h($m['nama_mitra']) ?></td>
                 <td><span class="badge badge-secondary" style="font-size:11px;font-weight:600;"><?= h($m['bidang'] ?? 'AHU') ?></span></td>
                 <td><?= formatTanggal($m['tanggal_berakhir']) ?></td>
-                <td><?= $s['nilai_berjalan'] > 0 ? number_format($s['nilai_berjalan'], 2) : '-' ?></td>
+                <td><?= $s['nilai_final'] !== null ? number_format($s['nilai_final'], 2) : '-' ?></td>
                 <td><span class="badge badge-<?= warnaKategori($s['kategori']) ?>"><?= h($s['kategori']) ?></span></td>
                 <td><span class="badge badge-secondary" style="font-size:11px;"><?= h($s['posisi_portofolio']) ?></span></td>
-                <td><span class="badge badge-warning" style="font-size:11px;"><?= h($s['rekomendasi']) ?></span></td>
+                <td>
+                    <?php $rekHead = explode("\n", trim($s['rekomendasi'] ?? '-'))[0] ?: '-'; ?>
+                    <span class="badge badge-warning" style="font-size:10.5px;max-width:160px;white-space:normal;display:inline-block;line-height:1.2;text-align:left;" title="<?= h($s['rekomendasi']) ?>">
+                        <?= h(singkat($rekHead, 45)) ?>
+                    </span>
+                </td>
                 <td><span class="badge badge-<?= warnaWarning($s['warning']['status']) ?>"><?= h($s['warning']['label']) ?></span></td>
                 <td><?= h($s['status_scorecard']) ?></td>
             </tr>
@@ -83,11 +88,11 @@ require __DIR__ . '/includes/header.php';
         <?php foreach (ASPEK_LABELS as $kode => $label):
             $val = $stats['aspekRataRata'][$kode] ?? 0;
             $maxScore = BOBOT_INDIKATOR[$kode];
-            $pct = $maxScore > 0 ? round($val / $maxScore * 100) : 0;
+            $pct = $maxScore > 0 ? min(100, round(($val / $maxScore) * 100)) : 0;
         ?>
             <tr>
                 <td><strong><?= $label ?></strong> (<?= h($kode) ?>)</td>
-                <td><?= $val ?> / <?= $maxScore ?></td>
+                <td><?= is_float($val) && $val != (int)$val ? number_format($val, 1) : $val ?> / <?= $maxScore ?></td>
                 <td>
                     <div class="hbar-track" style="display:inline-block;vertical-align:middle;width:120px;height:14px;">
                         <div class="hbar-fill" style="width:<?= $pct ?>%;background:linear-gradient(90deg,#2563eb,#60a5fa);"></div>
@@ -127,21 +132,21 @@ require __DIR__ . '/includes/header.php';
 
 <!-- Lembar Tanda Tangan Resmi (Cetak) -->
 <div class="signature-block" style="display:none;margin-top:40px;page-break-inside:avoid;">
-    <table style="width:100%;border:none;background:none;">
-        <tr style="border:none;">
-            <td style="border:none;width:50%;text-align:center;font-size:12pt;vertical-align:top;">
+    <table class="signature-table" style="width:100%;border:none !important;background:none !important;">
+        <tr style="border:none !important;">
+            <td style="border:none !important;width:50%;text-align:center;font-size:11pt !important;vertical-align:top;background:none !important;">
                 <div>Mengetahui,</div>
                 <div style="font-weight:700;">Koordinator Tim Efektif</div>
                 <div style="height:70px;"></div>
                 <div style="font-weight:700;text-decoration:underline;">Kepala Bagian Tata Usaha &amp; Umum</div>
-                <div style="font-size:10pt;">Kanwil Kementerian Hukum Kepulauan Riau</div>
+                <div style="font-size:9.5pt;">Kanwil Kementerian Hukum Kepulauan Riau</div>
             </td>
-            <td style="border:none;width:50%;text-align:center;font-size:12pt;vertical-align:top;">
+            <td style="border:none !important;width:50%;text-align:center;font-size:11pt !important;vertical-align:top;background:none !important;">
                 <div>Tanjungpinang, <?= formatTanggalPanjang(date('Y-m-d')) ?></div>
                 <div style="font-weight:700;">Kepala Kantor Wilayah</div>
                 <div style="height:70px;"></div>
                 <div style="font-weight:700;text-decoration:underline;">EDISON MANIK, S.H., M.Si.</div>
-                <div style="font-size:10pt;">NIP. 19780217 200112 1 002</div>
+                <div style="font-size:9.5pt;">NIP. 19780217 200112 1 002</div>
             </td>
         </tr>
     </table>

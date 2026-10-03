@@ -6,7 +6,7 @@
  * Kunci API hardcoded telah disanitasi.
  */
 
-define('AI_ENABLED', false);
+define('AI_ENABLED', filter_var(getenv('AI_ENABLED'), FILTER_VALIDATE_BOOLEAN));
 
 /* ── 1. Google Gemini (PRIMARY) ─────────────────────────── */
 define('GEMINI_API_KEY', getenv('GEMINI_API_KEY') ?: '');
@@ -15,7 +15,7 @@ define('GEMINI_API_URL', 'https://generativelanguage.googleapis.com/v1/models/')
 
 /* ── 2. OpenRouter (FALLBACK #1) ───────────────────────── */
 define('OPENROUTER_API_KEY', getenv('OPENROUTER_API_KEY') ?: '');
-define('OPENROUTER_MODEL', getenv('OPENROUTER_MODEL') ?: 'google/gemini-2.0-flash-exp:free');
+define('OPENROUTER_MODEL', getenv('OPENROUTER_MODEL') ?: 'google/gemini-2.0-flash-001');
 define('OPENROUTER_API_URL', 'https://openrouter.ai/api/v1/chat/completions');
 
 /* ── 3. Groq (FALLBACK #2) ─────────────────────────────── */

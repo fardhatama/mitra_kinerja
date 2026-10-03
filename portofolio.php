@@ -16,7 +16,7 @@ require __DIR__ . '/includes/header.php';
         <div class="muted" style="font-size:13px;">Rekap status dan evaluasi kerja sama</div>
     </div>
     <a href="dashboard.php" class="btn btn-outline btn-sm">&larr; Dashboard</a>
-    <?php if (in_array(currentUser()['role'], ['admin','pemeriksa'])): ?>
+    <?php if (in_array(currentUser()['role'], ['admin','pemeriksa','pengampu'])): ?>
     <a href="mitra_manage.php" class="btn btn-primary btn-sm">+ Tambah Naskah</a>
     <?php endif; ?>
 </div>
@@ -81,7 +81,7 @@ require __DIR__ . '/includes/header.php';
         </thead>
         <tbody>
         <?php foreach ($all as $s): $m = $s['mitra']; ?>
-            <tr data-portofolio="<?= h($m['portofolio']) ?>" data-bidang="<?= h($m['bidang'] ?? 'AHU') ?>" data-kategori="<?= h($s['kategori']) ?>" data-status="<?= h($s['status_scorecard']) ?>" data-posisi="<?= h($s['posisi_portofolio']) ?>" data-rekomendasi="<?= h($s['rekomendasi']) ?>">
+            <tr data-portofolio="<?= h($m['portofolio']) ?>" data-bidang="<?= h($m['bidang'] ?? 'AHU') ?>" data-kategori="<?= h($s['kategori']) ?>" data-status="<?= h($s['status_scorecard']) ?>" data-posisi="<?= h($s['posisi_portofolio']) ?>" data-rekomendasi="<?= h($s['rekomendasi']) ?>" data-rekomendasi-key="<?= h(ekstrakKeywordRekomendasi($s['rekomendasi'])) ?>">
                 <td><strong><?= h($m['kode']) ?></strong></td>
                 <td><?= h($m['portofolio']) ?></td>
                 <td><?= h($m['nama_mitra']) ?></td>
@@ -102,7 +102,7 @@ require __DIR__ . '/includes/header.php';
                 <td><?= h($s['status_scorecard']) ?></td>
                 <td><span class="badge badge-<?= warnaWarning($s['warning']['status']) ?>"><?= h($s['warning']['label']) ?></span></td>
                 <td>
-                    <?php if (in_array(currentUser()['role'], ['admin','pemeriksa'])): ?>
+                    <?php if (in_array(currentUser()['role'], ['admin','pemeriksa','pengampu'])): ?>
                     <a href="mitra_manage.php?id=<?= $m['id'] ?>" class="btn btn-outline btn-sm">Edit</a>
                     <?php endif; ?>
                     <a href="mitra_edit.php?id=<?= $m['id'] ?>" class="btn btn-outline btn-sm">Scorecard</a>
@@ -131,8 +131,20 @@ function applyFilters() {
         var matchP = !p || tr.dataset.portofolio === p;
         var matchB = !b || tr.dataset.bidang === b;
         var matchK = !k || tr.dataset.kategori === k;
+
+        // Mendukung posisi portofolio deskriptif / hasil audit V3
         var matchPos = !pos || tr.dataset.posisi === pos;
-        var matchRek = !rek || tr.dataset.rekomendasi === rek;
+        if (pos && !matchPos) {
+            var pUpper = (tr.dataset.posisi || '').toUpperCase();
+            if (pos === 'BERDAMPAK' && (pUpper.indexOf('DAMPAK') !== -1 || pUpper.indexOf('BERDAMPAK') !== -1)) matchPos = true;
+            else if (pos === 'OUTCOME TERBENTUK' && pUpper.indexOf('OUTCOME') !== -1) matchPos = true;
+            else if (pos === 'OUTPUT TERSEDIA' && pUpper.indexOf('OUTPUT') !== -1) matchPos = true;
+            else if (pos === 'AKTIF' && (pUpper.indexOf('AKTIF') !== -1 || (pUpper.indexOf('IMPLEMENTASI') !== -1 && pUpper.indexOf('BELUM') === -1 && pUpper.indexOf('MASA IMPLEMENTASI AWAL') === -1))) matchPos = true;
+            else if (pos === 'BELUM DAPAT DITENTUKAN' && (pUpper.indexOf('BELUM') !== -1 || pUpper.indexOf('MASA IMPLEMENTASI') !== -1)) matchPos = true;
+        }
+
+        // Cek apakah dataset.rekomendasi mengandung keyword terpilih (atau match key)
+        var matchRek = !rek || (tr.dataset.rekomendasi && tr.dataset.rekomendasi.toUpperCase().indexOf(rek.toUpperCase()) !== -1) || (tr.dataset.rekomendasiKey && tr.dataset.rekomendasiKey === rek);
         var matchS = !s || tr.dataset.status === s;
         tr.style.display = (matchQ && matchP && matchB && matchK && matchPos && matchRek && matchS) ? '' : 'none';
     });

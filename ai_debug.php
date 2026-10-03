@@ -24,7 +24,7 @@ require_once __DIR__ . '/includes/ai_config.php';
 <div class="c p">PHP: <?= phpversion() ?></div>
 
 <h2>2. API Key</h2>
-<?php $ph = GEMINI_API_KEY === 'ISI_API_KEY_ANDA_DI_SINI'; ?>
+<?php $ph = empty(GEMINI_API_KEY) || GEMINI_API_KEY === 'ISI_API_KEY_ANDA_DI_SINI'; ?>
 <div class="c <?= $ph?'f':'p' ?>">
     Key: <?= $ph?'❌ BELUM DIISI':'✅ '.substr(GEMINI_API_KEY,0,8).'...' ?>
 </div>
@@ -48,9 +48,13 @@ function doTest(){
     el.innerHTML='<div class="c w">⏳ Menghubungi Gemini API...</div>';
     fetch('ai_debug_raw.php').then(function(r){return r.json()}).then(function(d){
         if(d.success){
-            el.innerHTML='<div class="c p"><strong>✅ BERHASIL!</strong><pre>'+d.ai_response.replace(/</g,'&lt;')+'</pre></div>';
+            var resp = (d.gemini && d.gemini.ai_response) || (d.openrouter && d.openrouter.ai_response) || (d.groq && d.groq.ai_response) || d.ai_response || '';
+            var prov = (d.gemini && d.gemini.success) ? 'Gemini' : ((d.openrouter && d.openrouter.success) ? 'OpenRouter' : ((d.groq && d.groq.success) ? 'Groq' : ''));
+            el.innerHTML='<div class="c p"><strong>✅ BERHASIL! '+(prov ? '('+prov+')' : '')+'</strong><pre>'+String(resp).replace(/</g,'&lt;')+'</pre></div>';
         } else {
-            el.innerHTML='<div class="c f"><strong>❌ GAGAL</strong><br>HTTP: '+d.http_code+'<br>cURL Error: '+(d.curl_error||'none')+'<pre>'+JSON.stringify(d,null,2).replace(/</g,'&lt;')+'</pre></div>';
+            var httpCode = (d.gemini && d.gemini.http_code) || (d.openrouter && d.openrouter.http_code) || (d.groq && d.groq.http_code) || d.http_code || 'N/A';
+            var curlErr = (d.gemini && d.gemini.curl_error) || (d.openrouter && d.openrouter.curl_error) || (d.groq && d.groq.curl_error) || d.curl_error || 'none';
+            el.innerHTML='<div class="c f"><strong>❌ GAGAL</strong><br>HTTP: '+httpCode+'<br>cURL Error: '+curlErr+'<pre>'+JSON.stringify(d,null,2).replace(/</g,'&lt;')+'</pre></div>';
         }
     }).catch(function(e){el.innerHTML='<div class="c f">Error: '+e.message+'</div>'});
 }

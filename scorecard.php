@@ -157,171 +157,275 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && in_array(($_POST['action'] 
                         $weights = ['I1' => 10, 'I2' => 15, 'I3' => 15, 'I4' => 20, 'I5' => 20, 'I6' => 10, 'I7' => 10];
                         $updatedScorecard = 0;
 
-                        foreach ($scRows as $rIdx => $row) {
-                            $col1 = strtoupper(trim((string)($row[1] ?? '')));
-                            if (!preg_match('/^(I[1-7])(?:\.|\b)/', $col1, $mCode)) continue;
-                            $kodeInd = $mCode[1];
+                        // Bug 1.2: Wrap multi-row Excel import in a PDO database transaction
+                        $pdo->beginTransaction();
+                        try {
+                            foreach ($scRows as $rIdx => $row) {
+                                $col1 = strtoupper(trim((string)($row[1] ?? '')));
+                                if (!preg_match('/^(I[1-7])(?:\.|\b)/', $col1, $mCode)) continue;
+                                $kodeInd = $mCode[1];
 
-                            $bobot = isset($weights[$kodeInd]) ? $weights[$kodeInd] : (int)($row[2] ?? 10);
+                                $bobot = isset($weights[$kodeInd]) ? $weights[$kodeInd] : (int)($row[2] ?? 10);
 
-                            if ($isPenilaianLayout) {
-                                $kondisiBaseline = trim((string)($row[4] ?? ''));
-                                $kondisi = trim((string)($row[5] ?? ''));
-                                $rawStatus = strtoupper(trim((string)($row[6] ?? '')));
-                                $evidenceLoc = trim((string)($row[7] ?? ''));
-                                $rawSkor = trim((string)($row[8] ?? ''));
-                                $alasanSkor = trim((string)($row[10] ?? ''));
-                                $catatanTl = trim((string)($row[11] ?? ''));
+                                if ($isPenilaianLayout) {
+                                    $kondisiBaseline = trim((string)($row[4] ?? ''));
+                                    $kondisi = trim((string)($row[5] ?? ''));
+                                    $rawStatus = strtoupper(trim((string)($row[6] ?? '')));
+                                    $evidenceLoc = trim((string)($row[7] ?? ''));
+                                    $rawSkor = trim((string)($row[8] ?? ''));
+                                    $alasanSkor = trim((string)($row[10] ?? ''));
+                                    $catatanTl = trim((string)($row[11] ?? ''));
+                                } else {
+                                    $kondisiBaseline = trim((string)($row[3] ?? ''));
+                                    $rawStatus = strtoupper(trim((string)($row[5] ?? '')));
+                                    $kondisi = trim((string)($row[6] ?? ''));
+                                    $rawSkor = trim((string)($row[7] ?? ''));
+                                    $alasanSkor = trim((string)($row[8] ?? ''));
+                                    $catatanTl = trim((string)($row[9] ?? ''));
+                                    $evidenceLoc = '';
+                                }
+
+                                // Normalisasi status pemeriksaan
+                                $statusPem = 'BELUM DITELAAH';
+                                if (str_contains($rawStatus, 'BELUM DAPAT') || str_contains($rawStatus, 'BELUM DINILAI')) {
+                                    $statusPem = 'BELUM DAPAT DINILAI';
+                                } elseif (str_contains($rawStatus, 'DAPAT DINILAI') || (str_contains($rawStatus, 'MEMADAI') && !str_contains($rawStatus, 'BELUM'))) {
+                                    $statusPem = 'BUKTI MEMADAI';
+                                } elseif (str_contains($rawStatus, 'CUKUP')) {
+                                    $statusPem = 'BUKTI CUKUP';
+                                } elseif (str_contains($rawStatus, 'BELUM MEMADAI')) {
+                                    $statusPem = 'BUKTI BELUM MEMADAI';
+                                }
+
+                                // Bug 1.1: Range-clamp imported scores max(0, min(4, $rawSkor)), and set score to null if status is not DAPAT DINILAI / BUKTI MEMADAI
+                                if (in_array($statusPem, ['DAPAT DINILAI', 'BUKTI MEMADAI', 'BUKTI CUKUP'], true) && is_numeric($rawSkor)) {
+                                    $skor = max(0, min(4, (int)$rawSkor));
+                                    $nilai = round(($skor / 4.0) * $bobot, 2);
+                                } else {
+                                    $skor = null;
+                                    $nilai = null;
+                                }
+
+                                // Update atau insert ke indikator_skor
+                                $stmtCheck = $pdo->prepare('SELECT id FROM indikator_skor WHERE mitra_id = ? AND kode_indikator = ?');
+                                $stmtCheck->execute([$targetId, $kodeInd]);
+                                if ($stmtCheck->fetch()) {
+                                    // Bug 7.2: Include bobot in UPDATE query
+                                    // Bug 1.4: If sheet name is SCORECARD, don't overwrite temuan_bukti with empty string if not found
+                                    if ($isPenilaianLayout || $evidenceLoc !== '') {
+                                        $stmtU = $pdo->prepare('UPDATE indikator_skor SET bobot = ?, status_pemeriksaan = ?, kondisi_baseline = ?, kondisi_saat_ini = ?, temuan_bukti = ?, skor = ?, alasan_skor = ?, catatan_tindak_lanjut = ?, nilai = ?, referensi_baseline = ? WHERE mitra_id = ? AND kode_indikator = ?');
+                                        $stmtU->execute([$bobot, $statusPem, $kondisiBaseline, $kondisi, $evidenceLoc, $skor, $alasanSkor, $catatanTl, $nilai, $kondisiBaseline, $targetId, $kodeInd]);
+                                    } else {
+                                        $stmtU = $pdo->prepare('UPDATE indikator_skor SET bobot = ?, status_pemeriksaan = ?, kondisi_baseline = ?, kondisi_saat_ini = ?, skor = ?, alasan_skor = ?, catatan_tindak_lanjut = ?, nilai = ?, referensi_baseline = ? WHERE mitra_id = ? AND kode_indikator = ?');
+                                        $stmtU->execute([$bobot, $statusPem, $kondisiBaseline, $kondisi, $skor, $alasanSkor, $catatanTl, $nilai, $kondisiBaseline, $targetId, $kodeInd]);
+                                    }
+                                } else {
+                                    // Bug 7.3: Do not overwrite deskripsi with generic "Indikator $kodeInd" if a valid description already exists
+                                    $stdDeskripsi = [
+                                        'I1' => 'Pengelolaan & RTL',
+                                        'I2' => 'Implementasi',
+                                        'I3' => 'Output',
+                                        'I4' => 'Outcome',
+                                        'I5' => 'Dampak',
+                                        'I6' => 'Evidence & Data',
+                                        'I7' => 'Risiko & Keberlanjutan',
+                                    ];
+                                    $deskripsiInit = $stdDeskripsi[$kodeInd] ?? "Indikator $kodeInd";
+                                    $stmtI = $pdo->prepare('INSERT INTO indikator_skor (mitra_id, kode_indikator, deskripsi, bobot, referensi_baseline, kondisi_baseline, status_pemeriksaan, kondisi_saat_ini, temuan_bukti, skor, alasan_skor, catatan_tindak_lanjut, nilai) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                                    $stmtI->execute([$targetId, $kodeInd, $deskripsiInit, $bobot, $kondisiBaseline, $kondisiBaseline, $statusPem, $kondisi, $evidenceLoc, $skor, $alasanSkor, $catatanTl, $nilai]);
+                                }
+                                $updatedScorecard++;
+                            }
+
+                            if ($updatedScorecard === 0) {
+                                if ($pdo->inTransaction()) {
+                                    $pdo->rollBack();
+                                }
+                                $errors[] = 'Tidak ditemukan data indikator I1–I7 yang valid pada sheet Scorecard.';
                             } else {
-                                $kondisiBaseline = trim((string)($row[3] ?? ''));
-                                $rawStatus = strtoupper(trim((string)($row[5] ?? '')));
-                                $kondisi = trim((string)($row[6] ?? ''));
-                                $rawSkor = trim((string)($row[7] ?? ''));
-                                $alasanSkor = trim((string)($row[8] ?? ''));
-                                $catatanTl = trim((string)($row[9] ?? ''));
-                                $evidenceLoc = '';
-                            }
+                                // Metadata tambahan dari Scorecard final (Status, Rekomendasi, Posisi)
+                                $rawScStatus = '';
+                                if ($isPenilaianLayout) {
+                                    foreach ($scRows as $r) {
+                                        $c1 = strtolower(trim((string)($r[1] ?? '')));
+                                        if (str_contains($c1, 'status scorecard') && !empty($r[2])) {
+                                            $rawScStatus = trim((string)$r[2]);
+                                            break;
+                                        }
+                                    }
+                                    if (!$rawScStatus && isset($scRows[27][2])) {
+                                        $rawScStatus = trim((string)$scRows[27][2]);
+                                    }
+                                }
 
-                            // Normalisasi status pemeriksaan
-                            $statusPem = 'BELUM DITELAAH';
-                            if (str_contains($rawStatus, 'BELUM DAPAT') || str_contains($rawStatus, 'BELUM DINILAI')) {
-                                $statusPem = 'BELUM DAPAT DINILAI';
-                            } elseif (str_contains($rawStatus, 'DAPAT DINILAI') || (str_contains($rawStatus, 'MEMADAI') && !str_contains($rawStatus, 'BELUM'))) {
-                                $statusPem = 'BUKTI MEMADAI';
-                            } elseif (str_contains($rawStatus, 'CUKUP')) {
-                                $statusPem = 'BUKTI CUKUP';
-                            } elseif (str_contains($rawStatus, 'BELUM MEMADAI')) {
-                                $statusPem = 'BUKTI BELUM MEMADAI';
-                            }
+                                $posisiPortofolio = '';
+                                $rekomNarrative = '';
+                                if ($rekSheetName && !empty($parsedWb[$rekSheetName])) {
+                                    $rekRows = $parsedWb[$rekSheetName];
+                                    foreach ($rekRows as $r) {
+                                        $c1 = strtolower(trim((string)($r[1] ?? '')));
+                                        if (str_contains($c1, 'posisi portofolio') && !empty($r[2])) {
+                                            $posisiPortofolio = trim((string)$r[2]);
+                                        }
+                                        if (!$rawScStatus && str_contains($c1, 'status scorecard') && !empty($r[2])) {
+                                            $rawScStatus = trim((string)$r[2]);
+                                        }
+                                    }
+                                    if (!$posisiPortofolio && isset($rekRows[9][2])) {
+                                        $posisiPortofolio = trim((string)$rekRows[9][2]);
+                                    }
 
-                            $skor = is_numeric($rawSkor) ? (int)$rawSkor : null;
-                            $nilai = $skor !== null ? round(($skor / 4.0) * $bobot, 2) : null;
+                                    $rekomText = '';
+                                    $temuan = '';
+                                    $tl = '';
+                                    foreach ($rekRows as $r) {
+                                        $c1 = strtolower(trim((string)($r[1] ?? '')));
+                                        if ($c1 === 'rekomendasi' && !empty($r[2])) $rekomText = trim((string)$r[2]);
+                                        elseif ($c1 === 'temuan utama' && !empty($r[2])) $temuan = trim((string)$r[2]);
+                                        elseif ($c1 === 'tindak lanjut' && !empty($r[2])) $tl = trim((string)$r[2]);
+                                    }
+                                    if (!$rekomText && isset($rekRows[17][2])) $rekomText = trim((string)$rekRows[17][2]);
+                                    if (!$temuan && isset($rekRows[16][2])) $temuan = trim((string)$rekRows[16][2]);
+                                    if (!$tl && isset($rekRows[19][2])) $tl = trim((string)$rekRows[19][2]);
 
-                            // Update atau insert ke indikator_skor
-                            $stmtCheck = $pdo->prepare('SELECT id FROM indikator_skor WHERE mitra_id = ? AND kode_indikator = ?');
-                            $stmtCheck->execute([$targetId, $kodeInd]);
-                            if ($stmtCheck->fetch()) {
-                                $stmtU = $pdo->prepare('UPDATE indikator_skor SET status_pemeriksaan = ?, kondisi_baseline = ?, kondisi_saat_ini = ?, temuan_bukti = ?, skor = ?, alasan_skor = ?, catatan_tindak_lanjut = ?, nilai = ?, referensi_baseline = ? WHERE mitra_id = ? AND kode_indikator = ?');
-                                $stmtU->execute([$statusPem, $kondisiBaseline, $kondisi, $evidenceLoc, $skor, $alasanSkor, $catatanTl, $nilai, $kondisiBaseline, $targetId, $kodeInd]);
-                            } else {
-                                $stmtI = $pdo->prepare('INSERT INTO indikator_skor (mitra_id, kode_indikator, deskripsi, bobot, referensi_baseline, kondisi_baseline, status_pemeriksaan, kondisi_saat_ini, temuan_bukti, skor, alasan_skor, catatan_tindak_lanjut, nilai) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                                $stmtI->execute([$targetId, $kodeInd, "Indikator $kodeInd", $bobot, $kondisiBaseline, $kondisiBaseline, $statusPem, $kondisi, $evidenceLoc, $skor, $alasanSkor, $catatanTl, $nilai]);
-                            }
-                            $updatedScorecard++;
-                        }
+                                    if ($rekomText) {
+                                        $parts = [$rekomText];
+                                        if ($temuan) $parts[] = "Temuan Utama:\n" . $temuan;
+                                        if ($tl) $parts[] = "Rencana Tindak Lanjut:\n" . $tl;
+                                        $rekomNarrative = trim(implode("\n\n", $parts));
+                                    }
+                                }
 
-                        if ($updatedScorecard === 0) {
-                            $errors[] = 'Tidak ditemukan data indikator I1–I7 yang valid pada sheet Scorecard.';
-                        } else {
-                            // Metadata tambahan dari Scorecard final (Status, Rekomendasi, Posisi)
-                            $rawScStatus = '';
-                            if ($isPenilaianLayout) {
-                                foreach ($scRows as $r) {
-                                    $c1 = strtolower(trim((string)($r[1] ?? '')));
-                                    if (str_contains($c1, 'status scorecard') && !empty($r[2])) {
-                                        $rawScStatus = trim((string)$r[2]);
+                                // Bug 7.4: Map imported posisi_portofolio and rekomendasi appropriately
+                                if (!empty($posisiPortofolio)) {
+                                    $uPos = strtoupper(trim($posisiPortofolio));
+                                    if (str_contains($uPos, 'BERDAMPAK')) {
+                                        $posisiPortofolio = 'BERDAMPAK';
+                                    } elseif (str_contains($uPos, 'OUTCOME')) {
+                                        $posisiPortofolio = 'OUTCOME TERBENTUK';
+                                    } elseif (str_contains($uPos, 'OUTPUT')) {
+                                        $posisiPortofolio = 'OUTPUT TERSEDIA';
+                                    } elseif (str_contains($uPos, 'AKTIF') || str_contains($uPos, 'IMPLEMENTASI') || str_contains($uPos, 'BERJALAN')) {
+                                        $posisiPortofolio = 'AKTIF';
+                                    } elseif (in_array($uPos, ['BELUM DAPAT DITENTUKAN', 'BELUM DITENTUKAN'], true)) {
+                                        $posisiPortofolio = 'BELUM DAPAT DITENTUKAN';
+                                    }
+                                }
+
+                                $uSqlParts = [];
+                                $uParams = [];
+                                if (!empty($rawScStatus)) {
+                                    $uSqlParts[] = 'status_scorecard = ?';
+                                    $uParams[] = $rawScStatus;
+                                }
+                                if (!empty($posisiPortofolio)) {
+                                    $uSqlParts[] = 'posisi_portofolio = ?';
+                                    $uParams[] = $posisiPortofolio;
+                                }
+                                if (!empty($rekomNarrative)) {
+                                    $uSqlParts[] = 'rekomendasi = ?';
+                                    $uParams[] = $rekomNarrative;
+                                }
+                                if (!empty($uSqlParts)) {
+                                    $uParams[] = $targetId;
+                                    $pdo->prepare('UPDATE mitra_kinerja SET ' . implode(', ', $uSqlParts) . ' WHERE id = ?')->execute($uParams);
+                                }
+
+                                // Bug 7.1: Check for PIC in PENILAIAN or KENDALI sheets where official templates store PIC data
+                                $picInternalFound = '';
+                                $picMitraFound = '';
+                                $picFocalPoint = '';
+
+                                // A. Dari sheet PENILAIAN (baris PIC/Focal Point)
+                                if (!empty($scRows) && $isPenilaianLayout) {
+                                    foreach ($scRows as $pRow) {
+                                        $label = strtolower(trim((string)($pRow[1] ?? '')));
+                                        $val = trim((string)($pRow[2] ?? ''));
+                                        if (str_contains($label, 'pic') || str_contains($label, 'focal')) {
+                                            if (!empty($val)) {
+                                                $picFocalPoint = $val;
+                                                if (preg_match('/Internal\s*:\s*([^;]+)/i', $val, $mInt)) {
+                                                    $picInternalFound = trim($mInt[1]);
+                                                }
+                                                if (preg_match('/Mitra\s*:\s*([^;]+)/i', $val, $mMit)) {
+                                                    $picMitraFound = trim($mMit[1]);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // B. Dari sheet KENDALI (jika ada)
+                                $kendaliSheetName = '';
+                                foreach (array_keys($parsedWb) as $sName) {
+                                    if (str_contains(strtoupper($sName), 'KENDALI')) {
+                                        $kendaliSheetName = $sName;
                                         break;
                                     }
                                 }
-                                if (!$rawScStatus && isset($scRows[27][2])) {
-                                    $rawScStatus = trim((string)$scRows[27][2]);
-                                }
-                            }
-
-                            $posisiPortofolio = '';
-                            $rekomNarrative = '';
-                            if ($rekSheetName && !empty($parsedWb[$rekSheetName])) {
-                                $rekRows = $parsedWb[$rekSheetName];
-                                foreach ($rekRows as $r) {
-                                    $c1 = strtolower(trim((string)($r[1] ?? '')));
-                                    if (str_contains($c1, 'posisi portofolio') && !empty($r[2])) {
-                                        $posisiPortofolio = trim((string)$r[2]);
-                                    }
-                                    if (!$rawScStatus && str_contains($c1, 'status scorecard') && !empty($r[2])) {
-                                        $rawScStatus = trim((string)$r[2]);
+                                if ($kendaliSheetName && !empty($parsedWb[$kendaliSheetName])) {
+                                    $kRows = $parsedWb[$kendaliSheetName];
+                                    foreach ($kRows as $kRow) {
+                                        for ($c = 1; $c <= count($kRow); $c++) {
+                                            $cellVal = trim((string)($kRow[$c] ?? ''));
+                                            if (empty($cellVal)) continue;
+                                            if (str_contains(strtolower($cellVal), 'pic/focal point') || str_contains(strtolower($cellVal), 'focal point')) {
+                                                if (empty($picFocalPoint) && !empty($kRow[$c + 1])) {
+                                                    $picFocalPoint = trim((string)$kRow[$c + 1]);
+                                                }
+                                            }
+                                        }
                                     }
                                 }
-                                if (!$posisiPortofolio && isset($rekRows[9][2])) {
-                                    $posisiPortofolio = trim((string)$rekRows[9][2]);
-                                }
 
-                                $rekomText = '';
-                                $temuan = '';
-                                $tl = '';
-                                foreach ($rekRows as $r) {
-                                    $c1 = strtolower(trim((string)($r[1] ?? '')));
-                                    if ($c1 === 'rekomendasi' && !empty($r[2])) $rekomText = trim((string)$r[2]);
-                                    elseif ($c1 === 'temuan utama' && !empty($r[2])) $temuan = trim((string)$r[2]);
-                                    elseif ($c1 === 'tindak lanjut' && !empty($r[2])) $tl = trim((string)$r[2]);
-                                }
-                                if (!$rekomText && isset($rekRows[17][2])) $rekomText = trim((string)$rekRows[17][2]);
-                                if (!$temuan && isset($rekRows[16][2])) $temuan = trim((string)$rekRows[16][2]);
-                                if (!$tl && isset($rekRows[19][2])) $tl = trim((string)$rekRows[19][2]);
-
-                                if ($rekomText) {
-                                    $parts = [$rekomText];
-                                    if ($temuan) $parts[] = "Temuan Utama:
-" . $temuan;
-                                    if ($tl) $parts[] = "Rencana Tindak Lanjut:
-" . $tl;
-                                    $rekomNarrative = trim(implode("
-
-", $parts));
-                                }
-                            }
-
-                            $uSqlParts = [];
-                            $uParams = [];
-                            if (!empty($rawScStatus)) {
-                                $uSqlParts[] = 'status_scorecard = ?';
-                                $uParams[] = $rawScStatus;
-                            }
-                            if (!empty($posisiPortofolio)) {
-                                $uSqlParts[] = 'posisi_portofolio = ?';
-                                $uParams[] = $posisiPortofolio;
-                            }
-                            if (!empty($rekomNarrative)) {
-                                $uSqlParts[] = 'rekomendasi = ?';
-                                $uParams[] = $rekomNarrative;
-                            }
-                            if (!empty($uSqlParts)) {
-                                $uParams[] = $targetId;
-                                $pdo->prepare('UPDATE mitra_kinerja SET ' . implode(', ', $uSqlParts) . ' WHERE id = ?')->execute($uParams);
-                            }
-
-                            // Update PIC internal & PIC mitra jika tersedia
-                            if ($picSheetName && !empty($parsedWb[$picSheetName])) {
-                                $picRows = $parsedWb[$picSheetName];
-                                $picInternalFound = '';
-                                $picMitraFound = '';
-                                foreach ($picRows as $pRow) {
-                                    $label = strtolower(trim((string)($pRow[1] ?? '')));
-                                    $val = trim((string)($pRow[2] ?? ''));
-                                    if (str_contains($label, 'pic mitra') || (str_contains($label, 'nama') && str_contains($label, 'mitra'))) {
-                                        if (!empty($val)) $picMitraFound = $val;
-                                    } elseif (str_contains($label, 'pic internal') || str_contains($label, 'pengampu')) {
-                                        if (!empty($val)) $picInternalFound = $val;
+                                // C. Dari sheet IDENTITAS & PIC (jika ada)
+                                if ($picSheetName && !empty($parsedWb[$picSheetName])) {
+                                    $picRows = $parsedWb[$picSheetName];
+                                    foreach ($picRows as $pRow) {
+                                        $label = strtolower(trim((string)($pRow[1] ?? '')));
+                                        $val = trim((string)($pRow[2] ?? ''));
+                                        if (str_contains($label, 'pic mitra') || (str_contains($label, 'nama') && str_contains($label, 'mitra'))) {
+                                            if (!empty($val)) $picMitraFound = $val;
+                                        } elseif (str_contains($label, 'pic internal') || str_contains($label, 'pengampu')) {
+                                            if (!empty($val)) $picInternalFound = $val;
+                                        } elseif (str_contains($label, 'focal') || str_contains($label, 'pic')) {
+                                            if (!empty($val) && empty($picFocalPoint)) $picFocalPoint = $val;
+                                        }
                                     }
                                 }
-                                if ($picInternalFound || $picMitraFound) {
-                                    $uSql = 'UPDATE mitra_kinerja SET ';
-                                    $uParams = [];
-                                    if ($picInternalFound) { $uSql .= 'pic_internal = ?, '; $uParams[] = $picInternalFound; }
-                                    if ($picMitraFound) { $uSql .= 'pic_mitra = ?, '; $uParams[] = $picMitraFound; }
-                                    $uSql = rtrim($uSql, ', ') . ' WHERE id = ?';
-                                    $uParams[] = $targetId;
-                                    $pdo->prepare($uSql)->execute($uParams);
+
+                                // Update PIC ke database
+                                $uPicParts = [];
+                                $uPicParams = [];
+                                if (!empty($picInternalFound)) { $uPicParts[] = 'pic_internal = ?'; $uPicParams[] = $picInternalFound; }
+                                if (!empty($picMitraFound)) { $uPicParts[] = 'pic_mitra = ?'; $uPicParams[] = $picMitraFound; }
+                                if (!empty($picFocalPoint)) { $uPicParts[] = 'pic_focal_point = ?'; $uPicParams[] = $picFocalPoint; }
+                                if (!empty($uPicParts)) {
+                                    $uPicParams[] = $targetId;
+                                    $pdo->prepare('UPDATE mitra_kinerja SET ' . implode(', ', $uPicParts) . ' WHERE id = ?')->execute($uPicParams);
                                 }
+
+                                // Sinkronkan status scorecard dan nilai final di DB
+                                syncStatusScorecard($pdo, $targetId);
+
+                                // Bug 1.3: Pastikan status imported seperti 'SIAP DIVALIDASI' dipertahankan jika ada dalam berkas import
+                                if (!empty($rawScStatus)) {
+                                    $pdo->prepare('UPDATE mitra_kinerja SET status_scorecard = ? WHERE id = ?')->execute([$rawScStatus, $targetId]);
+                                }
+
+                                $pdo->commit();
+
+                                logAudit($targetId, $user['id'], 'IMPORT_SCORECARD', "Import Scorecard untuk {$targetMitra['kode']}: {$updatedScorecard} indikator diperbarui.");
+                                $success = "Data Scorecard untuk <strong>" . h($targetMitra['kode']) . " — " . h($targetMitra['nama_mitra']) . "</strong> berhasil di-import!<br>"
+                                         . "&bull; {$updatedScorecard} indikator Scorecard (I1–I7) berhasil disinkronkan ke sistem.<br>"
+                                         . (!empty($rawScStatus) ? "&bull; Status Scorecard: <strong>" . h($rawScStatus) . "</strong>.<br>" : "")
+                                         . (!empty($posisiPortofolio) ? "&bull; Posisi Portofolio: <strong>" . h($posisiPortofolio) . "</strong>.<br>" : "");
                             }
-
-                            // Sinkronkan status scorecard dan nilai final di DB
-                            syncStatusScorecard($pdo, $targetId);
-
-                            logAudit($targetId, $user['id'], 'IMPORT_SCORECARD', "Import Scorecard untuk {$targetMitra['kode']}: {$updatedScorecard} indikator diperbarui.");
-                            $success = "Data Scorecard untuk <strong>" . h($targetMitra['kode']) . " — " . h($targetMitra['nama_mitra']) . "</strong> berhasil di-import!<br>"
-                                     . "&bull; {$updatedScorecard} indikator Scorecard (I1–I7) berhasil disinkronkan ke sistem.<br>"
-                                     . (!empty($rawScStatus) ? "&bull; Status Scorecard: <strong>" . h($rawScStatus) . "</strong>.<br>" : "")
-                                     . (!empty($posisiPortofolio) ? "&bull; Posisi Portofolio: <strong>" . h($posisiPortofolio) . "</strong>.<br>" : "");
+                        } catch (Throwable $e) {
+                            if ($pdo->inTransaction()) {
+                                $pdo->rollBack();
+                            }
+                            $errors[] = 'Gagal menyimpan data import Scorecard: ' . $e->getMessage();
                         }
                     }
                 }
@@ -532,6 +636,8 @@ require __DIR__ . '/includes/header.php';
                         <strong style="font-size:14px;color:#0f172a;">
                             <?= number_format((float)$s['nilai_final'], 2) ?>
                         </strong>
+                    <?php elseif (($s['status_scorecard'] ?? '') === 'BELUM DINILAI'): ?>
+                        <span class="muted" style="font-size:13px;font-weight:600;">-</span>
                     <?php else: ?>
                         <span class="badge badge-warning" style="font-size:11px;">Dalam Proses</span>
                     <?php endif; ?>

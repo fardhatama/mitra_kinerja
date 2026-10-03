@@ -7,11 +7,30 @@ document.addEventListener('DOMContentLoaded', function () {
     initSearchableDropdowns();
 });
 
+// Single delegated document click listener (BUG-FA-04)
+document.addEventListener('click', function (e) {
+    document.querySelectorAll('.searchable-combobox-wrap.open').forEach(function (wrap) {
+        if (!wrap.contains(e.target)) {
+            if (typeof wrap._closeDropdown === 'function') {
+                wrap._closeDropdown();
+            } else {
+                wrap.classList.remove('open');
+            }
+        }
+    });
+});
+
 function initSearchableDropdowns() {
     var selects = document.querySelectorAll('select.searchable-select, select[data-searchable="true"]');
     selects.forEach(function (select) {
         if (select.dataset.searchableInitialized === 'true') return;
         select.dataset.searchableInitialized = 'true';
+
+        // BUG-TL-03: Remove HTML5 required constraint from hidden select so browser doesn't block with "not focusable"
+        var isRequired = select.required;
+        if (isRequired) {
+            select.required = false;
+        }
 
         // Hide native select
         select.style.display = 'none';
@@ -25,6 +44,9 @@ function initSearchableDropdowns() {
         input.className = 'searchable-combobox-input';
         input.placeholder = select.getAttribute('placeholder') || 'Ketik untuk mencari atau klik untuk memilih naskah...';
         input.autocomplete = 'off';
+        if (isRequired) {
+            input.required = true;
+        }
 
         var arrow = document.createElement('span');
         arrow.className = 'searchable-combobox-arrow';
@@ -50,11 +72,30 @@ function initSearchableDropdowns() {
             var options = select.querySelectorAll('option');
             options.forEach(function (opt) {
                 var val = opt.value;
-                if (!val) return; // Skip placeholder
-
                 var label = opt.textContent.trim();
                 var sub = opt.getAttribute('data-sub') || '';
                 var fullText = (label + ' ' + sub).toLowerCase();
+
+                // BUG-FA-02: Include empty placeholder option so selection can be cleared
+                if (!val) {
+                    if (query === '') {
+                        count++;
+                        var emptyItem = document.createElement('div');
+                        emptyItem.className = 'searchable-combobox-option opt-placeholder';
+                        emptyItem.dataset.value = '';
+                        var emptyTitle = document.createElement('div');
+                        emptyTitle.className = 'opt-title';
+                        emptyTitle.style.color = '#94a3b8';
+                        emptyTitle.textContent = label || '-- Kosongkan Pilihan --';
+                        emptyItem.appendChild(emptyTitle);
+                        emptyItem.addEventListener('click', function (e) {
+                            e.stopPropagation();
+                            chooseOption('', '');
+                        });
+                        dropdown.appendChild(emptyItem);
+                    }
+                    return;
+                }
 
                 if (query === '' || fullText.indexOf(query) !== -1) {
                     count++;
@@ -95,9 +136,33 @@ function initSearchableDropdowns() {
             select.value = val;
             input.value = label;
             wrap.classList.remove('open');
+            if (isRequired) {
+                input.setCustomValidity(val ? '' : 'Harap pilih salah satu naskah.');
+            }
             var event = new Event('change', { bubbles: true });
             select.dispatchEvent(event);
         }
+
+        function closeDropdown() {
+            wrap.classList.remove('open');
+            // BUG-FA-03: Handle blur/outside click smoothly without unprompted wipe
+            if (input.value.trim() === '') {
+                if (select.value !== '') {
+                    select.value = '';
+                    if (isRequired) input.setCustomValidity('Harap pilih salah satu naskah.');
+                    var event = new Event('change', { bubbles: true });
+                    select.dispatchEvent(event);
+                }
+            } else {
+                var cur = select.options[select.selectedIndex];
+                if (cur && cur.value) {
+                    input.value = cur.textContent.trim();
+                } else if (!select.value) {
+                    input.value = '';
+                }
+            }
+        }
+        wrap._closeDropdown = closeDropdown;
 
         // Set initial value if an option is selected
         var selectedOpt = select.options[select.selectedIndex];
@@ -114,6 +179,16 @@ function initSearchableDropdowns() {
         input.addEventListener('input', function () {
             renderOptions(input.value);
             wrap.classList.add('open');
+            if (isRequired) {
+                input.setCustomValidity(select.value ? '' : 'Harap pilih salah satu naskah.');
+            }
+        });
+
+        // BUG-FA-10: Close dropdown on Tab / focusout
+        wrap.addEventListener('focusout', function (e) {
+            if (!wrap.contains(e.relatedTarget)) {
+                closeDropdown();
+            }
         });
 
         // Keyboard navigation
@@ -136,13 +211,19 @@ function initSearchableDropdowns() {
                 activeIndex = (activeIndex - 1 + items.length) % items.length;
                 updateActiveItem(items);
             } else if (e.key === 'Enter') {
-                if (wrap.classList.contains('open') && activeIndex >= 0 && activeIndex < items.length) {
+                // BUG-FA-01: Prevent default Enter submission when activeIndex is -1 or dropdown is open
+                if (wrap.classList.contains('open')) {
                     e.preventDefault();
-                    var chosen = items[activeIndex];
-                    chooseOption(chosen.dataset.value, chosen.querySelector('.opt-title').textContent.trim());
+                    if (activeIndex >= 0 && activeIndex < items.length) {
+                        var chosen = items[activeIndex];
+                        var chosenVal = chosen.dataset.value || '';
+                        var chosenLabel = chosen.querySelector('.opt-title').textContent.trim();
+                        chooseOption(chosenVal, chosenVal ? chosenLabel : '');
+                    }
                 }
-            } else if (e.key === 'Escape') {
-                wrap.classList.remove('open');
+            } else if (e.key === 'Escape' || e.key === 'Tab') {
+                // BUG-FA-10: Close on Escape or Tab
+                closeDropdown();
             }
         });
 
@@ -160,25 +241,11 @@ function initSearchableDropdowns() {
         wrap.addEventListener('click', function (e) {
             if (e.target === arrow) {
                 if (wrap.classList.contains('open')) {
-                    wrap.classList.remove('open');
+                    closeDropdown();
                 } else {
                     renderOptions('');
                     wrap.classList.add('open');
                     input.focus();
-                }
-            }
-        });
-
-        // Close when clicking outside
-        document.addEventListener('click', function (e) {
-            if (!wrap.contains(e.target)) {
-                wrap.classList.remove('open');
-                // Restore label if input was left dirty without selecting
-                var cur = select.options[select.selectedIndex];
-                if (cur && cur.value) {
-                    input.value = cur.textContent.trim();
-                } else if (!select.value) {
-                    input.value = '';
                 }
             }
         });

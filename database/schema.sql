@@ -152,6 +152,7 @@ DROP TABLE IF EXISTS `intervensi_usulan`;
 CREATE TABLE `intervensi_usulan` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `mitra_id` int(11) NOT NULL,
+  `uraian_kendala` text DEFAULT NULL,
   `upaya_dilakukan` text DEFAULT NULL,
   `keputusan_diminta` text DEFAULT NULL,
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
@@ -190,6 +191,7 @@ CREATE TABLE `mitra_kinerja` (
   `sumber_baseline` varchar(255) DEFAULT NULL,
   `pic_internal` varchar(255) DEFAULT NULL,
   `pic_mitra` varchar(255) DEFAULT NULL,
+  `pic_focal_point` varchar(255) DEFAULT NULL,
   `file_naskah` varchar(255) DEFAULT NULL,
   `foto_kerjasama` varchar(255) DEFAULT NULL,
   `pemeriksa_id` int(11) DEFAULT NULL,

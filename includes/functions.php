@@ -1,4 +1,6 @@
 <?php
+date_default_timezone_set('Asia/Jakarta');
+
 /**
  * Logika bisnis inti Scorecard Efektivitas Mitra Kinerja.
  * DITERJEMAHKAN LANGSUNG DARI RUMUS EXCEL ASLI (bukan dari nilai cache),
@@ -98,7 +100,7 @@ if (!defined('BASELINE_12_DEFS')) {
 function hitungCekIndikator(array $row): string {
     $status  = $row['status_pemeriksaan'] ?? 'BELUM DITELAAH';
     $temuan  = trim((string)($row['temuan_bukti'] ?? ''));
-    $skor    = $row['skor'];
+    $skor    = $row['skor'] ?? null;
     $alasan  = trim((string)($row['alasan_skor'] ?? ''));
 
     $isDapatDinilai = in_array($status, ['DAPAT DINILAI', 'BUKTI CUKUP', 'BUKTI MEMADAI'], true);
@@ -221,17 +223,44 @@ function hitungRekomendasi(float $nilai, string $warningStatus, string $posisiPo
     if ($warningStatus === 'E3') {
         return 'HENTIKAN';
     }
-    if ($warningStatus === 'E2' || $nilai < 50 || $posisiPortofolio === 'BELUM DAPAT DITENTUKAN') {
-        return 'PERBAIKI';
-    }
     if ($sisaHari !== null && $sisaHari <= 90 && $nilai >= 75) {
         return 'PERPANJANG';
+    }
+    if ($warningStatus === 'E2' || $nilai < 50 || $posisiPortofolio === 'BELUM DAPAT DITENTUKAN') {
+        return 'PERBAIKI';
     }
     if ($nilai >= 85 && $posisiPortofolio === 'BERDAMPAK') {
         return 'REPLIKASI';
     }
     if ($nilai >= 50) {
         return 'LANJUT';
+    }
+    return 'PERBAIKI';
+}
+
+/**
+ * Ekstrak kata kunci dasar rekomendasi (LANJUT, PERBAIKI, PERPANJANG, REPLIKASI, HENTIKAN)
+ * dari teks rekomendasi multi-baris / deskriptif / hasil audit.
+ */
+function ekstrakKeywordRekomendasi(?string $teks): string {
+    if (!$teks || trim($teks) === '' || trim($teks) === '-' || stripos($teks, 'BELUM') !== false) {
+        return 'BELUM DITENTUKAN';
+    }
+    $upper = strtoupper(trim($teks));
+    if (str_contains($upper, 'HENTIKAN') || str_contains($upper, 'HENTI')) {
+        return 'HENTIKAN';
+    }
+    if (str_contains($upper, 'PERPANJANG')) {
+        return 'PERPANJANG';
+    }
+    if (str_contains($upper, 'REPLIKASI')) {
+        return 'REPLIKASI';
+    }
+    if (str_contains($upper, 'LANJUT')) {
+        return 'LANJUT';
+    }
+    if (str_contains($upper, 'PERBAIK') || str_contains($upper, 'BENTUK') || str_contains($upper, 'AKTIFKAN') || str_contains($upper, 'PERCEPAT') || str_contains($upper, 'MULAI')) {
+        return 'PERBAIKI';
     }
     return 'PERBAIKI';
 }
@@ -251,7 +280,7 @@ function kategoriDariNilai(float $nilai): string {
 function hitungStatusScorecard(bool $skorLengkap, bool $cekLengkapOk, string $statusValidasi, int $buktiKurangN = 0, int $bdnN = 0, int $dapatDinilaiN = 0): string {
     // V3: if any indicator has BUKTI BELUM MEMADAI, that status takes priority
     if ($buktiKurangN > 0) return 'BUKTI BELUM MEMADAI';
-    if (!$skorLengkap && $dapatDinilaiN === 0 && $bdnN === 0) return 'BELUM DINILAI';
+    if ($dapatDinilaiN === 0) return 'BELUM DINILAI';
     if (!$skorLengkap) return 'DALAM PENILAIAN';
     if (!$cekLengkapOk) return 'DALAM PENILAIAN';
     if ($statusValidasi === 'DISETUJUI') return 'FINAL/TERVALIDASI';
@@ -374,11 +403,13 @@ function hitungKebutuhanScorecard(?string $tanggalMulai, ?string $tanggalBerakhi
 
     $diff = $start->diff($end);
     $durasiBulan = ($diff->y * 12) + $diff->m + ($diff->d > 15 ? 1 : 0);
-    // Formula arahan tim: Durasi bulan dibagi evaluasi rencana kerja per tahun
-    $totalSiklus = max(1, (int)ceil($durasiBulan / $evaluasiPerTahun));
+    // Formula arahan tim: Durasi bulan dikali evaluasi per tahun dibagi 12 bulan
+    $totalSiklus = max(1, (int)ceil(($durasiBulan * $evaluasiPerTahun) / 12));
     $cadenceBulan = max(1, (int)round($durasiBulan / $totalSiklus));
 
-    $today = new DateTime('now');
+    $today = new DateTime('today');
+    $today->setTime(0, 0, 0);
+    $todayTs = $today->getTimestamp();
     $milestones = [];
     $warning1Bulan = false;
     $hariMenujuEvaluasi = null;
@@ -390,7 +421,7 @@ function hitungKebutuhanScorecard(?string $tanggalMulai, ?string $tanggalBerakhi
         if ($targetDate > $end) $targetDate = clone $end;
 
         $targetStr = $targetDate->format('Y-m-d');
-        $diffDays = (int)round((strtotime($targetStr) - $today->getTimestamp()) / 86400);
+        $diffDays = (int)round((strtotime($targetStr) - $todayTs) / 86400);
 
         $milestones[] = [
             'siklus_ke'   => $i,
@@ -401,13 +432,22 @@ function hitungKebutuhanScorecard(?string $tanggalMulai, ?string $tanggalBerakhi
             'is_past'     => ($diffDays < 0),
         ];
 
-        if ($targetEvaluasiTerdekat === null && $diffDays >= -15) {
+        // Hanya milestone aktif/mendatang (diffDays >= 0) yang menjadi target evaluasi terdekat & memicu warning
+        if ($targetEvaluasiTerdekat === null && $diffDays >= 0) {
             $targetEvaluasiTerdekat = $targetStr;
             $hariMenujuEvaluasi = $diffDays;
-            if ($diffDays >= 0 && $diffDays <= 30) {
+            if ($diffDays <= 30) {
                 $warning1Bulan = true;
             }
         }
+    }
+
+    // Jika seluruh siklus telah lewat
+    if ($targetEvaluasiTerdekat === null && !empty($milestones)) {
+        $lastMs = end($milestones);
+        $targetEvaluasiTerdekat = $lastMs['target_tgl'];
+        $hariMenujuEvaluasi = $lastMs['sisa_hari'];
+        $warning1Bulan = false;
     }
 
     return [
@@ -426,6 +466,13 @@ const URUTAN_WARNING = ['E3' => 4, 'E2' => 3, 'E1' => 2, 'V0' => 1, 'E0' => 0];
 
 /** Warning tertinggi dari 4 dimensi. Persis rumus B32 (COUNTIF berurutan E3,E2,E1,V0, baru E0). */
 function warningTertinggi(array $statusList): array {
+    if (empty($statusList)) {
+        return [
+            'status'             => 'V0',
+            'label'              => labelWarning('V0'),
+            'tingkat_penanganan' => tingkatPenanganan('V0'),
+        ];
+    }
     $best = 'E0';
     $bestLevel = -1;
     foreach ($statusList as $status) {
@@ -640,8 +687,9 @@ function formatLinkSumberBukti(?string $raw): string {
         if (is_array($decoded)) {
             $html = '<div style="display:flex;flex-direction:column;gap:3px;">';
             foreach ($decoded as $idx => $f) {
+                if (!is_string($f)) continue;
                 $leaf = basename($f);
-                $html .= '<a href="' . h($f) . '" target="_blank" class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;">📄 Berkas ' . ($idx + 1) . ' (' . h(singkat($leaf, 20)) . ')</a>';
+                $html .= '<a href="' . h($f) . '" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;">📄 Berkas ' . ($idx + 1) . ' (' . h(singkat($leaf, 20)) . ')</a>';
             }
             $html .= '</div>';
             return $html;
@@ -665,14 +713,19 @@ function formatLinkSumberBukti(?string $raw): string {
         }
     }
 
-    // Jika mengandung URL di dalam teks, linkify URL-nya
+    // Jika mengandung URL di dalam teks, linkify URL-nya tanpa double escape
     if (preg_match('/https?:\/\/[^\s]+/i', $raw)) {
-        $replaced = preg_replace_callback('/https?:\/\/[^\s]+/i', function($m) {
-            $u = $m[0];
-            $label = str_contains($u, 'p2ma') ? '🌐 Portal P2MA' : (str_contains($u, 'google') ? '📁 Google Drive' : '🔗 Tautan');
-            return '<a href="' . h($u) . '" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;font-weight:600;">[' . $label . ']</a>';
-        }, h($raw));
-        return nl2br($replaced);
+        $parts = preg_split('/(https?:\/\/[^\s<>"\'\(\)]+)/i', $raw, -1, PREG_SPLIT_DELIM_CAPTURE);
+        $out = '';
+        foreach ($parts as $part) {
+            if (preg_match('/^https?:\/\//i', $part)) {
+                $label = str_contains($part, 'p2ma') ? '🌐 Portal P2MA' : (str_contains($part, 'google') ? '📁 Google Drive' : '🔗 Tautan');
+                $out .= '<a href="' . h($part) . '" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;font-weight:600;">[' . $label . ']</a>';
+            } else {
+                $out .= h($part);
+            }
+        }
+        return nl2br($out);
     }
 
     return nl2br(h($raw));

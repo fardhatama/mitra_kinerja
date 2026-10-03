@@ -15,7 +15,7 @@
     --text: #1e293b;
     --text-muted: #64748b;
     --sidebar-w: 240px;
-    --header-h: 140px;
+    --header-h: 82px;
 }
 
 * { box-sizing: border-box; }
@@ -58,7 +58,7 @@ a:hover { text-decoration: underline; }
         rgba(15, 43, 70, .55) 62%,   /* mulai transisi */
         rgba(15, 43, 70, .30) 78%,   /* foto makin kelihatan */
         rgba(15, 43, 70, .25) 100%), /* foto + tagline emas paling jelas di bawah */
-        url('../img/sidebar-coast.jpeg??v=999') center bottom / cover no-repeat,
+        url('../img/sidebar-coast.jpeg?v=999') center bottom / cover no-repeat,
         linear-gradient(180deg, var(--navy) 0%, var(--navy-dark) 100%);
 }
 .sidebar-nav { padding: 16px 0; flex: 1; overflow-y: auto; }
@@ -80,16 +80,19 @@ a:hover { text-decoration: underline; }
 .sidebar-nav a .nav-icon svg { width: 100%; height: 100%; }
 
 .sidebar-motto {
-    padding: 0 55px 26px;
+    padding: 0 16px 20px;
     font-family: 'Dancing Script', 'Segoe Script', cursive;
     font-weight: 600;
-    font-size: 26px; line-height: 1.3;
+    font-size: 15px; line-height: 1.35;
     color: rgba(255,255,255,.85);
-    opacity: 0.7;
+    opacity: 0.8;
     text-shadow: 0 2px 8px rgba(0,0,0,.45);
     text-align: left;
-    transform: rotate(-12deg);        /* baru — memutar seluruh blok teks */
-    transform-origin: left bottom;   /* baru — titik putar di kiri-bawah, biar posisi awal teks tidak geser */
+    transform: rotate(-10deg);
+    transform-origin: left bottom;
+    word-break: normal;
+    overflow-wrap: break-word;
+    max-width: calc(var(--sidebar-w) - 24px);
 }
 
 /* Main Content — header full-width, sidebar overlap di atasnya */
@@ -431,8 +434,11 @@ a:hover { text-decoration: underline; }
     border-radius: 10px;
     padding: 20px;
     margin-bottom: 18px;
-    overflow-x: auto;
+    overflow: visible;
     min-width: 0;
+}
+.card:has(> table) {
+    overflow-x: auto;
 }
 .card h2 { font-size: 15px; margin: 0 0 14px; }
 .card h3 { font-size: 13px; margin: 0 0 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; }
@@ -733,6 +739,10 @@ tr:hover td { background: #fafbfc; }
         size: A4 portrait;
         margin: 1.5cm 1cm 1.5cm 1cm;
     }
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
     .sidebar, .app-hero, .app-footer, .no-print, .btn, .btn-sm, .actions-row, .filters, #aiToast, #aiTriggerBtn {
         display: none !important;
     }
@@ -746,6 +756,8 @@ tr:hover td { background: #fafbfc; }
         padding: 0 !important;
     }
     body {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
         background: #fff !important;
         color: #000 !important;
         font-family: Arial, "Helvetica Neue", Helvetica, sans-serif !important;
@@ -756,7 +768,10 @@ tr:hover td { background: #fafbfc; }
         box-shadow: none !important;
         margin-bottom: 16px !important;
         padding: 12px !important;
-        page-break-inside: avoid;
+        page-break-inside: auto !important;
+    }
+    tr {
+        page-break-inside: avoid !important;
     }
     .card h2 {
         font-size: 12pt !important;
@@ -796,12 +811,29 @@ tr:hover td { background: #fafbfc; }
         font-size: 8pt !important;
         padding: 2px 4px !important;
     }
+    .signature-block, .signature-block table, .signature-block tr, .signature-block td {
+        border: none !important;
+        background: transparent !important;
+    }
+    .signature-block table {
+        font-size: 11pt !important;
+        margin-top: 20px !important;
+    }
+    .signature-block td {
+        border: none !important;
+        font-size: 11pt !important;
+        padding: 0 16px !important;
+    }
 }
 
 /* ---------- Searchable Combobox & Dropdown Autocomplete ---------- */
 .searchable-combobox-wrap {
     position: relative;
     width: 100%;
+    z-index: 10;
+}
+.searchable-combobox-wrap.open {
+    z-index: 1050;
 }
 .searchable-combobox-input {
     width: 100%;

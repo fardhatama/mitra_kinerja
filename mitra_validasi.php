@@ -57,6 +57,10 @@ if ($id <= 0) {
 
                 if (!empty($monev['milestones'])) {
                     foreach ($monev['milestones'] as $ms) {
+                        $isCompleted = in_array(strtolower(trim($ms['status_siklus'] ?? '')), ['selesai', 'selesai evaluasi'], true);
+                        if ($isCompleted) {
+                            continue;
+                        }
                         if (!empty($ms['is_due_soon']) || !empty($ms['is_past'])) {
                             $msLabel = $ms['nama'];
                             $msTarget = $ms['target_tgl'];
@@ -151,20 +155,37 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
     if (!in_array($status, ['BELUM','DISETUJUI','PERLU PERBAIKAN'], true)) {
         $errors[] = 'Status validasi tidak valid.';
-    } elseif ($status === 'DISETUJUI' && $summary['kelengkapan'] < 100) {
-        $errors[] = 'Tidak dapat menyetujui: kelengkapan indikator belum 100%.';
+    } elseif ($status === 'DISETUJUI' && ($summary['kelengkapan'] < 100 || empty($summary['all_evaluable']) || ($summary['bukti_kurang_n'] ?? 0) > 0)) {
+        if (($summary['bukti_kurang_n'] ?? 0) > 0) {
+            $errors[] = 'Tidak dapat menyetujui: terdapat indikator dengan status Bukti Belum Memadai.';
+        } elseif (empty($summary['all_evaluable'])) {
+            $errors[] = 'Tidak dapat menyetujui: seluruh 7 indikator harus berstatus DAPAT DINILAI / BUKTI MEMADAI.';
+        } else {
+            $errors[] = 'Tidak dapat menyetujui: kelengkapan indikator belum 100%.';
+        }
     } elseif ($status === 'PERLU PERBAIKAN' && $catatan === '') {
         $errors[] = 'Tulis catatan bagian yang harus diperbaiki.';
     } else {
+        $valId = in_array($status, ['DISETUJUI', 'PERLU PERBAIKAN'], true) ? $user['id'] : null;
+        $tglVal = in_array($status, ['DISETUJUI', 'PERLU PERBAIKAN'], true) ? date('Y-m-d') : null;
+
         $stmtV = $pdo->prepare(
             'INSERT INTO validasi (mitra_id, status, validator_id, tanggal_validasi, catatan)
-             VALUES (?, ?, ?, CURDATE(), ?)
+             VALUES (?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE status=VALUES(status), validator_id=VALUES(validator_id), tanggal_validasi=VALUES(tanggal_validasi), catatan=VALUES(catatan)'
         );
-        $stmtV->execute([$id, $status, $user['id'], $catatan ?: null]);
+        $stmtV->execute([$id, $status, $valId, $tglVal, $catatan ?: null]);
+        if ($status === 'DISETUJUI') {
+            $pdo->prepare("UPDATE mitra_kinerja SET status_scorecard = 'FINAL/TERVALIDASI' WHERE id = ?")->execute([$id]);
+        }
         syncStatusScorecard($pdo, $id);
         logAudit($id, $user['id'], 'VALIDASI', 'Status validasi diubah menjadi ' . $status);
         $saved = true;
+
+        // Re-fetch $mitra dari DB agar data state yang dirender selalu fresh
+        $stmt = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
+        $stmt->execute([$id]);
+        $mitra = $stmt->fetch();
         $summary = getMitraSummary($pdo, $mitra);
     }
 }

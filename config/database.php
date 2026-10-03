@@ -26,7 +26,7 @@ if (file_exists(__DIR__ . '/database.local.php')) {
 if (!defined('DB_HOST')) define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
 if (!defined('DB_NAME')) define('DB_NAME', getenv('DB_NAME') ?: 'mitra_kinerja');
 if (!defined('DB_USER')) define('DB_USER', getenv('DB_USER') ?: 'root');
-if (!defined('DB_PASS')) define('DB_PASS', getenv('DB_PASS') ?: '');
+if (!defined('DB_PASS')) define('DB_PASS', getenv('DB_PASS') !== false ? getenv('DB_PASS') : '');
 define('DB_CHARSET', 'utf8mb4');
 
 function getDB(): PDO {
@@ -37,6 +37,7 @@ function getDB(): PDO {
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,
+            PDO::MYSQL_ATTR_MULTI_STATEMENTS => true,
         ];
         try {
             $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
@@ -48,6 +49,9 @@ function getDB(): PDO {
         } catch (PDOException $e) {
             // Di production jangan bocorkan detail koneksi (host/kredensial) ke pengguna.
             error_log('DB connection failed: ' . $e->getMessage());
+            if (!headers_sent()) {
+                http_response_code(500);
+            }
             die(APP_ENV === 'production'
                 ? 'Terjadi kesalahan sistem. Silakan hubungi admin.'
                 : 'Koneksi database gagal: ' . $e->getMessage());

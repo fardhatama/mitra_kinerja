@@ -18,7 +18,8 @@ if (!defined('APP_ENV')) {
     if (!$env) {
         $serverName = $_SERVER['SERVER_NAME'] ?? '';
         $remoteAddr = $_SERVER['REMOTE_ADDR'] ?? '';
-        if ($serverName === 'localhost' || $remoteAddr === '127.0.0.1' || $remoteAddr === '::1' || str_starts_with($remoteAddr, '192.168.') || str_starts_with($remoteAddr, '10.') || str_starts_with($remoteAddr, '172.')) {
+        $isPrivate172 = (bool) preg_match('/^172\.(1[6-9]|2[0-9]|3[0-1])\./', $remoteAddr);
+        if ($serverName === 'localhost' || $remoteAddr === '127.0.0.1' || $remoteAddr === '::1' || str_starts_with($remoteAddr, '192.168.') || str_starts_with($remoteAddr, '10.') || $isPrivate172) {
             $env = 'development';
         }
     }

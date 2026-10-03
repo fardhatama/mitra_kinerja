@@ -141,15 +141,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                                 $linkBukti = trim((string)($row[8] ?? ''));
                                 $catatan = trim((string)($row[9] ?? ''));
 
-                                // Normalisasi status secara cerdas
+                                // BUG-BL-01, BUG-BL-02: Normalisasi status secara cerdas
                                 $finalStatus = 'BELUM DIISI';
-                                if (str_contains($rawStatus, 'BELUM TERVERIFIKASI')) {
+                                if (str_contains($rawStatus, 'BELUM TERVERIFIKASI') || str_contains($rawStatus, 'BELUM SESUAI') || str_contains($rawStatus, 'TIDAK SESUAI')) {
                                     $finalStatus = 'BELUM TERVERIFIKASI';
-                                } elseif (str_contains($rawStatus, 'BELUM TERSEDIA') || str_contains($rawStatus, 'TIDAK TERSEDIA') || str_contains($rawStatus, 'TIDAK ADA')) {
+                                } elseif (str_contains($rawStatus, 'BELUM TERSEDIA') || str_contains($rawStatus, 'TIDAK TERSEDIA') || str_contains($rawStatus, 'TIDAK ADA') || str_contains($rawStatus, 'BELUM ADA')) {
                                     $finalStatus = 'BELUM TERSEDIA';
                                 } elseif (str_contains($rawStatus, 'TIDAK RELEVAN') || str_contains($rawStatus, 'BUKAN')) {
                                     $finalStatus = 'TIDAK RELEVAN';
-                                } elseif (str_contains($rawStatus, 'TERVERIFIKASI') || str_contains($rawStatus, 'SESUAI') || str_contains($rawStatus, 'VERIFIED') || str_contains($rawStatus, 'ADA') || str_contains($rawStatus, 'SUDAH')) {
+                                } elseif (str_contains($rawStatus, 'TERVERIFIKASI') || str_contains($rawStatus, 'VERIFIED') || preg_match('/\b(SESUAI|ADA|SUDAH)\b/', $rawStatus)) {
                                     $finalStatus = 'TERVERIFIKASI';
                                 } elseif (!empty($linkBukti) || !empty($fakta)) {
                                     $finalStatus = !empty($linkBukti) ? 'TERVERIFIKASI' : 'BELUM TERVERIFIKASI';
@@ -228,9 +228,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                                     foreach ($picRows as $pRow) {
                                         $label = strtolower(trim($pRow[1] ?? ''));
                                         $val = trim($pRow[2] ?? '');
-                                        if (str_contains($label, 'pic mitra') || (str_contains($label, 'nama') && str_contains($label, 'mitra'))) {
+                                        // BUG-BL-06: Do not let "Nama Mitra" label overwrite pic_mitra with organization name
+                                        if (str_contains($label, 'pic mitra') || str_contains($label, 'focal point mitra') || (str_contains($label, 'pic') && str_contains($label, 'mitra'))) {
                                             if (!empty($val)) $picMitraFound = $val;
-                                        } elseif (str_contains($label, 'pic internal') || str_contains($label, 'pengampu')) {
+                                        } elseif (str_contains($label, 'pic internal') || str_contains($label, 'pengampu') || str_contains($label, 'focal point internal')) {
                                             if (!empty($val)) $picInternalFound = $val;
                                         }
                                     }
@@ -301,6 +302,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                     $st = $_POST["status_{$num}"] ?? 'BELUM DIISI';
                     $fakta = trim($_POST["fakta_{$num}"] ?? '');
                     $bukti = trim($_POST["bukti_{$num}"] ?? '');
+
+                    // BUG-BL-08: In Element 9 textarea, handle decode/encode safely on form save
+                    if ($num === 9 && !empty($bukti)) {
+                        if (str_starts_with($bukti, '[') && str_ends_with($bukti, ']') && ($testDec = json_decode($bukti, true)) && is_array($testDec)) {
+                            $bukti = json_encode(array_values(array_filter($testDec)), JSON_UNESCAPED_UNICODE);
+                        } else {
+                            $lines = preg_split('/[
+\n;]+/', $bukti);
+                            $cleanLines = array_values(array_filter(array_map('trim', $lines)));
+                            if (count($cleanLines) > 1 || (count($cleanLines) === 1 && !empty($cleanLines[0]))) {
+                                $bukti = json_encode($cleanLines, JSON_UNESCAPED_UNICODE);
+                            }
+                        }
+                    }
 
                     $stmtE = $pdo->prepare('INSERT INTO baseline_elemen (
                         mitra_id, nomor_elemen, kelompok, nama_elemen, yang_diperiksa, sumber_bukti_minimum,
@@ -386,6 +401,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             } else {
                 $targetDir = __DIR__ . '/public/uploads/baseline_pdf/';
                 if (!is_dir($targetDir)) mkdir($targetDir, 0777, true);
+                // BUG-BL-04: Sanitize $mitra['kode']
+                $safeKode = preg_replace('/[^a-zA-Z0-9_-]/', '_', $mitra['kode']);
 
                 if ($elemenNomor === 9 && isset($_FILES['pdf_files']) && is_array($_FILES['pdf_files']['name'])) {
                     // Multiple files for Tindak Lanjut
@@ -400,38 +417,49 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                     }
 
                     $fileCount = count($_FILES['pdf_files']['name']);
+                    $newUploadedCount = 0;
                     for ($f = 0; $f < $fileCount; $f++) {
                         if ($_FILES['pdf_files']['error'][$f] === UPLOAD_ERR_OK) {
+                            // BUG-BL-09: Enforce 25MB limit on baseline PDF uploads
+                            if ($_FILES['pdf_files']['size'][$f] > 25 * 1024 * 1024) {
+                                $errors[] = "Ukuran file {$_FILES['pdf_files']['name'][$f]} melebihi batas 25MB.";
+                                continue;
+                            }
                             $ext = strtolower(pathinfo($_FILES['pdf_files']['name'][$f], PATHINFO_EXTENSION));
                             if ($ext === 'pdf' && isPdfValid($_FILES['pdf_files']['tmp_name'][$f])) {
                                 $safeLeaf = preg_replace('/[^a-zA-Z0-9_\.-]/', '_', pathinfo($_FILES['pdf_files']['name'][$f], PATHINFO_FILENAME));
-                                $targetName = 'baseline_e9_' . $mitra['kode'] . '_' . time() . '_' . $f . '_' . $safeLeaf . '.pdf';
+                                $targetName = 'baseline_e9_' . $safeKode . '_' . time() . '_' . $f . '_' . $safeLeaf . '.pdf';
                                 if (move_uploaded_file($_FILES['pdf_files']['tmp_name'][$f], $targetDir . $targetName)) {
                                     $savedPaths[] = 'public/uploads/baseline_pdf/' . $targetName;
+                                    $newUploadedCount++;
                                 }
                             }
                         }
                     }
 
-                    if (!empty($savedPaths)) {
+                    // BUG-BL-03: Fix multi-file PDF upload so success message is only shown if new files were actually uploaded
+                    if ($newUploadedCount > 0) {
                         $jsonVal = json_encode(array_values(array_unique($savedPaths)), JSON_UNESCAPED_UNICODE);
                         $stmtU = $pdo->prepare('UPDATE baseline_elemen SET link_sumber_bukti = ?, status = \'TERVERIFIKASI\' WHERE mitra_id = ? AND nomor_elemen = 9');
                         $stmtU->execute([$jsonVal, $id]);
-                        logAudit($id, $user['id'], 'UPLOAD_BASELINE_PDF', 'Upload multiple dokumen tindak lanjut ' . $mitra['kode']);
-                        $success = 'Berkas PDF Rencana Tindak Lanjut berhasil diunggah.';
-                    } else {
-                        $errors[] = 'Gagal mengunggah berkas. Pastikan format file adalah .PDF.';
+                        logAudit($id, $user['id'], 'UPLOAD_BASELINE_PDF', 'Upload multiple dokumen tindak lanjut ' . $mitra['kode'] . " ({$newUploadedCount} berkas baru)");
+                        $success = "Sebanyak {$newUploadedCount} berkas PDF Rencana Tindak Lanjut berhasil diunggah.";
+                    } elseif (empty($errors)) {
+                        $errors[] = 'Gagal mengunggah berkas. Pastikan memilih berkas berformat .PDF yang valid dan tidak melebihi 25MB.';
                     }
                 } else {
                     // Single file for 1, 3, 12
                     if (!isset($_FILES['pdf_file']) || $_FILES['pdf_file']['error'] !== UPLOAD_ERR_OK) {
                         $errors[] = 'Pilih file PDF yang valid.';
+                    } elseif ($_FILES['pdf_file']['size'] > 25 * 1024 * 1024) {
+                        // BUG-BL-09: Enforce 25MB limit on baseline PDF uploads
+                        $errors[] = 'Ukuran file PDF melebihi batas maksimum 25MB.';
                     } else {
                         $ext = strtolower(pathinfo($_FILES['pdf_file']['name'], PATHINFO_EXTENSION));
                         if ($ext !== 'pdf' || !isPdfValid($_FILES['pdf_file']['tmp_name'])) {
                             $errors[] = 'Format file wajib berupa dokumen .PDF asli bertanda tangan.';
                         } else {
-                            $targetName = 'baseline_e' . $elemenNomor . '_' . $mitra['kode'] . '_' . time() . '.pdf';
+                            $targetName = 'baseline_e' . $elemenNomor . '_' . $safeKode . '_' . time() . '.pdf';
                             if (move_uploaded_file($_FILES['pdf_file']['tmp_name'], $targetDir . $targetName)) {
                                 $filePath = 'public/uploads/baseline_pdf/' . $targetName;
                                 $stmtU = $pdo->prepare('UPDATE baseline_elemen SET link_sumber_bukti = ?, status = \'TERVERIFIKASI\' WHERE mitra_id = ? AND nomor_elemen = ?');
@@ -471,7 +499,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             if ($namaPic === '') {
                 $errors[] = 'Nama PIC wajib diisi.';
             } else {
-                $summaryPic = $namaPic . ($jabatanPic ? " ({$jabatanPic})" : '') . ($kontakPic ? " - HP/WA: {$kontakPic}" : '');
+                // BUG-BL-10: Prevent compounding duplicate suffixes on PIC updates
+                $cleanNamaPic = preg_replace('/\s*-\s*(HP\/WA|Kontak|Telp):.*$/i', '', $namaPic);
+                if ($jabatanPic) {
+                    $cleanNamaPic = preg_replace('/\s*\([^)]+\)$/', '', $cleanNamaPic);
+                }
+                $cleanNamaPic = trim($cleanNamaPic);
+                $summaryPic = $cleanNamaPic . ($jabatanPic ? " ({$jabatanPic})" : '') . ($kontakPic ? " - HP/WA: {$kontakPic}" : '');
                 if ($picType === 'internal') {
                     $detailFakta = "PIC Internal: {$namaPic}\nJabatan: " . ($jabatanPic ?: '-') . "\nUnit: " . ($unitPic ?: '-') . "\nKontak: " . ($kontakPic ?: '-') . "\nDasar Penetapan/SK: " . ($skPic ?: '-');
                     $stmtM = $pdo->prepare('UPDATE mitra_kinerja SET pic_internal = ? WHERE id = ?');
@@ -861,7 +895,17 @@ if ($id > 0) {
                                 <?php if ($isLocked || !$canEdit): ?>
                                     <div style="font-size:11px;color:#475569;"><?= formatLinkSumberBukti($el['link_sumber_bukti'] ?? '') ?></div>
                                 <?php else: ?>
-                                    <textarea name="bukti_<?= $num ?>" rows="2" style="width:100%;font-size:11px;" placeholder="Tautan P2MA / surat / nomor arsip..."><?= h($el['link_sumber_bukti'] ?? '') ?></textarea>
+                                    <?php
+                                    // BUG-BL-08: In Element 9 textarea, do not display raw JSON string
+                                    $displayBukti = $el['link_sumber_bukti'] ?? '';
+                                    if ($num === 9 && !empty($displayBukti)) {
+                                        $dec = json_decode($displayBukti, true);
+                                        if (is_array($dec)) {
+                                            $displayBukti = implode("\n", $dec);
+                                        }
+                                    }
+                                    ?>
+                                    <textarea name="bukti_<?= $num ?>" rows="2" style="width:100%;font-size:11px;" placeholder="Tautan P2MA / surat / nomor arsip..."><?= h($displayBukti) ?></textarea>
                                 <?php endif; ?>
                             </td>
                             <!-- Kolom Aksi / Tindakan Khusus Elemen -->
@@ -967,8 +1011,8 @@ if ($id > 0) {
 
                                 <?php elseif ($num === 12): // HAMBATAN: fitur upload file pdf ?>
                                     <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
-                                        <?php if (!empty($el['link_sumber_bukti']) && file_exists(__DIR__ . '/' . $el['link_sumber_bukti'])): ?>
-                                            <a href="<?= h($el['link_sumber_bukti']) ?>" target="_blank" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📄 Lihat PDF</a>
+                                        <?php if (!empty($el['link_sumber_bukti']) && (preg_match('/^https?:\/\//i', $el['link_sumber_bukti']) || file_exists(__DIR__ . '/' . $el['link_sumber_bukti']))): ?>
+                                            <a href="<?= h($el['link_sumber_bukti']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📄 Lihat PDF</a>
                                         <?php endif; ?>
                                         <?php if (!$isLocked && $canEdit): ?>
                                             <button type="button" onclick="openUploadModal(12, 'Dokumen Kendala / Gap')" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📤 Upload PDF</button>
@@ -1149,13 +1193,15 @@ if ($id > 0) {
             document.getElementById('lblNamaPic').innerText = 'Nama PIC Internal *';
             document.getElementById('lblUnitPic').innerText = 'Divisi / Subbagian Internal';
             document.getElementById('lblSkPic').innerText = 'Dasar Penunjukan (Nomor SK / Nota Dinas)';
-            document.getElementById('picNama').value = '<?= addslashes($mitra['pic_internal'] ?? '') ?>';
+            // BUG-BL-07: Use json_encode instead of addslashes
+            document.getElementById('picNama').value = <?= json_encode((string)($mitra['pic_internal'] ?? '')) ?>;
         } else {
             document.getElementById('modalPicTitle').innerText = 'Update Data PIC Mitra Kerja Sama';
             document.getElementById('lblNamaPic').innerText = 'Nama PIC Mitra *';
             document.getElementById('lblUnitPic').innerText = 'Instansi / Lembaga Mitra';
             document.getElementById('lblSkPic').innerText = 'Surat Tugas / Konfirmasi Resmi Mitra';
-            document.getElementById('picNama').value = '<?= addslashes($mitra['pic_mitra'] ?? '') ?>';
+            // BUG-BL-07: Use json_encode instead of addslashes
+            document.getElementById('picNama').value = <?= json_encode((string)($mitra['pic_mitra'] ?? '')) ?>;
         }
         document.getElementById('modalUpdatePic').style.display = 'block';
     }

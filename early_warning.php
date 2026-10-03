@@ -15,6 +15,7 @@ foreach ($all as $s) {
         $warningData[] = [
             'kode' => $s['mitra']['kode'],
             'nama_mitra' => $s['mitra']['nama_mitra'],
+            'tanggal_berakhir' => $s['mitra']['tanggal_berakhir'] ?? null,
             'warning_label' => $wLabel,
             'warning_status' => $status,
             'tingkat' => $s['warning']['tingkat_penanganan'],
@@ -26,6 +27,14 @@ foreach ($all as $s) {
 }
 $severityOrder = ['E3' => 4, 'E2' => 3, 'E1' => 2, 'V0' => 1, 'E0' => 0];
 usort($warningData, fn($a, $b) => ($severityOrder[$b['warning_status']] ?? -1) <=> ($severityOrder[$a['warning_status']] ?? -1));
+
+// BUG-EW-04: Filter controls
+$filterStatus = trim($_GET['status'] ?? '');
+if ($filterStatus !== '' && in_array($filterStatus, ['E3', 'E2', 'E1', 'V0'], true)) {
+    $warningDataFiltered = array_filter($warningData, fn($w) => $w['warning_status'] === $filterStatus);
+} else {
+    $warningDataFiltered = $warningData;
+}
 
 $pageTitle = 'Early Warning';
 require __DIR__ . '/includes/header.php';
@@ -40,26 +49,50 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <?php
-$dueSoonMonev = [];
+// BUG-EW-01: Include overdue/past-due evaluations in the warning banner
+$monevAlerts = [];
 foreach ($all as $s) {
-    if (!empty($s['monev']['warning_1_bulan'])) {
-        $dueSoonMonev[] = $s;
+    $hari = $s['monev']['hari_menuju_evaluasi'] ?? null;
+    $targetTgl = $s['monev']['target_evaluasi_terdekat'] ?? null;
+    if ($targetTgl !== null) {
+        $isOverdue = ($hari !== null && $hari < 0);
+        $isDueSoon = (!empty($s['monev']['warning_1_bulan']) || ($hari !== null && $hari >= 0 && $hari <= 30));
+        if ($isOverdue || $isDueSoon) {
+            $monevAlerts[] = [
+                's' => $s,
+                'is_overdue' => $isOverdue,
+                'hari' => $hari,
+                'target' => $targetTgl
+            ];
+        }
     }
 }
 ?>
-<?php if (!empty($dueSoonMonev)): ?>
+<?php if (!empty($monevAlerts)): ?>
 <div class="alert alert-warning" style="margin-bottom:20px;border-left:4px solid #ea580c;background:#fff7ed;color:#9a3412;">
     <div style="font-weight:700;font-size:14px;margin-bottom:4px;">
-        ⚠️ Jadwal Evaluasi Mendatang (&lt; 30 Hari):
+        ⚠️ Pemantauan Jadwal Evaluasi Berkala (Mendatang &amp; Terlewat):
     </div>
     <div style="font-size:13px;">
-        Terdapat <strong><?= count($dueSoonMonev) ?> kerja sama</strong> yang mendekati jadwal evaluasi berkala:
+        Terdapat <strong><?= count($monevAlerts) ?> kerja sama</strong> yang memerlukan perhatian evaluasi berkala:
         <ul style="margin:6px 0 0 18px;padding:0;">
-            <?php foreach ($dueSoonMonev as $ds): ?>
+            <?php foreach ($monevAlerts as $ma): 
+                $ds = $ma['s'];
+            ?>
             <li style="margin-bottom:4px;">
+                <?php if ($ma['is_overdue']): ?>
+                    <span class="badge badge-danger" style="font-size:10px;vertical-align:middle;margin-right:4px;">TERLEWAT</span>
+                <?php else: ?>
+                    <span class="badge badge-warning" style="font-size:10px;vertical-align:middle;margin-right:4px;">SEGERA</span>
+                <?php endif; ?>
                 <strong><?= h($ds['mitra']['kode']) ?></strong> &mdash; <?= h($ds['mitra']['nama_mitra']) ?>: 
-                Target: <strong><?= formatTanggal($ds['monev']['target_evaluasi_terdekat']) ?></strong> 
-                (<?= $ds['monev']['hari_menuju_evaluasi'] ?> hari lagi) &bull;
+                Target: <strong><?= formatTanggal($ma['target']) ?></strong> 
+                <?php if ($ma['is_overdue']): ?>
+                    <span style="color:#b91c1c;font-weight:600;">(Terlewat <?= abs((int)$ma['hari']) ?> hari yang lalu)</span>
+                <?php else: ?>
+                    (<?= (int)$ma['hari'] ?> hari lagi)
+                <?php endif; ?>
+                &bull;
                 <a href="mitra_edit.php?id=<?= $ds['mitra']['id'] ?>" style="color:#2563eb;text-decoration:underline;">Buka Penilaian &rarr;</a>
             </li>
             <?php endforeach; ?>
@@ -76,8 +109,8 @@ foreach ($all as $s) {
 </div>
 <?php else: ?>
 
-<!-- Ringkasan -->
-<div class="kpi-row" style="grid-template-columns: repeat(4, 1fr); margin-bottom:20px;">
+<!-- Ringkasan (BUG-EW-02: responsive kpi-row without inline repeat(4, 1fr)) -->
+<div class="kpi-row" style="margin-bottom:20px;">
     <?php
     $e3Count = count(array_filter($warningData, fn($w) => $w['warning_status'] === 'E3'));
     $e2Count = count(array_filter($warningData, fn($w) => $w['warning_status'] === 'E2'));
@@ -90,8 +123,28 @@ foreach ($all as $s) {
     <div class="kpi-card"><div class="kpi-icon" style="background:#f1f5f9;color:#64748b;">⚪</div><div><div class="kpi-number"><?= $v0Count ?></div><div class="kpi-label">V0 — Data Belum Cukup</div></div></div>
 </div>
 
+<!-- BUG-EW-04: Filter Controls -->
+<form method="get" class="filters" style="margin-bottom:20px;align-items:center;">
+    <label style="font-weight:600;font-size:13px;">Filter Tingkat Risiko:</label>
+    <select name="status" onchange="this.form.submit()">
+        <option value="">Semua Tingkat (<?= count($warningData) ?>)</option>
+        <option value="E3" <?= $filterStatus === 'E3' ? 'selected' : '' ?>>E3 — Merah (<?= $e3Count ?>)</option>
+        <option value="E2" <?= $filterStatus === 'E2' ? 'selected' : '' ?>>E2 — Jingga (<?= $e2Count ?>)</option>
+        <option value="E1" <?= $filterStatus === 'E1' ? 'selected' : '' ?>>E1 — Kuning (<?= $e1Count ?>)</option>
+        <option value="V0" <?= $filterStatus === 'V0' ? 'selected' : '' ?>>V0 — Data Belum Cukup (<?= $v0Count ?>)</option>
+    </select>
+    <?php if ($filterStatus !== ''): ?>
+        <a href="early_warning.php" class="btn btn-outline btn-sm">Reset Filter</a>
+    <?php endif; ?>
+</form>
+
 <!-- Detail -->
-<?php foreach ($warningData as $wd): ?>
+<?php if (empty($warningDataFiltered)): ?>
+    <div class="card" style="text-align:center;padding:30px;">
+        <p class="muted" style="margin:0;">Tidak ada naskah yang cocok dengan filter yang dipilih.</p>
+    </div>
+<?php else: ?>
+<?php foreach ($warningDataFiltered as $wd): ?>
 <div class="card">
     <div class="flex-between" style="margin-bottom:10px;">
         <div>
@@ -106,14 +159,21 @@ foreach ($all as $s) {
         <thead><tr><th>Dimensi</th><th>Kondisi</th><th>Status</th><th>Fakta/Bukti</th><th>Tindakan</th><th>Tenggat</th><th>Progres</th></tr></thead>
         <tbody>
         <?php foreach ($wd['rows'] as $r): ?>
+            <?php
+            // BUG-EW-05: Display actual expiry date for Masa Berlaku dimension instead of '-'
+            $tenggatDisplay = formatTanggal($r['tenggat']);
+            if (($tenggatDisplay === '-' || empty($r['tenggat'])) && stripos($r['dimensi'], 'Masa Berlaku') !== false && !empty($wd['tanggal_berakhir'])) {
+                $tenggatDisplay = formatTanggal($wd['tanggal_berakhir']);
+            }
+            ?>
             <tr>
                 <td><strong><?= h($r['dimensi']) ?></strong></td>
-                <td><?= h($r['kondisi']) ?></td>
+                <td><?= h($r['kondisi'] ?? '-') ?></td>
                 <td><span class="badge badge-<?= warnaWarning($r['status']) ?>"><?= h($r['status']) ?></span></td>
                 <td><?= h($r['fakta_bukti'] ?? '-') ?></td>
                 <td><?= h($r['tindakan'] ?? '-') ?></td>
-                <td><?= formatTanggal($r['tenggat']) ?></td>
-                <td><?= h($r['progres']) ?></td>
+                <td><?= $tenggatDisplay ?></td>
+                <td><?= h($r['progres'] ?? '-') ?></td>
             </tr>
         <?php endforeach; ?>
         </tbody>
@@ -121,6 +181,7 @@ foreach ($all as $s) {
     </div>
 </div>
 <?php endforeach; ?>
+<?php endif; ?>
 <?php endif; ?>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

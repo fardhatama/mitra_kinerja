@@ -65,16 +65,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                 $importType = trim($_POST['import_type'] ?? 'all');
                 $targetCode = strtoupper(trim($targetMitra['kode']));
 
-                // Temukan Sheet Baseline & Sheet Scorecard
-                $baseSheetName = '';
-                $scSheetName = '';
-                $rekSheetName = '';
-                $picSheetName = '';
-                $kegSheetName = '';
-                $utlSheetName = '';
+                // BUG-IM-01: Server-side check on isTargetLocked before importing baseline
+                $isTargetLocked = str_contains($targetMitra['baseline_status'] ?? '', 'DIKUNCI');
+                if ($importType === 'baseline' && $isTargetLocked) {
+                    $errors[] = "Data Baseline untuk naskah {$targetMitra['kode']} telah dikunci (TERVERIFIKASI / DIKUNCI) dan tidak dapat di-import ulang.";
+                } else {
+                    // BUG-IM-05: Wrap multi-table import in a database transaction
+                    $pdo->beginTransaction();
+                    try {
+                        // Temukan Sheet Baseline & Sheet Scorecard
+                        $baseSheetName = '';
+                        $scSheetName = '';
+                        $rekSheetName = '';
+                        $picSheetName = '';
+                        $kegSheetName = '';
+                        $utlSheetName = '';
 
-                // 1. Deteksi Sheet Baseline
-                if ($importType !== 'scorecard') {
+                        // 1. Deteksi Sheet Baseline (skip jika target locked dan importType === 'all')
+                        if ($importType !== 'scorecard' && !$isTargetLocked) {
                     // a. Cocokkan dengan kode naskah (misal: P01_DEKRANASDA, P02, dll)
                     foreach (array_keys($parsedWb) as $sName) {
                         $upper = strtoupper($sName);
@@ -154,11 +162,28 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                     $baseRows = $parsedWb[$baseSheetName];
 
                     // Baca metadata pemeriksa & cut-off jika ada
-                    $pemeriksaVal = $baseRows[5][8] ?? $baseRows[5][7] ?? $baseRows[5][3] ?? '';
+                    $pemeriksaRaw = trim((string)($baseRows[5][8] ?? $baseRows[5][7] ?? $baseRows[5][3] ?? ''));
+                    $pemeriksaVal = '';
+                    // BUG-IM-06: Guard against placeholder text [NAMA PEMERIKSA]
+                    if ($pemeriksaRaw !== '' && !preg_match('/^\[.*\]$/', $pemeriksaRaw) && stripos($pemeriksaRaw, 'nama pemeriksa') === false && $pemeriksaRaw !== '-') {
+                        $pemeriksaVal = $pemeriksaRaw;
+                    }
+
                     $cutoffVal = $baseRows[8][8] ?? $baseRows[8][7] ?? $baseRows[8][2] ?? '';
-                    if (!empty($cutoffVal) && preg_match('/(\d{4}-\d{2}-\d{2})/', $cutoffVal, $mCut)) {
-                        $cutoffDate = $mCut[1];
-                    } else {
+                    // BUG-IM-02: Convert Excel serial dates for cut-off date instead of overwriting with today's date
+                    $cutoffDate = null;
+                    if (!empty($cutoffVal)) {
+                        $cStr = trim((string)$cutoffVal);
+                        if (is_numeric($cStr) && (float)$cStr > 20000 && (float)$cStr < 70000) {
+                            $ts = ((float)$cStr - 25569) * 86400;
+                            $cutoffDate = gmdate('Y-m-d', (int)round($ts));
+                        } elseif (preg_match('/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/', $cStr, $mCut)) {
+                            $cutoffDate = sprintf('%04d-%02d-%02d', $mCut[1], $mCut[2], $mCut[3]);
+                        } elseif (preg_match('/(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/', $cStr, $mCut)) {
+                            $cutoffDate = sprintf('%04d-%02d-%02d', $mCut[3], $mCut[2], $mCut[1]);
+                        }
+                    }
+                    if (!$cutoffDate) {
                         $cutoffDate = date('Y-m-d');
                     }
 
@@ -176,15 +201,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                         $linkBukti = trim((string)($row[8] ?? ''));
                         $catatan = trim((string)($row[9] ?? ''));
 
-                        // Normalisasi status secara cerdas
+                        // BUG-BL-01, BUG-BL-02: Normalisasi status secara cerdas
                         $finalStatus = 'BELUM DIISI';
-                        if (str_contains($rawStatus, 'BELUM TERVERIFIKASI')) {
+                        if (str_contains($rawStatus, 'BELUM TERVERIFIKASI') || str_contains($rawStatus, 'BELUM SESUAI') || str_contains($rawStatus, 'TIDAK SESUAI')) {
                             $finalStatus = 'BELUM TERVERIFIKASI';
-                        } elseif (str_contains($rawStatus, 'BELUM TERSEDIA') || str_contains($rawStatus, 'TIDAK TERSEDIA') || str_contains($rawStatus, 'TIDAK ADA')) {
+                        } elseif (str_contains($rawStatus, 'BELUM TERSEDIA') || str_contains($rawStatus, 'TIDAK TERSEDIA') || str_contains($rawStatus, 'TIDAK ADA') || str_contains($rawStatus, 'BELUM ADA')) {
                             $finalStatus = 'BELUM TERSEDIA';
                         } elseif (str_contains($rawStatus, 'TIDAK RELEVAN') || str_contains($rawStatus, 'BUKAN')) {
                             $finalStatus = 'TIDAK RELEVAN';
-                        } elseif (str_contains($rawStatus, 'TERVERIFIKASI') || str_contains($rawStatus, 'SESUAI') || str_contains($rawStatus, 'VERIFIED') || str_contains($rawStatus, 'ADA') || str_contains($rawStatus, 'SUDAH')) {
+                        } elseif (str_contains($rawStatus, 'TERVERIFIKASI') || str_contains($rawStatus, 'VERIFIED') || preg_match('/\b(SESUAI|ADA|SUDAH)\b/', $rawStatus)) {
                             $finalStatus = 'TERVERIFIKASI';
                         } elseif (!empty($linkBukti) || !empty($fakta)) {
                             $finalStatus = !empty($linkBukti) ? 'TERVERIFIKASI' : 'BELUM TERVERIFIKASI';
@@ -266,12 +291,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                             $evidenceLoc = '';
                         }
 
-                        // Normalisasi status pemeriksaan
+                        // BUG-IM-03: Normalisasi status pemeriksaan (cegah 'BUKTI BELUM CUKUP' menjadi 'BUKTI CUKUP')
                         $statusPem = 'BELUM DITELAAH';
-                        if (str_contains($rawStatus, 'BELUM DAPAT') || str_contains($rawStatus, 'BELUM DINILAI')) $statusPem = 'BELUM DAPAT DINILAI';
-                        elseif (str_contains($rawStatus, 'DAPAT DINILAI') || (str_contains($rawStatus, 'MEMADAI') && !str_contains($rawStatus, 'BELUM'))) $statusPem = 'BUKTI MEMADAI';
-                        elseif (str_contains($rawStatus, 'CUKUP')) $statusPem = 'BUKTI CUKUP';
-                        elseif (str_contains($rawStatus, 'BELUM MEMADAI')) $statusPem = 'BUKTI BELUM MEMADAI';
+                        if (str_contains($rawStatus, 'BELUM DAPAT') || str_contains($rawStatus, 'BELUM DINILAI')) {
+                            $statusPem = 'BELUM DAPAT DINILAI';
+                        } elseif (str_contains($rawStatus, 'BELUM MEMADAI') || str_contains($rawStatus, 'BELUM CUKUP') || str_contains($rawStatus, 'TIDAK MEMADAI') || str_contains($rawStatus, 'TIDAK CUKUP')) {
+                            $statusPem = 'BUKTI BELUM MEMADAI';
+                        } elseif (str_contains($rawStatus, 'DAPAT DINILAI') || (str_contains($rawStatus, 'MEMADAI') && !str_contains($rawStatus, 'BELUM'))) {
+                            $statusPem = 'BUKTI MEMADAI';
+                        } elseif (str_contains($rawStatus, 'CUKUP') && !str_contains($rawStatus, 'BELUM')) {
+                            $statusPem = 'BUKTI CUKUP';
+                        }
 
                         $skor = is_numeric($rawSkor) ? (int)$rawSkor : null;
                         $nilai = $skor !== null ? round(($skor / 4.0) * $bobot, 2) : null;
@@ -329,6 +359,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
 
                     // Sinkronkan total skor dan status scorecard
                     syncStatusScorecard($pdo, $targetId);
+                    // BUG-IM-04: Ensure syncStatusScorecard preserves 'SIAP DIVALIDASI' status
+                    if (!empty($rawScStatus) && (str_contains(strtoupper($rawScStatus), 'SIAP') || strtoupper($rawScStatus) === 'SIAP DIVALIDASI')) {
+                        $pdo->prepare('UPDATE mitra_kinerja SET status_scorecard = ? WHERE id = ?')->execute(['SIAP DIVALIDASI', $targetId]);
+                    } elseif (!empty($rawScStatus)) {
+                        $pdo->prepare('UPDATE mitra_kinerja SET status_scorecard = ? WHERE id = ?')->execute([$rawScStatus, $targetId]);
+                    }
                 }
 
                 // 3. IMPORT DATA IDENTITAS & PIC (JIKA ADA)
@@ -339,9 +375,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                     foreach ($picRows as $pRow) {
                         $label = strtolower(trim($pRow[1] ?? ''));
                         $val = trim($pRow[2] ?? '');
-                        if (str_contains($label, 'pic mitra') || (str_contains($label, 'nama') && str_contains($label, 'mitra'))) {
+                        // BUG-BL-06: Do not let "Nama Mitra" label overwrite pic_mitra with organization name
+                        if (str_contains($label, 'pic mitra') || str_contains($label, 'focal point mitra') || (str_contains($label, 'pic') && str_contains($label, 'mitra'))) {
                             if (!empty($val)) $picMitraFound = $val;
-                        } elseif (str_contains($label, 'pic internal') || str_contains($label, 'pengampu')) {
+                        } elseif (str_contains($label, 'pic internal') || str_contains($label, 'pengampu') || str_contains($label, 'focal point internal')) {
                             if (!empty($val)) $picInternalFound = $val;
                         }
                     }
@@ -355,6 +392,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                         $pdo->prepare($uSql)->execute($uParams);
                     }
                 }
+
+                // Commit transaction (BUG-IM-05)
+                $pdo->commit();
 
                 if ($importType === 'baseline') {
                     logAudit($targetId, $user['id'], 'IMPORT_BASELINE', "Import Baseline untuk {$targetMitra['kode']}: {$updatedBaseline} elemen diperbarui.");
@@ -374,19 +414,28 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                              . ($updatedScorecard ? "&bull; {$updatedScorecard} indikator Scorecard disinkronkan ke sistem.<br>" : "")
                              . ($fileNaskahExtracted ? "&bull; Tautan naskah resmi P2MA terhubung secara otomatis.<br>" : "");
                 }
+                    } catch (Throwable $e) {
+                        if ($pdo->inTransaction()) {
+                            $pdo->rollBack();
+                        }
+                        $errors[] = 'Gagal memproses import data: ' . $e->getMessage();
+                    }
+                }
             }
         }
     }
 }
 
 // Ambil daftar seluruh naskah kerja sama
+// BUG-IM-07, BUG-IM-08: Count filled vs verified accurately, and order by Pilot Utama before Cadangan
 $stmt = $pdo->query('
     SELECT m.*, 
            (SELECT COUNT(*) FROM baseline_elemen WHERE mitra_id = m.id AND status = "TERVERIFIKASI") as total_terverifikasi,
+           (SELECT COUNT(*) FROM baseline_elemen WHERE mitra_id = m.id AND status IS NOT NULL AND status != "BELUM DIISI") as total_terisi,
            (SELECT COUNT(*) FROM indikator_skor WHERE mitra_id = m.id AND skor IS NOT NULL) as total_terisi_skor,
            (SELECT ROUND(SUM(nilai), 1) FROM indikator_skor WHERE mitra_id = m.id) as total_skor
     FROM mitra_kinerja m 
-    ORDER BY m.portofolio DESC, m.kode ASC
+    ORDER BY CASE WHEN m.portofolio IN ("Pilot Utama", "PILOT") THEN 0 ELSE 1 END ASC, m.kode ASC
 ');
 $daftarMitra = $stmt->fetchAll();
 
@@ -531,11 +580,11 @@ require __DIR__ . '/includes/header.php';
                                 <span>🔒</span> Terkunci
                             </span>
                             <div style="font-size:10.5px;color:#64748b;margin-top:2px;">(12 Elemen)</div>
-                        <?php elseif ((int)($m['total_terverifikasi'] ?? 0) > 0): ?>
+                        <?php elseif ((int)($m['total_terisi'] ?? 0) > 0): ?>
                             <span class="badge badge-warning" style="font-size:10.5px;padding:3px 7px;">
                                 Dalam Proses
                             </span>
-                            <div style="font-size:10.5px;color:#64748b;margin-top:2px;"><?= $m['total_terverifikasi'] ?>/12 Terisi</div>
+                            <div style="font-size:10.5px;color:#64748b;margin-top:2px;"><?= (int)($m['total_terverifikasi'] ?? 0) ?> Verif / <?= (int)$m['total_terisi'] ?> Terisi</div>
                         <?php else: ?>
                             <span class="badge badge-secondary" style="font-size:10.5px;padding:3px 7px;background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1;">
                                 Belum Ada

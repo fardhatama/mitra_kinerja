@@ -4,10 +4,10 @@ require_once __DIR__ . '/includes/data.php';
 requireLogin();
 
 $user = currentUser();
-$canEdit = in_array($user['role'], ['admin', 'pemeriksa'], true);
+$userRole = $user['role'] ?? 'pemeriksa';
 
 $id = (int)($_GET['id'] ?? 0);
-$stmt = $pdo = getDB();
+$pdo = getDB();
 $stmt = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
 $stmt->execute([$id]);
 $mitra = $stmt->fetch();
@@ -16,13 +16,31 @@ if (!$mitra) {
     die('Naskah tidak ditemukan.');
 }
 
+// Cek status validasi saat ini untuk mendeteksi kunci / status disetujui
+$stmtVal = $pdo->prepare('SELECT status FROM validasi WHERE mitra_id = ?');
+$stmtVal->execute([$id]);
+$currentValStatus = $stmtVal->fetchColumn() ?: 'BELUM';
+
+// Bug 8.3: Role pengampu diizinkan mengedit jika ditugaskan
+$isAssigned = (!empty($mitra['pemeriksa_id']) && (int)$mitra['pemeriksa_id'] === (int)$user['id'])
+    || (!empty($mitra['pic_internal']) && stripos($mitra['pic_internal'], $user['nama'] ?? $user['username'] ?? '') !== false);
+
+$canEdit = in_array($userRole, ['admin', 'pemeriksa'], true)
+    || ($userRole === 'pengampu' && ($isAssigned || empty($mitra['pemeriksa_id'])));
+
+// Bug 2.2: Kunci naskah jika FINAL/TERVALIDASI atau validasi DISETUJUI (hanya admin yang dapat mengubah)
+$isLockedFinal = (in_array($mitra['status_scorecard'] ?? '', ['FINAL/TERVALIDASI', 'FINAL'], true) || $currentValStatus === 'DISETUJUI');
+if ($isLockedFinal && $userRole !== 'admin') {
+    $canEdit = false;
+}
+
 $errors = [];
 $saved = false;
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if (!$canEdit) {
         http_response_code(403);
-        die('Role Anda tidak dapat mengubah data ini.');
+        die('Akses ditolak: Data naskah telah berstatus FINAL/TERVALIDASI atau disetujui validator, atau role Anda tidak memiliki izin untuk mengubah data ini.');
     }
 
     $pdo->beginTransaction();
@@ -34,9 +52,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $rekomendasi = trim($_POST['rekomendasi'] ?? '') ?: 'BELUM DITENTUKAN';
         $picFocalPoint = trim($_POST['pic_focal_point'] ?? '');
 
+        $reviewerIdToSave = !empty($mitra['pemeriksa_id']) ? $mitra['pemeriksa_id'] : $user['id'];
         $stmtU = $pdo->prepare('UPDATE mitra_kinerja SET pemeriksa_id = ?, tanggal_review = ?, status_tanggal = ?, posisi_portofolio = ?, rekomendasi = ?, pic_focal_point = ? WHERE id = ?');
         $stmtU->execute([
-            $user['id'],
+            $reviewerIdToSave,
             ($_POST['tanggal_review'] ?? '') !== '' ? $_POST['tanggal_review'] : null,
             $statusTanggal,
             $posisiPortofolio,
@@ -46,6 +65,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         ]);
 
         // --- B. Tujuh Indikator V2.1 (I1..I7) ---
+        // Bug 2.3: Gunakan INSERT ... ON DUPLICATE KEY UPDATE agar tidak silently match 0 baris
         foreach (['I1','I2','I3','I4','I5','I6','I7'] as $kode) {
             $status  = $_POST['status_' . $kode] ?? 'BELUM DITELAAH';
             $kondisiSaatIni = trim($_POST['kondisi_saat_ini_' . $kode] ?? '');
@@ -60,23 +80,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 $skor = max(0, min(4, (int)$skorRaw));
             }
 
-            $stmtI = $pdo->prepare('SELECT bobot FROM indikator_skor WHERE mitra_id = ? AND kode_indikator = ?');
+            $stmtI = $pdo->prepare('SELECT bobot, deskripsi FROM indikator_skor WHERE mitra_id = ? AND kode_indikator = ?');
             $stmtI->execute([$id, $kode]);
-            $bobot = (int)($stmtI->fetchColumn() ?: (BOBOT_INDIKATOR[$kode] ?? 10));
+            $existRow = $stmtI->fetch();
+            $bobot = (int)($existRow['bobot'] ?? (BOBOT_INDIKATOR[$kode] ?? 10));
+            $deskripsiExist = $existRow['deskripsi'] ?? "Indikator $kode";
             $nilai = hitungNilaiIndikator($skor, $bobot);
 
             $stmtU2 = $pdo->prepare(
-                'UPDATE indikator_skor SET status_pemeriksaan=?, kondisi_saat_ini=?, temuan_bukti=?, skor=?, alasan_skor=?, catatan_tindak_lanjut=?, nilai=?, updated_by=? WHERE mitra_id=? AND kode_indikator=?'
+                'INSERT INTO indikator_skor (mitra_id, kode_indikator, deskripsi, bobot, referensi_baseline, status_pemeriksaan, kondisi_saat_ini, temuan_bukti, skor, alasan_skor, catatan_tindak_lanjut, nilai, updated_by)
+                 VALUES (?, ?, ?, ?, \'Baseline awal\', ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE status_pemeriksaan=VALUES(status_pemeriksaan), kondisi_saat_ini=VALUES(kondisi_saat_ini), temuan_bukti=VALUES(temuan_bukti), skor=VALUES(skor), alasan_skor=VALUES(alasan_skor), catatan_tindak_lanjut=VALUES(catatan_tindak_lanjut), nilai=VALUES(nilai), updated_by=VALUES(updated_by)'
             );
-            $stmtU2->execute([$status, $kondisiSaatIni ?: null, $temuan ?: null, $skor, $alasan ?: null, $catatanTl ?: null, $nilai, $user['id'], $id, $kode]);
+            $stmtU2->execute([$id, $kode, $deskripsiExist, $bobot, $status, $kondisiSaatIni ?: null, $temuan ?: null, $skor, $alasan ?: null, $catatanTl ?: null, $nilai, $user['id']]);
         }
 
         // --- D. Early warning (4 dimensi) ---
-        // "Masa berlaku": Kondisi & Status 100% OTOMATIS (dari tanggal berakhir/cutoff/status
-        // tanggal) -- tidak menerima input Kondisi/Status dari form sama sekali, hanya field
-        // penanganan (Fakta, Tindakan, PIC, Tenggat, Progres) yang bisa diisi pemeriksa.
-        // 3 dimensi lain: Kondisi dipilih dari daftar tetap, Status DITURUNKAN dari Kondisi
-        // itu (bukan dipilih manual) -- ditegakkan di server via statusDariKondisi().
+        // Bug 2.3: Gunakan INSERT ... ON DUPLICATE KEY UPDATE
         foreach (['Masa berlaku','Aktivitas/tenggat','Data/eviden','PIC'] as $dim) {
             $key = preg_replace('/[^a-zA-Z]/', '', $dim);
             $fakta    = trim($_POST['warn_fakta_' . $key] ?? '');
@@ -86,48 +106,53 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $progres  = $_POST['warn_progres_' . $key] ?? 'BELUM MULAI';
 
             if ($dim === 'Masa berlaku') {
-                // Kondisi/status dihitung ulang setiap tampil (lihat getMitraSummary);
-                // tidak perlu -- dan tidak boleh -- menerima nilai dari klien.
                 $stmtW = $pdo->prepare(
-                    'UPDATE early_warning SET fakta_bukti=?, tindakan=?, pic=?, tenggat=?, progres=? WHERE mitra_id=? AND dimensi=?'
+                    'INSERT INTO early_warning (mitra_id, dimensi, status, fakta_bukti, tindakan, pic, tenggat, progres)
+                     VALUES (?, ?, \'V0\', ?, ?, ?, ?, ?)
+                     ON DUPLICATE KEY UPDATE fakta_bukti=VALUES(fakta_bukti), tindakan=VALUES(tindakan), pic=VALUES(pic), tenggat=VALUES(tenggat), progres=VALUES(progres)'
                 );
-                $stmtW->execute([$fakta ?: null, $tindakan ?: null, $pic ?: null, $tenggat !== '' ? $tenggat : null, $progres, $id, $dim]);
+                $stmtW->execute([$id, $dim, $fakta ?: null, $tindakan ?: null, $pic ?: null, $tenggat !== '' ? $tenggat : null, $progres]);
             } else {
                 $kondisiPost = $_POST['warn_kondisi_' . $key] ?? 'BELUM DIPERIKSA';
                 $allowedKondisi = array_keys(KONDISI_OPTIONS[$dim] ?? []);
                 $kondisi = in_array($kondisiPost, $allowedKondisi, true) ? $kondisiPost : 'BELUM DIPERIKSA';
-                $status = statusDariKondisi($dim, $kondisi); // dihitung server, bukan dari input klien
+                $status = statusDariKondisi($dim, $kondisi);
 
                 $stmtW = $pdo->prepare(
-                    'UPDATE early_warning SET status=?, kondisi=?, fakta_bukti=?, tindakan=?, pic=?, tenggat=?, progres=? WHERE mitra_id=? AND dimensi=?'
+                    'INSERT INTO early_warning (mitra_id, dimensi, status, kondisi, fakta_bukti, tindakan, pic, tenggat, progres)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     ON DUPLICATE KEY UPDATE status=VALUES(status), kondisi=VALUES(kondisi), fakta_bukti=VALUES(fakta_bukti), tindakan=VALUES(tindakan), pic=VALUES(pic), tenggat=VALUES(tenggat), progres=VALUES(progres)'
                 );
-                $stmtW->execute([$status, $kondisi, $fakta ?: null, $tindakan ?: null, $pic ?: null, $tenggat !== '' ? $tenggat : null, $progres, $id, $dim]);
+                $stmtW->execute([$id, $dim, $status, $kondisi, $fakta ?: null, $tindakan ?: null, $pic ?: null, $tenggat !== '' ? $tenggat : null, $progres]);
             }
         }
 
         // --- E. Uji kebutuhan intervensi pimpinan (5 pemicu) ---
+        // Bug 2.3: Gunakan INSERT ... ON DUPLICATE KEY UPDATE
         for ($no = 1; $no <= 5; $no++) {
             $jawaban = $_POST['pemicu_' . $no] ?? 'BELUM DIPASTIKAN';
             $bukti   = trim($_POST['pemicu_bukti_' . $no] ?? '');
-            $stmtP = $pdo->prepare('UPDATE intervensi_pimpinan SET jawaban=?, bukti_alasan=? WHERE mitra_id=? AND no_pemicu=?');
-            $stmtP->execute([$jawaban, $bukti ?: null, $id, $no]);
+            $stmtP = $pdo->prepare(
+                'INSERT INTO intervensi_pimpinan (mitra_id, no_pemicu, pemicu_teks, jawaban, bukti_alasan)
+                 VALUES (?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE jawaban=VALUES(jawaban), bukti_alasan=VALUES(bukti_alasan)'
+            );
+            $stmtP->execute([$id, $no, 'Pemicu ' . $no, $jawaban, $bukti ?: null]);
         }
 
         $kendala   = trim($_POST['uraian_kendala'] ?? '');
         $upaya     = trim($_POST['upaya_dilakukan'] ?? '');
         $keputusan = trim($_POST['keputusan_diminta'] ?? '');
-        $stmtV = $pdo->prepare('SELECT id FROM intervensi_usulan WHERE mitra_id = ?');
-        $stmtV->execute([$id]);
-        if ($stmtV->fetch()) {
-            $stmtU3 = $pdo->prepare('UPDATE intervensi_usulan SET uraian_kendala=?, upaya_dilakukan=?, keputusan_diminta=? WHERE mitra_id=?');
-            $stmtU3->execute([$kendala ?: null, $upaya ?: null, $keputusan ?: null, $id]);
-        } else {
-            $stmtU3 = $pdo->prepare('INSERT INTO intervensi_usulan (mitra_id, uraian_kendala, upaya_dilakukan, keputusan_diminta) VALUES (?,?,?,?)');
-            $stmtU3->execute([$id, $kendala ?: null, $upaya ?: null, $keputusan ?: null]);
-        }
+        $stmtU3 = $pdo->prepare(
+            'INSERT INTO intervensi_usulan (mitra_id, uraian_kendala, upaya_dilakukan, keputusan_diminta)
+             VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE uraian_kendala=VALUES(uraian_kendala), upaya_dilakukan=VALUES(upaya_dilakukan), keputusan_diminta=VALUES(keputusan_diminta)'
+        );
+        $stmtU3->execute([$id, $kendala ?: null, $upaya ?: null, $keputusan ?: null]);
 
-        $pdo->commit();
+        // Bug 2.1: Call syncStatusScorecard inside the try-catch block before or alongside commit
         syncStatusScorecard($pdo, $id);
+        $pdo->commit();
         logAudit($id, $user['id'], 'SIMPAN_SCORECARD', 'Menyimpan penilaian naskah ' . $mitra['kode']);
         $saved = true;
     } catch (Throwable $e) {
@@ -164,7 +189,11 @@ require __DIR__ . '/includes/header.php';
 
 <?php if ($saved): ?><div class="alert alert-info">Perubahan tersimpan.</div><?php endif; ?>
 <?php foreach ($errors as $e): ?><div class="alert alert-warning"><?= h($e) ?></div><?php endforeach; ?>
-<?php if (!$canEdit): ?><div class="alert alert-info">Anda melihat data ini sebagai <?= h($user['role']) ?> (mode baca saja).</div><?php endif; ?>
+<?php if ($isLockedFinal && $userRole !== 'admin'): ?>
+    <div class="alert alert-warning">🔒 Naskah ini telah berstatus <strong>FINAL/TERVALIDASI</strong> atau telah disetujui validator. Mode baca saja (hanya Administrator yang berwenang mengubah data).</div>
+<?php elseif (!$canEdit): ?>
+    <div class="alert alert-info">Anda melihat data ini sebagai <?= h($userRole) ?> (mode baca saja).</div>
+<?php endif; ?>
 
 <div class="kpi-grid" style="margin-bottom:12px;grid-template-columns:repeat(auto-fit, minmax(135px, 1fr));gap:12px;">
     <div class="kpi-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:92px;padding:10px 8px;">
@@ -181,11 +210,12 @@ require __DIR__ . '/includes/header.php';
     </div>
     <div class="kpi-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:92px;padding:10px 8px;">
         <?php
+        // Bug 8.1: Gunakan primary untuk SIAP DIVALIDASI agar memiliki kelas CSS valid
         $scBadgeColor = match($summary['status_scorecard']) {
             'FINAL/TERVALIDASI', 'FINAL' => 'success',
-            'SIAP DIVALIDASI' => 'info',
-            'DALAM PENILAIAN' => 'primary',
-            'BUKTI BELUM MEMADAI', 'PERLU PERBAIKAN' => 'warning',
+            'SIAP DIVALIDASI' => 'primary',
+            'DALAM PENILAIAN' => 'warning',
+            'BUKTI BELUM MEMADAI', 'PERLU PERBAIKAN' => 'danger',
             default => 'secondary'
         };
         ?>
@@ -237,7 +267,17 @@ require __DIR__ . '/includes/header.php';
         </div>
         <div class="field">
             <label>Reviewer/Pengelola</label>
-            <input type="text" value="<?= h($user['nama'] ?? $user['name'] ?? 'Reviewer') ?>" disabled>
+            <?php
+            // Bug 8.2: Tampilkan nama reviewer aktual dari pemeriksa_id join users
+            $reviewerName = 'Belum Ditugaskan';
+            if (!empty($mitra['pemeriksa_id'])) {
+                $stmtRev = $pdo->prepare('SELECT nama FROM users WHERE id = ?');
+                $stmtRev->execute([$mitra['pemeriksa_id']]);
+                $rev = $stmtRev->fetchColumn();
+                if ($rev) $reviewerName = $rev;
+            }
+            ?>
+            <input type="text" value="<?= h($reviewerName) ?>" disabled>
         </div>
         <div class="field">
             <label>Tanggal Penilaian</label>
@@ -368,7 +408,7 @@ $monev = $summary['monev'];
                     </tr>
                     <?php endforeach; ?>
                 <?php else: ?>
-                    <?php foreach (array_slice($monev['milestones'], 0, 4) as $ms): ?>
+                    <?php foreach (($monev['milestones'] ?? []) as $ms): ?>
                     <tr>
                         <td><strong>SC-<?= $ms['siklus_ke'] ?></strong></td>
                         <td><?= h($ms['nama']) ?></td>
@@ -411,14 +451,25 @@ $monev = $summary['monev'];
             <label>Rekomendasi Tindak Lanjut</label>
             <select name="rekomendasi" <?= $canEdit ? '' : 'disabled' ?>>
                 <?php
-                $rekOpts = ['BELUM DITENTUKAN','LANJUT','PERBAIKI','PERPANJANG','REPLIKASI','HENTIKAN'];
-                if (!empty($summary['rekomendasi']) && !in_array($summary['rekomendasi'], $rekOpts, true)) {
-                    $rekOpts[] = $summary['rekomendasi'];
+                // Bug 2.4: Hanya tampilkan opsi bersih, jangan inject teks panjang ke dalam <option>
+                $cleanRekOpts = ['BELUM DITENTUKAN', 'LANJUT', 'PERBAIKI', 'PERPANJANG', 'REPLIKASI', 'HENTIKAN'];
+                $curRek = strtoupper(trim((string)($summary['rekomendasi'] ?? '')));
+                $selectedRek = 'BELUM DITENTUKAN';
+                foreach ($cleanRekOpts as $ro) {
+                    if ($curRek === $ro || (strlen($ro) > 4 && str_contains($curRek, $ro))) {
+                        $selectedRek = $ro;
+                        break;
+                    }
                 }
-                foreach ($rekOpts as $opt): ?>
-                <option value="<?= h($opt) ?>" <?= $summary['rekomendasi'] === $opt ? 'selected' : '' ?>><?= h($opt) ?></option>
+                foreach ($cleanRekOpts as $opt): ?>
+                <option value="<?= h($opt) ?>" <?= $selectedRek === $opt ? 'selected' : '' ?>><?= h($opt) ?></option>
                 <?php endforeach; ?>
             </select>
+            <?php if (!empty($summary['rekomendasi']) && !in_array($summary['rekomendasi'], $cleanRekOpts, true)): ?>
+            <div class="muted" style="font-size:11px;margin-top:4px;">
+                <strong>Catatan Rekomendasi/Audit:</strong><br><?= nl2br(h(mb_strimwidth($summary['rekomendasi'], 0, 200, '...'))) ?>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>
