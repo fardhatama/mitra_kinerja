@@ -61,13 +61,11 @@ if ($id <= 0) {
                         if ($isCompleted) {
                             continue;
                         }
-                        if (!empty($ms['is_due_soon']) || !empty($ms['is_past'])) {
-                            $msLabel = $ms['nama'];
-                            $msTarget = $ms['target_tgl'];
-                            $msDays = $ms['sisa_hari'];
-                            $isDuePast = $ms['is_past'];
-                            break;
-                        }
+                        $msLabel = $ms['nama'];
+                        $msTarget = $ms['target_tgl'];
+                        $msDays = $ms['sisa_hari'];
+                        $isDuePast = !empty($ms['is_past']);
+                        break;
                     }
                 }
             ?>
@@ -146,10 +144,13 @@ $saved = false;
 $summary = getMitraSummary($pdo, $mitra);
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
-    if (!in_array($userRole, ['admin', 'validator'], true)) {
+    $csrfToken = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
+    if (!verifyCsrfToken($csrfToken)) {
+        $errors[] = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
+    } elseif (!in_array($userRole, ['admin', 'validator'], true)) {
         http_response_code(403);
         die('Akses ditolak: Hanya validator dan administrator yang berwenang menetapkan keputusan validasi.');
-    }
+    } else {
     $status = $_POST['status'] ?? 'BELUM';
     $catatan = trim($_POST['catatan'] ?? '');
 
@@ -182,6 +183,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 $pdo->prepare("UPDATE mitra_kinerja SET status_scorecard = 'FINAL/TERVALIDASI' WHERE id = ?")->execute([$id]);
             } elseif ($status === 'PERLU PERBAIKAN') {
                 $pdo->prepare("UPDATE mitra_kinerja SET status_scorecard = 'PERLU PERBAIKAN' WHERE id = ?")->execute([$id]);
+            } else { // 'BELUM'
+                $revertedStatus = hitungStatusScorecard(
+                    (bool)$summary['skor_lengkap'],
+                    (bool)$summary['cek_lengkap_ok'],
+                    'BELUM',
+                    (int)($summary['bukti_kurang_n'] ?? 0),
+                    (int)($summary['bdn_n'] ?? 0),
+                    (int)($summary['dapat_dinilai_n'] ?? 0)
+                );
+                $pdo->prepare("UPDATE mitra_kinerja SET status_scorecard = ? WHERE id = ?")->execute([$revertedStatus, $id]);
             }
             syncStatusScorecard($pdo, $id);
             logAudit($id, $user['id'], 'VALIDASI', 'Status validasi diubah menjadi ' . $status);
@@ -200,6 +211,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $stmt->execute([$id]);
         $mitra = $stmt->fetch();
         $summary = getMitraSummary($pdo, $mitra);
+    }
     }
 }
 
@@ -226,16 +238,9 @@ require __DIR__ . '/includes/header.php';
         <div class="kpi-card"><span class="badge badge-secondary" style="font-size:11px;"><?= h($summary['posisi_portofolio']) ?></span><div class="kpi-label">Posisi Portofolio</div></div>
         <?php
         $rekFull = $summary['rekomendasi'] ?? '';
-        $cleanRekOpts = ['LANJUT', 'PERBAIKI', 'PERPANJANG', 'REPLIKASI', 'HENTIKAN', 'BELUM DITENTUKAN'];
-        $rekBadge = 'BELUM DITENTUKAN';
-        foreach ($cleanRekOpts as $ro) {
-            if (str_contains(strtoupper($rekFull), $ro)) {
-                $rekBadge = $ro;
-                break;
-            }
-        }
+        $rekBadge = ekstrakKeywordRekomendasi($rekFull);
         if ($rekBadge === 'BELUM DITENTUKAN' && !empty($rekFull)) {
-            $rekBadge = mb_strimwidth($rekFull, 0, 20, '...');
+            $rekBadge = singkat($rekFull, 20);
         }
         ?>
         <div class="kpi-card"><span class="badge badge-warning" style="font-size:11px;" title="<?= h($rekFull) ?>"><?= h($rekBadge) ?></span><div class="kpi-label">Rekomendasi</div></div>
@@ -270,6 +275,7 @@ require __DIR__ . '/includes/header.php';
 <div class="card">
     <h2>Keputusan Validasi</h2>
     <form method="post">
+        <?= csrfField() ?>
         <div class="form-grid">
             <div class="field">
                 <label>Status</label>

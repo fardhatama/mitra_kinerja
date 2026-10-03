@@ -165,7 +165,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
             $statusRekomendasi = 'Tidak Prioritas / Tidak Layak';
         } elseif ($semuaKriteriaYa && !$adaTriggerYa) {
             $statusRekomendasi = 'Layak';
-        } elseif ($jumlahKriteriaYa >= 3 || ($jumlahKriteriaYa >= 1 && $adaTriggerYa)) {
+        } elseif ($jumlahKriteriaYa >= 3) {
             $statusRekomendasi = 'Perlu Penyempurnaan';
         } else {
             $statusRekomendasi = 'Tidak Prioritas / Tidak Layak';
@@ -282,9 +282,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                 // BUG-G0-07: Inisialisasi posisi_portofolio ke 'BELUM DAPAT DITENTUKAN' dan rekomendasi ke 'BELUM DITENTUKAN'
                 $stmtM = $pdo->prepare('INSERT INTO mitra_kinerja (
                     kode, portofolio, nama_mitra, judul, bidang, jenis, tanggal_mulai, tanggal_berakhir,
-                    status_tanggal, evaluasi_per_tahun, cutoff_date, sumber_baseline, status_scorecard, posisi_portofolio, rekomendasi,
+                    status_tanggal, evaluasi_per_tahun, baseline_status, cutoff_date, sumber_baseline, status_scorecard, posisi_portofolio, rekomendasi,
                     pic_internal
-                ) VALUES (?, \'Pilot Utama\', ?, ?, ?, ?, ?, ?, \'TERVERIFIKASI\', 4, CURDATE(), \'Gate 0 Promoted\', \'BELUM LENGKAP\', \'BELUM DAPAT DITENTUKAN\', \'BELUM DITENTUKAN\', ?)');
+                ) VALUES (?, \'Pilot Utama\', ?, ?, ?, ?, ?, ?, \'TERVERIFIKASI\', 4, \'DALAM PROSES\', CURDATE(), \'Gate 0 Promoted\', \'BELUM LENGKAP\', \'BELUM DAPAT DITENTUKAN\', \'BELUM DITENTUKAN\', ?)');
                 $stmtM->execute([
                     $newKode, $pra['calon_mitra'], $pra['judul_rencana'], $bidangCandidate, $jenisMitra,
                     $mulaiPks, $selesaiPks, $pra['penanggung_jawab_usulan'] ?: $pra['unit_pemrakarsa']
@@ -360,7 +360,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
 
                 // Inisialisasi Early Warning (4 dimensi)
                 foreach (['Masa berlaku','Aktivitas/tenggat','Data/eviden','PIC'] as $dim) {
-                    $pdo->prepare("INSERT INTO early_warning (mitra_id, dimensi, status, progres) VALUES (?, ?, 'E0', 'DALAM PROSES')")
+                    $pdo->prepare("INSERT INTO early_warning (mitra_id, dimensi, status, progres) VALUES (?, ?, 'V0', 'BELUM MULAI')")
                         ->execute([$newMitraId, $dim]);
                 }
 
@@ -492,7 +492,7 @@ function parseGate0Upload(string $tmpPath, string $origName): array {
         $stream = fopen('php://temp', 'r+');
         fwrite($stream, $content);
         rewind($stream);
-        while (($data = fgetcsv($stream, 0, $delim)) !== false) {
+        while (($data = fgetcsv($stream, 0, $delim, '"', '\\')) !== false) {
             if (count($data) === 1 && $data[0] === null) continue;
             $rows[] = $data;
         }
@@ -661,7 +661,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                         $rekomendasi = 'Tidak Prioritas / Tidak Layak';
                     } elseif ($jumlahKriteriaYa === 5 && !$adaTrigger) {
                         $rekomendasi = 'Layak';
-                    } elseif ($jumlahKriteriaYa >= 3 || ($jumlahKriteriaYa >= 1 && $adaTrigger)) {
+                    } elseif ($jumlahKriteriaYa >= 3) {
                         $rekomendasi = 'Perlu Penyempurnaan';
                     } else {
                         $rekomendasi = 'Tidak Prioritas / Tidak Layak';
@@ -715,7 +715,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                             catatan_verifikasi=VALUES(catatan_verifikasi),
                             gap_penyempurnaan=VALUES(gap_penyempurnaan),
                             unit_review_tambahan=VALUES(unit_review_tambahan),
-                            status_rekomendasi=VALUES(status_rekomendasi)
+                            status_rekomendasi=VALUES(status_rekomendasi),
+                            status_persetujuan=CASE WHEN status_persetujuan = \'Dikembalikan untuk Revisi\' THEN \'Menunggu Persetujuan Pimpinan\' ELSE status_persetujuan END
                     ');
                     $stmt->execute([
                         $noUsulan, $tipe, $jenis, $unit, $pj,
@@ -843,7 +844,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                             $rek = 'Tidak Prioritas / Tidak Layak';
                         } elseif ($jumlahKriteriaYa === 5 && !$adaTrigger) {
                             $rek = 'Layak';
-                        } elseif ($jumlahKriteriaYa >= 3 || ($jumlahKriteriaYa >= 1 && $adaTrigger)) {
+                        } elseif ($jumlahKriteriaYa >= 3) {
                             $rek = 'Perlu Penyempurnaan';
                         } else {
                             $rek = 'Tidak Prioritas / Tidak Layak';
@@ -882,7 +883,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                             catatan_verifikasi=VALUES(catatan_verifikasi),
                             gap_penyempurnaan=VALUES(gap_penyempurnaan),
                             unit_review_tambahan=VALUES(unit_review_tambahan),
-                            status_rekomendasi=VALUES(status_rekomendasi)');
+                            status_rekomendasi=VALUES(status_rekomendasi),
+                            status_persetujuan=CASE WHEN status_persetujuan = \'Dikembalikan untuk Revisi\' THEN \'Menunggu Persetujuan Pimpinan\' ELSE status_persetujuan END');
                         $stmt->execute([
                             $noUsulan, $tipe, $jenis, $unit, $pj,
                             $mitra, $judul, $tujuan, $ruang, $manfaat,
@@ -1036,13 +1038,13 @@ if (($view === 'detail' || $view === 'print') && $detailId > 0) {
                     <td style="font-size:11px;color:#334155;">Kesimpulan Kriteria <?= $kCode ?></td>
                 </tr>
                 <?php foreach ($crit['questions'] as $qNum => $qText): 
-                    $qItem = $pertanyaanData["q{$qNum}"] ?? ['jawab' => 'YA', 'bukti' => '-'];
+                    $qItem = $pertanyaanData["q{$qNum}"] ?? ['jawab' => 'BELUM DITELAAH', 'bukti' => '-'];
                 ?>
                 <tr>
                     <td style="text-align:center;"><?= $qNum ?></td>
                     <td><?= h($qText) ?></td>
                     <td style="text-align:center;">
-                        <strong style="color:<?= $qItem['jawab'] === 'YA' ? '#16a34a' : '#dc2626' ?>;"><?= $qItem['jawab'] ?></strong>
+                        <strong style="color:<?= $qItem['jawab'] === 'YA' ? '#16a34a' : ($qItem['jawab'] === 'TIDAK' ? '#dc2626' : '#64748b') ?>;"><?= h($qItem['jawab']) ?></strong>
                     </td>
                     <td style="font-size:11px;color:#475569;"><?= h($qItem['bukti'] ?? '-') ?></td>
                 </tr>
@@ -1319,7 +1321,7 @@ require __DIR__ . '/includes/header.php';
                             <a href="gate0.php?view=detail&id=<?= $u['id'] ?>" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 7px;">📄 Form</a>
                             <a href="gate0.php?view=print&id=<?= $u['id'] ?>" target="_blank" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 7px;">🖨️ PDF</a>
                             
-                            <?php if ($canDecide && $u['status_persetujuan'] === 'Menunggu Persetujuan Pimpinan'): ?>
+                            <?php if ($canDecide && in_array($u['status_persetujuan'], ['Menunggu Persetujuan Pimpinan', 'Dikembalikan untuk Revisi'], true)): ?>
                             <button onclick="openDecisionModal(<?= (int)$u['id'] ?>, <?= htmlspecialchars(json_encode((string)$u['nomor_usulan']), ENT_QUOTES, 'UTF-8') ?>, <?= htmlspecialchars(json_encode((string)$u['calon_mitra']), ENT_QUOTES, 'UTF-8') ?>)" class="btn btn-warning btn-sm" style="font-size:11px;padding:3px 7px;">⚖️ Putusan</button>
                             <?php endif; ?>
 

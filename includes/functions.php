@@ -108,19 +108,19 @@ function hitungCekIndikator(array $row): string {
     $isBelumTelaah  = in_array($status, ['BELUM DIPERIKSA', 'BELUM DITELAAH'], true);
 
     if ($isDapatDinilai) {
-        if ($skor === null) return 'BELUM DIISI';
+        if ($skor === null || $skor === '') return 'BELUM DIISI';
         if ($temuan === '') return 'TULIS TEMUAN/BUKTI';
         if ($alasan === '') return 'TULIS ALASAN';
         return 'OK';
     }
 
     if ($isBdnOrKurang) {
-        if ($skor !== null) return 'HAPUS SKOR';
+        if ($skor !== null && $skor !== '') return 'HAPUS SKOR';
         return 'OK';
     }
 
     if ($isBelumTelaah) {
-        if ($skor !== null) return 'HAPUS SKOR';
+        if ($skor !== null && $skor !== '') return 'HAPUS SKOR';
         return 'PERIKSA BUKTI';
     }
 
@@ -128,7 +128,8 @@ function hitungCekIndikator(array $row): string {
 }
 
 /** Nilai indikator = skor/4 * bobot (null jika skor belum ada). */
-function hitungNilaiIndikator(?int $skor, int $bobot): ?float {
+function hitungNilaiIndikator($skor, int $bobot): ?float {
+    $skor = ($skor === null || $skor === '') ? null : (int)$skor;
     if ($skor === null) return null;
     return round(($skor / 4) * $bobot, 2);
 }
@@ -170,12 +171,12 @@ function ringkasanIndikator(array $indikatorRows): array {
     $skorLengkap = ($cekOkCount === $n);
     $cekLengkapOk = ($cekOkCount === $n);
 
-    // V3: Nilai Final HANYA dihitung jika seluruh 7 indikator berstatus DAPAT DINILAI.
+    // V3: Nilai Final HANYA dihitung jika seluruh 7 indikator berstatus DAPAT DINILAI dan skor lengkap.
     // Jika belum lengkap, nilai = null (tampil strip '-').
     $allEvaluable = ($dapatDinilaiCount === $n);
-    $nilaiFinal = $allEvaluable ? round($nilaiBerjalan, 2) : null;
+    $nilaiFinal = ($allEvaluable && $skorLengkap) ? round($nilaiBerjalan, 2) : null;
 
-    if (!$allEvaluable) {
+    if (!($allEvaluable && $skorLengkap)) {
         $kategori = 'DALAM PROSES';
     } else {
         $kategori = kategoriDariNilai($nilaiBerjalan);
@@ -220,11 +221,11 @@ function hitungPosisiPortofolio(array $indikatorRows): string {
 
 /** Menentukan rekomendasi tindak lanjut berdasarkan skor, risiko, dan sisa hari. */
 function hitungRekomendasi(float $nilai, string $warningStatus, string $posisiPortofolio, ?int $sisaHari = null): string {
-    if ($warningStatus === 'E3') {
-        return 'HENTIKAN';
-    }
     if ($sisaHari !== null && $sisaHari <= 90 && $nilai >= 75) {
         return 'PERPANJANG';
+    }
+    if ($warningStatus === 'E3') {
+        return 'HENTIKAN';
     }
     if ($warningStatus === 'E2' || $nilai < 50 || $posisiPortofolio === 'BELUM DAPAT DITENTUKAN') {
         return 'PERBAIKI';
@@ -257,7 +258,11 @@ function ekstrakKeywordRekomendasi(?string $teks): string {
     }
 
     // Uji kata kunci pada headline (PERCEPAT/BENTUK/AKTIFKAN sebelum LANJUT untuk mencegah collision)
-    if (str_contains($upperFirst, 'HENTIKAN') || str_contains($upperFirst, 'HENTI')) {
+    // Cek frasa negatif/penghentian terlebih dahulu agar tidak salah mendeteksi LANJUT / PERPANJANG
+    if (str_contains($upperFirst, 'HENTIKAN') || str_contains($upperFirst, 'HENTI')
+        || str_contains($upperFirst, 'TIDAK DILANJUT') || str_contains($upperFirst, 'TIDAK DIPERPANJANG')
+        || str_contains($upperFirst, 'TIDAK LANJUT') || str_contains($upperFirst, 'TIDAK PERPANJANG')
+        || str_contains($upperFirst, 'JANGAN')) {
         return 'HENTIKAN';
     }
     if (str_contains($upperFirst, 'PERPANJANG')) {
@@ -275,7 +280,10 @@ function ekstrakKeywordRekomendasi(?string $teks): string {
 
     // Jika belum ditemukan di headline, periksa teks keseluruhan tanpa terhalang 'belum' di rincian temuan
     $upper = strtoupper(trim($teks));
-    if (str_contains($upper, 'HENTIKAN') || str_contains($upper, 'HENTI')) {
+    if (str_contains($upper, 'HENTIKAN') || str_contains($upper, 'HENTI')
+        || str_contains($upper, 'TIDAK DILANJUT') || str_contains($upper, 'TIDAK DIPERPANJANG')
+        || str_contains($upper, 'TIDAK LANJUT') || str_contains($upper, 'TIDAK PERPANJANG')
+        || str_contains($upper, 'JANGAN')) {
         return 'HENTIKAN';
     }
     if (str_contains($upper, 'PERPANJANG')) {
@@ -306,11 +314,11 @@ function kategoriDariNilai(float $nilai): string {
  * Status Scorecard V3. Hierarki prioritas:
  *   BUKTI BELUM MEMADAI > SIAP DIVALIDASI > MASA IMPLEMENTASI AWAL > BELUM DINILAI > DALAM PENILAIAN.
  */
-function hitungStatusScorecard(bool $skorLengkap, bool $cekLengkapOk, string $statusValidasi, int $buktiKurangN = 0, int $bdnN = 0, int $dapatDinilaiN = 0): string {
+function hitungStatusScorecard(bool $skorLengkap, bool $cekLengkapOk, string $statusValidasi, int $buktiKurangN = 0, int $bdnN = 0, int $dapatDinilaiN = 0, bool $allEvaluable = true): string {
     if ($buktiKurangN > 0) return 'BUKTI BELUM MEMADAI';
-    if ($statusValidasi === 'DISETUJUI') return 'FINAL/TERVALIDASI';
-    if ($statusValidasi === 'PERLU PERBAIKAN') return 'PERLU PERBAIKAN';
     if ($bdnN > 0) return 'MASA IMPLEMENTASI AWAL';
+    if ($statusValidasi === 'DISETUJUI' && $allEvaluable && $bdnN === 0) return 'FINAL/TERVALIDASI';
+    if ($statusValidasi === 'PERLU PERBAIKAN') return 'PERLU PERBAIKAN';
     if ($dapatDinilaiN === 0) return 'BELUM DINILAI';
     if (!$skorLengkap || !$cekLengkapOk) return 'DALAM PENILAIAN';
     return 'SIAP DIVALIDASI';
@@ -365,7 +373,7 @@ function statusDariKondisi(string $dimensi, ?string $kondisi): string {
  *   D27 (Status)   = BELUM DAPAT DIPASTIKAN->V0 ; SUDAH BERAKHIR/H-30->E3 ; H-90->E2 ; H-180->E1 ; else E0
  */
 function hitungMasaBerlaku(?string $tanggalBerakhir, ?string $cutoffDate, ?string $statusTanggal = null): array {
-    if (($statusTanggal ?? '') !== 'TERVERIFIKASI' || !$tanggalBerakhir || !$cutoffDate || $tanggalBerakhir === '0000-00-00' || $cutoffDate === '0000-00-00') {
+    if (($statusTanggal ?? '') !== 'TERVERIFIKASI' || !$tanggalBerakhir || !$cutoffDate || str_starts_with($tanggalBerakhir, '0000-00-00') || str_starts_with($cutoffDate, '0000-00-00')) {
         return ['sisa_hari' => null, 'kondisi' => 'BELUM DAPAT DIPASTIKAN', 'status' => 'V0'];
     }
     $timeBerakhir = strtotime($tanggalBerakhir);
@@ -406,7 +414,7 @@ function hitungKebutuhanScorecard(?string $tanggalMulai, ?string $tanggalBerakhi
         'milestones'               => [],
     ];
 
-    if (!$tanggalMulai || !$tanggalBerakhir || $tanggalMulai === '0000-00-00' || $tanggalBerakhir === '0000-00-00') {
+    if (!$tanggalMulai || !$tanggalBerakhir || str_starts_with($tanggalMulai, '0000-00-00') || str_starts_with($tanggalBerakhir, '0000-00-00')) {
         return $fallback;
     }
 
@@ -992,7 +1000,7 @@ function parseFullWorkbookXlsx(string $filePath): array {
                     $type = (string)($c['t'] ?? '');
                     $val = (string)($c->v ?? '');
 
-                    if ($type === 's' && isset($sharedStrings[(int)$val])) {
+                    if ($type === 's' && $val !== '' && is_numeric($val) && isset($sharedStrings[(int)$val])) {
                         $cellVal = $sharedStrings[(int)$val];
                     } elseif ($type === 'inlineStr' && isset($c->is->t)) {
                         $cellVal = (string)$c->is->t;

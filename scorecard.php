@@ -85,7 +85,10 @@ function formatKeputusanPimpinan(?string $hasilUji): array {
 
 // ── PROSES IMPORT SCORECARD EXCEL (.xlsx) ──────────────────────────────────
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && in_array(($_POST['action'] ?? ''), ['import_scorecard', 'import_naskah'], true)) {
-    if (!$canImport) {
+    $csrfToken = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
+    if (!verifyCsrfToken($csrfToken)) {
+        $errors[] = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
+    } elseif (!$canImport) {
         $errors[] = 'Anda tidak memiliki hak akses untuk melakukan import Scorecard.';
     } else {
         $targetId = (int)($_POST['mitra_id'] ?? 0);
@@ -429,9 +432,35 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && in_array(($_POST['action'] 
                                 // Sinkronkan status scorecard dan nilai final di DB
                                 syncStatusScorecard($pdo, $targetId);
 
-                                // Bug 1.3: Pastikan status imported seperti 'SIAP DIVALIDASI' dipertahankan jika ada dalam berkas import
+                                // Bug 1.3 & Bug 15: Validasi status_scorecard dari spreadsheet terhadap nilai yang diizinkan
+                                $allowedScStatuses = [
+                                    'SIAP DIVALIDASI',
+                                    'FINAL/TERVALIDASI',
+                                    'FINAL',
+                                    'PERLU PERBAIKAN',
+                                    'MASA IMPLEMENTASI AWAL',
+                                    'BUKTI BELUM MEMADAI',
+                                    'BELUM DINILAI',
+                                    'DALAM PENILAIAN',
+                                    'BELUM LENGKAP'
+                                ];
+                                $validScStatus = null;
                                 if (!empty($rawScStatus)) {
-                                    $pdo->prepare('UPDATE mitra_kinerja SET status_scorecard = ? WHERE id = ?')->execute([$rawScStatus, $targetId]);
+                                    $normStatus = strtoupper(trim((string)$rawScStatus));
+                                    if ($normStatus === 'SIAP') {
+                                        $normStatus = 'SIAP DIVALIDASI';
+                                    } elseif ($normStatus === 'TERVALIDASI') {
+                                        $normStatus = 'FINAL/TERVALIDASI';
+                                    } elseif (str_contains($normStatus, 'IMPLEMENTASI AWAL')) {
+                                        $normStatus = 'MASA IMPLEMENTASI AWAL';
+                                    }
+                                    if (in_array($normStatus, $allowedScStatuses, true)) {
+                                        $validScStatus = $normStatus;
+                                    }
+                                }
+
+                                if (!empty($validScStatus)) {
+                                    $pdo->prepare('UPDATE mitra_kinerja SET status_scorecard = ? WHERE id = ?')->execute([$validScStatus, $targetId]);
                                 }
 
                                 $pdo->commit();
@@ -439,7 +468,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && in_array(($_POST['action'] 
                                 logAudit($targetId, $user['id'], 'IMPORT_SCORECARD', "Import Scorecard untuk {$targetMitra['kode']}: {$updatedScorecard} indikator diperbarui.");
                                 $success = "Data Scorecard untuk <strong>" . h($targetMitra['kode']) . " — " . h($targetMitra['nama_mitra']) . "</strong> berhasil di-import!<br>"
                                          . "&bull; {$updatedScorecard} indikator Scorecard (I1–I7) berhasil disinkronkan ke sistem.<br>"
-                                         . (!empty($rawScStatus) ? "&bull; Status Scorecard: <strong>" . h($rawScStatus) . "</strong>.<br>" : "")
+                                         . (!empty($validScStatus) ? "&bull; Status Scorecard: <strong>" . h($validScStatus) . "</strong>.<br>" : "")
                                          . (!empty($posisiPortofolio) ? "&bull; Posisi Portofolio: <strong>" . h($posisiPortofolio) . "</strong>.<br>" : "");
                             }
                         } catch (Throwable $e) {
@@ -585,9 +614,20 @@ require __DIR__ . '/includes/header.php';
             $msLabel = 'SC-1';
             if (!empty($ds['monev']['milestones'])) {
                 foreach ($ds['monev']['milestones'] as $ms) {
-                    if (!empty($ms['is_due_soon'])) {
+                    $isCompleted = in_array(strtolower(trim($ms['status_siklus'] ?? '')), ['selesai', 'selesai evaluasi'], true);
+                    if ($isCompleted) {
+                        continue;
+                    }
+                    if (!empty($ds['monev']['target_evaluasi_terdekat']) && ($ms['target_tgl'] ?? '') === $ds['monev']['target_evaluasi_terdekat']) {
                         $msLabel = $ms['nama'];
                         break;
+                    }
+                    if (!empty($ms['is_due_soon']) || !empty($ms['is_past'])) {
+                        $msLabel = $ms['nama'];
+                        break;
+                    }
+                    if ($msLabel === 'SC-1') {
+                        $msLabel = $ms['nama'];
                     }
                 }
             }
@@ -726,7 +766,7 @@ require __DIR__ . '/includes/header.php';
                             </button>
                             <div class="rekom-tooltip-content">
                                 <div style="font-weight:700;margin-bottom:3px;color:#93c5fd;font-size:11px;">Rekomendasi Tindak Lanjut:</div>
-                                <div><?= nl2br(h(mb_strimwidth($rekomText ?: 'Belum ada rekomendasi yang ditetapkan.', 0, 160, '...'))) ?></div>
+                                <div><?= nl2br(h(singkat($rekomText ?: 'Belum ada rekomendasi yang ditetapkan.', 160))) ?></div>
                                 <div style="margin-top:6px;font-size:10px;color:#94a3b8;border-top:1px solid #334155;padding-top:4px;">Klik ikon ℹ️ untuk membaca lengkap</div>
                             </div>
                         </div>
@@ -779,6 +819,7 @@ require __DIR__ . '/includes/header.php';
         </div>
 
         <form method="POST" enctype="multipart/form-data" style="margin:0;">
+            <?= csrfField() ?>
             <input type="hidden" name="action" value="import_scorecard">
 
             <div style="padding:20px;">

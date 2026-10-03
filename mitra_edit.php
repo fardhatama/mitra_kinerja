@@ -38,6 +38,11 @@ $errors = [];
 $saved = false;
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    $csrfToken = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
+    if (!verifyCsrfToken($csrfToken)) {
+        http_response_code(403);
+        die('Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.');
+    }
     if (!$canEdit) {
         http_response_code(403);
         die('Akses ditolak: Data naskah telah berstatus FINAL/TERVALIDASI atau disetujui validator, atau role Anda tidak memiliki izin untuk mengubah data ini.');
@@ -50,12 +55,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             ? $_POST['status_tanggal'] : ($mitra['status_tanggal'] ?? 'BELUM TERVERIFIKASI');
         $posisiPortofolio = trim($_POST['posisi_portofolio'] ?? '') ?: 'BELUM DAPAT DITENTUKAN';
 
-        // Preserve rich multi-line audit recommendation narrative
-        $rawRek = trim($_POST['rekomendasi'] ?? '');
+        // Preserve rich multi-line audit recommendation narrative / allow deliberate clearing
+        $rawRek = isset($_POST['rekomendasi']) ? trim($_POST['rekomendasi']) : null;
         $kwRek  = trim($_POST['rekomendasi_keyword'] ?? '');
         $existRek = trim($mitra['rekomendasi'] ?? '');
-        if ($rawRek !== '') {
-            $rekomendasi = $rawRek;
+        if ($rawRek !== null) {
+            if ($rawRek !== '') {
+                $rekomendasi = $rawRek;
+            } elseif ($kwRek !== '' && $kwRek !== 'BELUM DITENTUKAN') {
+                $rekomendasi = $kwRek;
+            } else {
+                $rekomendasi = 'BELUM DITENTUKAN';
+            }
         } elseif ($kwRek !== '') {
             if ($existRek !== '' && strlen($existRek) > 50 && !str_contains(strtoupper($existRek), $kwRek)) {
                 $rekomendasi = $kwRek . " — " . $existRek;
@@ -281,6 +292,7 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <form method="post">
+<?= csrfField() ?>
 <input type="hidden" name="status_tanggal" value="<?= h($mitra['status_tanggal']) ?>">
 
 <div class="card">
@@ -407,12 +419,20 @@ $monev = $summary['monev'];
                 <tr><th>Judul Rencana Kerja</th><th>Periode Pelaksanaan</th><th>Ruang Lingkup</th><th>Status Persetujuan</th></tr>
             </thead>
             <tbody>
-                <?php foreach ($rencanaKerja as $rk): ?>
+                <?php foreach ($rencanaKerja as $rk): 
+                    $rkStatus = trim((string)($rk['status'] ?? 'Draft'));
+                    $rkBadge = match(strtolower($rkStatus)) {
+                        'disetujui' => 'success',
+                        'proses', 'dalam proses' => 'warning',
+                        'draft' => 'secondary',
+                        default => 'secondary'
+                    };
+                ?>
                 <tr>
                     <td><strong><?= h($rk['judul_rencana']) ?></strong></td>
                     <td><?= formatTanggal($rk['tanggal_mulai']) ?> s.d. <?= formatTanggal($rk['tanggal_selesai']) ?></td>
                     <td><?= h(singkat($rk['ruang_lingkup'] ?? '-', 60)) ?></td>
-                    <td><span class="badge badge-success"><?= h($rk['status']) ?></span></td>
+                    <td><span class="badge badge-<?= $rkBadge ?>"><?= h($rk['status']) ?></span></td>
                 </tr>
                 <?php endforeach; ?>
             </tbody>
@@ -512,8 +532,16 @@ $monev = $summary['monev'];
                 let cur = ta.value.trim();
                 if (!cur || cur === 'BELUM DITENTUKAN') {
                     ta.value = val;
-                } else if (!cur.toUpperCase().startsWith(val)) {
-                    ta.value = val + " — " + cur;
+                    return;
+                }
+                const prefixRegex = /^(?:(?:LANJUT|PERBAIKI|PERPANJANG|REPLIKASI|HENTIKAN|BELUM DITENTUKAN)\s*[-—–:]\s*)+/i;
+                let cleaned = cur.replace(prefixRegex, '').trim();
+                if (val === 'BELUM DITENTUKAN') {
+                    ta.value = cleaned ? cleaned : 'BELUM DITENTUKAN';
+                } else if (cleaned) {
+                    ta.value = val + " — " + cleaned;
+                } else {
+                    ta.value = val;
                 }
             }
             </script>
@@ -527,7 +555,7 @@ $monev = $summary['monev'];
     $cek = hitungCekIndikator($row);
     $cekColor = $cek === 'OK' ? 'success' : ($cek === 'PERIKSA BUKTI' ? 'secondary' : 'warning');
 
-    $statusOptions = ['DAPAT DINILAI', 'BUKTI BELUM MEMADAI', 'BELUM DAPAT DINILAI'];
+    $statusOptions = ['DAPAT DINILAI', 'BUKTI BELUM MEMADAI', 'BELUM DAPAT DINILAI', 'BELUM DITELAAH'];
     $curStatus = $row['status_pemeriksaan'] ?? 'BELUM DITELAAH';
     if (in_array($curStatus, ['BUKTI CUKUP', 'BUKTI MEMADAI'], true)) {
         $curStatus = 'DAPAT DINILAI';

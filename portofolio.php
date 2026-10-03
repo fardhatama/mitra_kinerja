@@ -100,7 +100,7 @@ require __DIR__ . '/includes/header.php';
                 <td><span class="badge badge-secondary" style="font-size:11px;max-width:180px;white-space:normal;display:inline-block;line-height:1.25;text-align:left;"><?= h($s['posisi_portofolio']) ?></span></td>
                 <td>
                     <?php 
-                    $rekHead = explode("\n", trim($s['rekomendasi'] ?? '-'))[0] ?: '-';
+                    $rekHead = rtrim(explode("\n", trim($s['rekomendasi'] ?? '-'))[0], "\r") ?: '-';
                     ?>
                     <span class="badge badge-warning" style="font-size:11px;max-width:210px;white-space:normal;display:inline-block;line-height:1.25;text-align:left;" title="<?= h($s['rekomendasi']) ?>">
                         <?= h(singkat($rekHead, 45)) ?>
@@ -174,6 +174,9 @@ if (document.getElementById('fKategori')) {
 document.getElementById('fPosisi').addEventListener('change', applyFilters);
 document.getElementById('fRekomendasi').addEventListener('change', applyFilters);
 document.getElementById('fStatus').addEventListener('change', applyFilters);
+
+document.addEventListener('DOMContentLoaded', applyFilters);
+window.addEventListener('pageshow', applyFilters);
 </script>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

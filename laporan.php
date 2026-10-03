@@ -66,7 +66,7 @@ require __DIR__ . '/includes/header.php';
                 <td><span class="badge badge-<?= warnaKategori($s['kategori']) ?>"><?= h($s['kategori']) ?></span></td>
                 <td><span class="badge badge-secondary" style="font-size:11px;white-space:normal;max-width:180px;display:inline-block;"><?= h($s['posisi_portofolio']) ?></span></td>
                 <td>
-                    <?php $rekHead = explode("\n", trim($s['rekomendasi'] ?? '-'))[0] ?: '-'; ?>
+                    <?php $rekHead = rtrim(explode("\n", trim($s['rekomendasi'] ?? '-'))[0], "\r") ?: '-'; ?>
                     <span class="badge badge-warning" style="font-size:10.5px;max-width:160px;white-space:normal;display:inline-block;line-height:1.2;text-align:left;" title="<?= h($s['rekomendasi']) ?>">
                         <?= h(singkat($rekHead, 45)) ?>
                     </span>

@@ -477,6 +477,8 @@ tr:hover td { background: #fafbfc; }
 .badge-orange { background: #ffedd5; color: #c2410c; }
 .badge-danger { background: #fee2e2; color: #b91c1c; }
 .badge-secondary { background: #f1f5f9; color: #475569; }
+.badge-info { background: #e0f2fe; color: #0369a1; }
+.badge-outline { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
 
 /* ---------- Forms ---------- */
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
@@ -761,6 +763,9 @@ tr:hover td { background: #fafbfc; }
         width: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
+    }
+    .table-wrap {
+        overflow: visible !important;
     }
     body {
         -webkit-print-color-adjust: exact !important;

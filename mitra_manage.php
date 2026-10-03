@@ -23,37 +23,58 @@ $mouOptions = $pdo->query("SELECT id, kode, nama_mitra, judul FROM mitra_kinerja
 
 /* ── MODAL QUICK UPLOAD SCAN PDF (dari Listing) ─────────── */
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'upload_scan_pdf') {
-    $targetMitraId = (int)($_POST['target_mitra_id'] ?? 0);
-    // Bug 10.2: Verifikasi target_mitra_id benar-benar ada di database sebelum memproses file
-    $stmtM = $pdo->prepare('SELECT kode FROM mitra_kinerja WHERE id = ?');
-    $stmtM->execute([$targetMitraId]);
-    $kodeMitra = $stmtM->fetchColumn();
-
-    if ($targetMitraId <= 0 || !$kodeMitra) {
-        $errors[] = 'Naskah kerja sama yang dipilih tidak ditemukan dalam sistem.';
-    } elseif (!isset($_FILES['scan_pdf']) || $_FILES['scan_pdf']['error'] !== UPLOAD_ERR_OK) {
-        $errors[] = 'Pilih file scan berkas dalam format PDF yang valid.';
+    $csrfToken = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
+    if (!verifyCsrfToken($csrfToken)) {
+        $errors[] = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
     } else {
-        $ext = strtolower(pathinfo($_FILES['scan_pdf']['name'], PATHINFO_EXTENSION));
-        if ($ext !== 'pdf' || !isPdfValid($_FILES['scan_pdf']['tmp_name'])) {
-            $errors[] = 'File naskah wajib berformat .PDF asli (dokumen hasil scan fisik bertanda tangan, bukan hasil ketik atau berkas palsu).';
+        $targetMitraId = (int)($_POST['target_mitra_id'] ?? 0);
+        // Bug 10.2: Verifikasi target_mitra_id benar-benar ada di database sebelum memproses file
+        $stmtM = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
+        $stmtM->execute([$targetMitraId]);
+        $targetMitra = $stmtM->fetch();
+        $kodeMitra = $targetMitra['kode'] ?? null;
+
+        if ($targetMitraId <= 0 || !$targetMitra) {
+            $errors[] = 'Naskah kerja sama yang dipilih tidak ditemukan dalam sistem.';
         } else {
-            $targetName = 'scan_naskah_' . $kodeMitra . '_' . time() . '.pdf';
-            $targetPath = __DIR__ . '/public/uploads/' . $targetName;
-            if (move_uploaded_file($_FILES['scan_pdf']['tmp_name'], $targetPath)) {
-                $savedPath = 'public/uploads/' . $targetName;
-                $stmtU = $pdo->prepare('UPDATE mitra_kinerja SET file_naskah = ? WHERE id = ?');
-                $stmtU->execute([$savedPath, $targetMitraId]);
+            // Bug 9: Enforce finalized lock and pengampu assignment check
+            $userRole = $user['role'] ?? 'pengampu';
+            $stmtVal = $pdo->prepare('SELECT status FROM validasi WHERE mitra_id = ?');
+            $stmtVal->execute([$targetMitraId]);
+            $valStatus = $stmtVal->fetchColumn() ?: 'BELUM';
+            $isLockedFinal = (in_array($targetMitra['status_scorecard'] ?? '', ['FINAL/TERVALIDASI', 'FINAL'], true) || $valStatus === 'DISETUJUI');
+            $isAssigned = (!empty($targetMitra['pemeriksa_id']) && (int)$targetMitra['pemeriksa_id'] === (int)$user['id'])
+                || (!empty($targetMitra['pic_internal']) && stripos($targetMitra['pic_internal'], $user['nama'] ?? $user['username'] ?? '') !== false);
 
-                // Sinkronkan otomatis ke Baseline Elemen 1 (Identitas naskah)
-                $stmtB = $pdo->prepare("UPDATE baseline_elemen SET link_sumber_bukti = ?, status = 'TERVERIFIKASI' WHERE mitra_id = ? AND nomor_elemen = 1");
-                $stmtB->execute([$savedPath, $targetMitraId]);
-
-                logAudit($targetMitraId, $user['id'], 'UPLOAD_SCAN', 'Upload scan naskah PDF: ' . $kodeMitra);
-                $success = 'Berkas scan naskah PDF untuk ' . $kodeMitra . ' berhasil diunggah dan disinkronkan ke Identitas Baseline.';
+            if ($userRole !== 'admin' && $isLockedFinal) {
+                $errors[] = 'Akses ditolak: Naskah telah berstatus FINAL/TERVALIDASI atau disetujui validator sehingga dokumen terkunci.';
+            } elseif ($userRole === 'pengampu' && !$isAssigned && !empty($targetMitra['pemeriksa_id'])) {
+                $errors[] = 'Akses ditolak: Sebagai role pengampu, Anda hanya diizinkan mengunggah berkas untuk naskah yang ditugaskan kepada Anda.';
+            } elseif (!isset($_FILES['scan_pdf']) || $_FILES['scan_pdf']['error'] !== UPLOAD_ERR_OK) {
+                $errors[] = 'Pilih file scan berkas dalam format PDF yang valid.';
             } else {
-                // Bug 5.5: Tambahkan pesan error jika move_uploaded_file gagal
-                $errors[] = 'Gagal menyimpan berkas scan naskah di server.';
+                $ext = strtolower(pathinfo($_FILES['scan_pdf']['name'], PATHINFO_EXTENSION));
+                if ($ext !== 'pdf' || !isPdfValid($_FILES['scan_pdf']['tmp_name'])) {
+                    $errors[] = 'File naskah wajib berformat .PDF asli (dokumen hasil scan fisik bertanda tangan, bukan hasil ketik atau berkas palsu).';
+                } else {
+                    $targetName = 'scan_naskah_' . $kodeMitra . '_' . time() . '.pdf';
+                    $targetPath = __DIR__ . '/public/uploads/' . $targetName;
+                    if (move_uploaded_file($_FILES['scan_pdf']['tmp_name'], $targetPath)) {
+                        $savedPath = 'public/uploads/' . $targetName;
+                        $stmtU = $pdo->prepare('UPDATE mitra_kinerja SET file_naskah = ? WHERE id = ?');
+                        $stmtU->execute([$savedPath, $targetMitraId]);
+
+                        // Sinkronkan otomatis ke Baseline Elemen 1 (Identitas naskah)
+                        $stmtB = $pdo->prepare("UPDATE baseline_elemen SET link_sumber_bukti = ?, status = 'TERVERIFIKASI' WHERE mitra_id = ? AND nomor_elemen = 1");
+                        $stmtB->execute([$savedPath, $targetMitraId]);
+
+                        logAudit($targetMitraId, $user['id'], 'UPLOAD_SCAN', 'Upload scan naskah PDF: ' . $kodeMitra);
+                        $success = 'Berkas scan naskah PDF untuk ' . $kodeMitra . ' berhasil diunggah dan disinkronkan ke Identitas Baseline.';
+                    } else {
+                        // Bug 5.5: Tambahkan pesan error jika move_uploaded_file gagal
+                        $errors[] = 'Gagal menyimpan berkas scan naskah di server.';
+                    }
+                }
             }
         }
     }
@@ -66,47 +87,77 @@ if ($id > 0) {
     $mitra = $stmt->fetch();
     if (!$mitra) { http_response_code(404); die('Naskah tidak ditemukan.'); }
 
+    // Bug 9: Enforce finalized lock and pengampu assignment check
+    $userRole = $user['role'] ?? 'pengampu';
+    $stmtVal = $pdo->prepare('SELECT status FROM validasi WHERE mitra_id = ?');
+    $stmtVal->execute([$id]);
+    $valStatus = $stmtVal->fetchColumn() ?: 'BELUM';
+    $isLockedFinal = (in_array($mitra['status_scorecard'] ?? '', ['FINAL/TERVALIDASI', 'FINAL'], true) || $valStatus === 'DISETUJUI');
+    $isAssigned = (!empty($mitra['pemeriksa_id']) && (int)$mitra['pemeriksa_id'] === (int)$user['id'])
+        || (!empty($mitra['pic_internal']) && stripos($mitra['pic_internal'], $user['nama'] ?? $user['username'] ?? '') !== false);
+
+    $canManage = in_array($userRole, ['admin', 'pemeriksa'], true)
+        || ($userRole === 'pengampu' && ($isAssigned || empty($mitra['pemeriksa_id'])));
+    if ($isLockedFinal && $userRole !== 'admin') {
+        $canManage = false;
+    }
+
     /* ── TAMBAH RENCANA KERJA DARI EDIT FORM ─────────────────── */
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'add_rencana_kerja') {
-        $judulRk = trim($_POST['judul_rencana'] ?? '');
-        $ruangRk = trim($_POST['ruang_lingkup'] ?? '');
-        $mulaiRk = $_POST['tanggal_mulai'] ?: date('Y-01-01');
-        $selesaiRk = ($_POST['tanggal_selesai'] ?? '') ?: date('Y-12-31');
-        $statusRk = $_POST['status'] ?? 'Disetujui';
-
-        if ($judulRk === '') {
-            $errors[] = 'Judul Rencana Kerja wajib diisi.';
+        $csrfToken = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
+        if (!verifyCsrfToken($csrfToken)) {
+            $errors[] = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
+        } elseif (!$canManage) {
+            http_response_code(403);
+            die('Akses ditolak: Data naskah telah berstatus FINAL/TERVALIDASI atau disetujui validator, atau role Anda tidak memiliki izin untuk mengubah naskah ini.');
         } else {
-            try {
-                $stmtR = $pdo->prepare('INSERT INTO rencana_kerja (mitra_id, judul_rencana, ruang_lingkup, tanggal_mulai, tanggal_selesai, status) VALUES (?, ?, ?, ?, ?, ?)');
-                $stmtR->execute([$id, $judulRk, $ruangRk, $mulaiRk, $selesaiRk, $statusRk]);
-                logAudit($id, $user['id'], 'ADD_RENCANA_KERJA', 'Tambah Rencana Kerja: ' . $judulRk);
-                $success = 'Rencana Kerja tahunan berhasil ditambahkan.';
-            } catch (Throwable $e) {
-                $errors[] = 'Gagal menambahkan rencana kerja: ' . $e->getMessage();
+            $judulRk = trim($_POST['judul_rencana'] ?? '');
+            $ruangRk = trim($_POST['ruang_lingkup'] ?? '');
+            $mulaiRk = $_POST['tanggal_mulai'] ?: date('Y-01-01');
+            $selesaiRk = ($_POST['tanggal_selesai'] ?? '') ?: date('Y-12-31');
+            $statusRk = $_POST['status'] ?? 'Disetujui';
+
+            if ($judulRk === '') {
+                $errors[] = 'Judul Rencana Kerja wajib diisi.';
+            } else {
+                try {
+                    $stmtR = $pdo->prepare('INSERT INTO rencana_kerja (mitra_id, judul_rencana, ruang_lingkup, tanggal_mulai, tanggal_selesai, status) VALUES (?, ?, ?, ?, ?, ?)');
+                    $stmtR->execute([$id, $judulRk, $ruangRk, $mulaiRk, $selesaiRk, $statusRk]);
+                    logAudit($id, $user['id'], 'ADD_RENCANA_KERJA', 'Tambah Rencana Kerja: ' . $judulRk);
+                    $success = 'Rencana Kerja tahunan berhasil ditambahkan.';
+                } catch (Throwable $e) {
+                    $errors[] = 'Gagal menambahkan rencana kerja: ' . $e->getMessage();
+                }
             }
         }
     }
 
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
-        $namaMitra  = trim($_POST['nama_mitra'] ?? '');
-        $judul      = trim($_POST['judul'] ?? '');
-        $portofolio = $_POST['portofolio'] ?? $mitra['portofolio'];
-        $bidang     = $_POST['bidang'] ?? ($mitra['bidang'] ?? 'AHU');
-        $jenis      = $_POST['jenis'] ?? $mitra['jenis'];
-        $pksIndukId = !empty($_POST['pks_induk_id']) ? (int)$_POST['pks_induk_id'] : null;
-        // Bug 5.4: Cegah referensi diri sendiri sebagai PKS Induk
-        if ($pksIndukId === $id) {
-            $pksIndukId = null;
-        }
-        $mulai      = $_POST['tanggal_mulai'] ?: null;
-        $berakhir   = $_POST['tanggal_berakhir'] ?: null;
-        $statusTgl  = $_POST['status_tanggal'] ?? $mitra['status_tanggal'];
-        $cutoff     = $_POST['cutoff_date'] ?: null;
-        $sumber     = trim($_POST['sumber_baseline'] ?? '');
-        $picInternal = trim($_POST['pic_internal'] ?? ($mitra['pic_internal'] ?? ''));
-        $picMitra    = trim($_POST['pic_mitra'] ?? ($mitra['pic_mitra'] ?? ''));
-        $evaluasiPerTahun = !empty($_POST['evaluasi_per_tahun']) ? (int)$_POST['evaluasi_per_tahun'] : 4;
+        $csrfToken = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
+        if (!verifyCsrfToken($csrfToken)) {
+            $errors[] = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
+        } elseif (!$canManage) {
+            http_response_code(403);
+            die('Akses ditolak: Data naskah telah berstatus FINAL/TERVALIDASI atau disetujui validator, atau role Anda tidak memiliki izin untuk mengubah naskah ini.');
+        } else {
+            $namaMitra  = trim($_POST['nama_mitra'] ?? '');
+            $judul      = trim($_POST['judul'] ?? '');
+            $portofolio = $_POST['portofolio'] ?? $mitra['portofolio'];
+            $bidang     = $_POST['bidang'] ?? ($mitra['bidang'] ?? 'AHU');
+            $jenis      = $_POST['jenis'] ?? $mitra['jenis'];
+            $pksIndukId = !empty($_POST['pks_induk_id']) ? (int)$_POST['pks_induk_id'] : null;
+            // Bug 5.4: Cegah referensi diri sendiri sebagai PKS Induk
+            if ($pksIndukId === $id) {
+                $pksIndukId = null;
+            }
+            $mulai      = $_POST['tanggal_mulai'] ?: null;
+            $berakhir   = $_POST['tanggal_berakhir'] ?: null;
+            $statusTgl  = $_POST['status_tanggal'] ?? $mitra['status_tanggal'];
+            $cutoff     = !empty($_POST['cutoff_date']) ? $_POST['cutoff_date'] : ($mitra['cutoff_date'] ?: ($mitra['tanggal_mulai'] ?: date('Y-m-d')));
+            $sumber     = trim($_POST['sumber_baseline'] ?? '');
+            $picInternal = trim($_POST['pic_internal'] ?? ($mitra['pic_internal'] ?? ''));
+            $picMitra    = trim($_POST['pic_mitra'] ?? ($mitra['pic_mitra'] ?? ''));
+            $evaluasiPerTahun = !empty($_POST['evaluasi_per_tahun']) ? (int)$_POST['evaluasi_per_tahun'] : 4;
 
         // Validasi enum values
         $validPortofolio = ['Pilot Utama', 'Cadangan'];
@@ -194,6 +245,7 @@ if ($id > 0) {
                 $errors[] = 'Gagal memperbarui data naskah: ' . $e->getMessage();
             }
         }
+        }
     }
 
     // Ambil daftar rencana kerja untuk naskah ini
@@ -212,8 +264,16 @@ if ($id > 0) {
 <?php if ($success): ?><div class="alert alert-info"><?= h($success) ?></div><?php endif; ?>
 <?php foreach ($errors as $e): ?><div class="alert alert-warning"><?= h($e) ?></div><?php endforeach; ?>
 
+<?php if (!$canManage): ?>
+<div class="alert alert-warning" style="margin-bottom:14px;">
+    🔒 <strong>Naskah Terkunci:</strong> Naskah ini telah berstatus <strong>FINAL/TERVALIDASI</strong> atau disetujui validator, atau akun Anda tidak memiliki izin penugasan untuk mengubah naskah ini. Perubahan dinonaktifkan.
+</div>
+<?php endif; ?>
+
 <div class="card" style="margin-bottom:20px;">
 <form method="post" enctype="multipart/form-data">
+<?= csrfField() ?>
+<fieldset <?= $canManage ? '' : 'disabled' ?> style="border:none;padding:0;margin:0;">
 <div class="form-grid">
     <div class="field"><label>Kode</label><input value="<?= h($mitra['kode']) ?>" disabled></div>
     <div class="field"><label>Portofolio</label><select name="portofolio"><?php foreach (['Pilot Utama','Cadangan'] as $opt): ?><option <?= $mitra['portofolio']===$opt?'selected':'' ?>><?= $opt ?></option><?php endforeach; ?></select></div>
@@ -276,10 +336,13 @@ if ($id > 0) {
     </div>
 </div>
 <div style="margin-top:16px;">
+    <?php if ($canManage): ?>
     <button type="submit" class="btn btn-primary">Simpan Perubahan</button>
+    <?php endif; ?>
     <a href="mitra_edit.php?id=<?= $id ?>" class="btn btn-outline" style="margin-left:8px;">Buka Scorecard &rarr;</a>
     <a href="baseline.php?id=<?= $id ?>" class="btn btn-outline" style="margin-left:8px;">Buka Baseline &rarr;</a>
 </div>
+</fieldset>
 </form>
 </div>
 
@@ -290,13 +353,16 @@ if ($id > 0) {
             <h2 style="margin:0;font-size:16px;">Rencana Kerja Tahunan (/Tahun)</h2>
             <div class="muted" style="font-size:12px;">Program dan target operasional turunan naskah per tahun</div>
         </div>
+        <?php if ($canManage): ?>
         <button type="button" onclick="document.getElementById('rkAddForm').style.display = document.getElementById('rkAddForm').style.display === 'none' ? 'block' : 'none';" class="btn btn-outline btn-sm">+ Tambah Rencana Kerja</button>
+        <?php endif; ?>
     </div>
 
     <!-- Form Tambah Rencana Kerja Baru -->
     <div id="rkAddForm" style="display:none;background:#f8fafc;padding:16px;border-radius:6px;border:1px solid #e2e8f0;margin-bottom:16px;">
         <h3 style="font-size:14px;margin-top:0;margin-bottom:12px;color:#1e40af;">Formulir Rencana Kerja Baru</h3>
         <form method="post">
+            <?= csrfField() ?>
             <input type="hidden" name="action" value="add_rencana_kerja">
             <div class="form-grid">
                 <div class="field" style="grid-column:1/-1;">
@@ -366,7 +432,11 @@ if ($id > 0) {
 
 /* ── LISTING + TAMBAH (tanpa ?id=) ─────────────────── */
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
-    $kode       = strtoupper(trim($_POST['kode'] ?? ''));
+    $csrfToken = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
+    if (!verifyCsrfToken($csrfToken)) {
+        $errors[] = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
+    } else {
+        $kode       = strtoupper(trim($_POST['kode'] ?? ''));
     $portofolio = $_POST['portofolio'] ?? 'Pilot Utama';
     $namaMitra  = trim($_POST['nama_mitra'] ?? '');
     $judul      = trim($_POST['judul'] ?? '');
@@ -488,6 +558,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
             $errors[] = str_contains($e->getMessage(),'Duplicate') ? 'Kode sudah ada.' : 'Gagal membuat naskah: ' . $e->getMessage();
         }
     }
+    }
 }
 
 $all = $pdo->query('SELECT id,kode,portofolio,nama_mitra,judul,bidang,jenis,file_naskah,tanggal_mulai,tanggal_berakhir,status_tanggal,status_scorecard FROM mitra_kinerja ORDER BY kode')->fetchAll();
@@ -520,14 +591,20 @@ require __DIR__ . '/includes/header.php';
             Unggah dokumen fisik hasil pemindaian/scan resmi bertanda tangan para pihak. Format wajib <strong>.PDF</strong> (bukan file hasil ketik/draft .docx).
         </p>
         <form method="post" enctype="multipart/form-data">
+            <?= csrfField() ?>
             <input type="hidden" name="action" value="upload_scan_pdf">
             <div class="field" style="margin-bottom:14px;">
                 <label style="display:block;font-weight:600;font-size:13px;margin-bottom:6px;">Pilih Naskah Kerja Sama * (Ketik untuk mencari)</label>
                 <select name="target_mitra_id" required class="searchable-select" placeholder="Ketik nama mitra / kode PKS..." style="width:100%;padding:8px;font-size:13px;border:1px solid #cbd5e1;border-radius:4px;">
                     <option value="">Pilih Naskah...</option>
-                    <?php foreach ($all as $m): ?>
-                    <option value="<?= $m['id'] ?>" data-sub="Judul: <?= h(singkat($m['judul'] ?: '-', 45)) ?> | Bidang: <?= h($m['bidang'] ?? 'AHU') ?>">
-                        <?= h($m['kode']) ?> &mdash; <?= h($m['nama_mitra']) ?>
+                    <?php foreach ($all as $m): 
+                        $isOptLocked = in_array($m['status_scorecard'] ?? '', ['FINAL/TERVALIDASI', 'FINAL'], true);
+                        $isOptAssigned = (!empty($m['pemeriksa_id']) && (int)$m['pemeriksa_id'] === (int)$user['id'])
+                            || (!empty($m['pic_internal']) && stripos($m['pic_internal'], $user['nama'] ?? $user['username'] ?? '') !== false);
+                        $isOptDisabled = ($userRole !== 'admin' && $isOptLocked) || ($userRole === 'pengampu' && !$isOptAssigned && !empty($m['pemeriksa_id']));
+                    ?>
+                    <option value="<?= $m['id'] ?>" data-sub="Judul: <?= h(singkat($m['judul'] ?: '-', 45)) ?> | Bidang: <?= h($m['bidang'] ?? 'AHU') ?>" <?= $isOptDisabled ? 'disabled' : '' ?>>
+                        <?= h($m['kode']) ?> &mdash; <?= h($m['nama_mitra']) ?><?= $isOptLocked ? ' (Terkunci)' : '' ?>
                     </option>
                     <?php endforeach; ?>
                 </select>
@@ -551,6 +628,7 @@ require __DIR__ . '/includes/header.php';
         <span class="muted" style="font-size:12px;">Input data naskah, bidang, scan berkas fisik, dan rencana kerja tahunan</span>
     </div>
     <form method="post" enctype="multipart/form-data">
+    <?= csrfField() ?>
     <div class="form-grid">
         <div class="field"><label>Kode (P11, C06, dst) *</label><input type="text" name="kode" maxlength="5" required placeholder="P11"></div>
         <div class="field"><label>Portofolio</label><select name="portofolio"><option>Pilot Utama</option><option>Cadangan</option></select></div>

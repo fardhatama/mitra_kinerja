@@ -109,8 +109,9 @@ function attemptLogin(string $username, string $password): bool {
     $isValid = false;
     $dummyHash = '$2y$12$I9etv6Uk10J47jr/70NiU.nScEgbBP/oVv0LpqIM2S3z6sO/ZxXuq';
     if ($user) {
-        $pwMatches = password_verify($password, $user['password_hash'] ?? '');
-        if ($pwMatches && !empty($user['aktif'])) {
+        $hashToVerify = (!empty($user['password_hash']) && is_string($user['password_hash'])) ? $user['password_hash'] : $dummyHash;
+        $pwMatches = password_verify($password, $hashToVerify);
+        if ($pwMatches && !empty($user['aktif']) && !empty($user['password_hash'])) {
             $isValid = true;
         }
     } else {

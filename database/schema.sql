@@ -305,6 +305,7 @@ CREATE TABLE `siklus_monev` (
   `nilai_siklus` decimal(6,2) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_mitra_siklus` (`mitra_id`, `siklus_ke`),
   KEY `mitra_id` (`mitra_id`),
   KEY `rencana_kerja_id` (`rencana_kerja_id`),
   CONSTRAINT `siklus_monev_ibfk_1` FOREIGN KEY (`mitra_id`) REFERENCES `mitra_kinerja` (`id`) ON DELETE CASCADE,

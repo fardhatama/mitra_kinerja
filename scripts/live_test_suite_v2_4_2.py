@@ -43,7 +43,7 @@ r_dash = session.get(f"{BASE}/dashboard.php")
 test("Dashboard HTTP 200", r_dash.status_code == 200)
 with open("dashboard.php", "r", encoding="utf-8") as df:
     dash_src = df.read()
-test("DOM XSS protection in formatInsight", "div.textContent = text" in dash_src and "div.innerHTML" in dash_src)
+test("DOM XSS protection in formatInsight", "escapeHtml(text)" in dash_src or ("div.textContent = text" in dash_src and "div.innerHTML" in dash_src))
 test("Local Chart.js loaded", "chart.umd.min.js" in r_dash.text)
 test("North Star metrics present", "Kerja Sama Aktif" in r_dash.text and "Total Naskah" in r_dash.text)
 test("Gauge subtitle valid", any(k in r_dash.text.upper() for k in ["KUAT", "CUKUP", "PERLU PERBAIKAN", "KRITIS"]))

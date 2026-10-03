@@ -49,25 +49,44 @@ $anyProviderActive = $geminiActive || $openrouterActive || $groqActive;
     Writable: <?= is_writable($cd)?'✅ Ya':'❌ Tidak' ?>
 </div>
 
-<?php if ($anyProviderActive && function_exists('curl_init')): ?>
+<?php if (function_exists('curl_init')): ?>
 <h2>4. Test API</h2>
 <button onclick="doTest()" style="padding:12px 24px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer">🚀 Test AI API</button>
 <div id="res" style="margin-top:16px"></div>
 <script>
+function renderProviderBox(title, p) {
+    if (!p) {
+        return '<div class="c w"><strong>' + title + ':</strong> Tidak ada data respons</div>';
+    }
+    if (!p.configured) {
+        return '<div class="c w"><strong>' + title + ':</strong> ⚪ Belum Dikonfigurasi (' + (p.reason || 'Key belum diisi') + ')</div>';
+    }
+    if (p.success) {
+        var resp = p.ai_response ? '<pre>' + String(p.ai_response).replace(/</g, '&lt;') + '</pre>' : '';
+        return '<div class="c p"><strong>' + title + ':</strong> ✅ BERHASIL (HTTP ' + (p.http_code || 200) + ')' + resp + '</div>';
+    }
+    var errText = p.error || (p.curl_error ? ('cURL Error: ' + p.curl_error) : ('HTTP ' + (p.http_code || 'Error')));
+    var extra = p.response ? '<pre>' + String(p.response).replace(/</g, '&lt;') + '</pre>' : '';
+    return '<div class="c f"><strong>' + title + ':</strong> ❌ GAGAL (' + errText + ')' + extra + '</div>';
+}
+
 function doTest(){
-    var el=document.getElementById('res');
-    el.innerHTML='<div class="c w">⏳ Menghubungi AI API...</div>';
-    fetch('ai_debug_raw.php').then(function(r){return r.json()}).then(function(d){
-        if(d.success){
-            var resp = (d.gemini && d.gemini.ai_response) || (d.openrouter && d.openrouter.ai_response) || (d.groq && d.groq.ai_response) || d.ai_response || '';
-            var prov = (d.gemini && d.gemini.success) ? 'Gemini' : ((d.openrouter && d.openrouter.success) ? 'OpenRouter' : ((d.groq && d.groq.success) ? 'Groq' : ''));
-            el.innerHTML='<div class="c p"><strong>✅ BERHASIL! '+(prov ? '('+prov+')' : '')+'</strong><pre>'+String(resp).replace(/</g,'&lt;')+'</pre></div>';
+    var el = document.getElementById('res');
+    el.innerHTML = '<div class="c w">⏳ Menghubungi AI API (Gemini, OpenRouter, Groq)...</div>';
+    fetch('ai_debug_raw.php').then(function(r){ return r.json(); }).then(function(d){
+        var html = '';
+        if (d.success) {
+            html += '<div class="c p"><strong>✅ DIAGNOSTIK SUKSES:</strong> Minimal satu provider AI aktif dan berhasil merespons.</div>';
         } else {
-            var httpCode = (d.gemini && d.gemini.http_code) || (d.openrouter && d.openrouter.http_code) || (d.groq && d.groq.http_code) || d.http_code || 'N/A';
-            var curlErr = (d.gemini && d.gemini.curl_error) || (d.openrouter && d.openrouter.curl_error) || (d.groq && d.groq.curl_error) || d.curl_error || 'none';
-            el.innerHTML='<div class="c f"><strong>❌ GAGAL</strong><br>HTTP: '+httpCode+'<br>cURL Error: '+curlErr+'<pre>'+JSON.stringify(d,null,2).replace(/</g,'&lt;')+'</pre></div>';
+            html += '<div class="c f"><strong>❌ DIAGNOSTIK GAGAL:</strong> Belum ada provider AI yang berhasil merespons.</div>';
         }
-    }).catch(function(e){el.innerHTML='<div class="c f">Error: '+e.message+'</div>'});
+        html += renderProviderBox('1. Google Gemini (Primary)', d.gemini);
+        html += renderProviderBox('2. OpenRouter (Fallback #1)', d.openrouter);
+        html += renderProviderBox('3. Groq (Fallback #2)', d.groq);
+        el.innerHTML = html;
+    }).catch(function(e){
+        el.innerHTML = '<div class="c f">Error: ' + e.message + '</div>';
+    });
 }
 </script>
 <?php endif; ?>

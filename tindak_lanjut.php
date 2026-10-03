@@ -28,8 +28,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
             } else {
                 // Upload File Bukti Kegiatan
                 $fileBukti = null;
-                if (isset($_FILES['file_bukti']) && $_FILES['file_bukti']['error'] === UPLOAD_ERR_OK) {
-                    $ext = strtolower(pathinfo($_FILES['file_bukti']['name'], PATHINFO_EXTENSION));
+                if (isset($_FILES['file_bukti'])) {
+                    if ($_FILES['file_bukti']['error'] !== UPLOAD_ERR_OK && $_FILES['file_bukti']['error'] !== UPLOAD_ERR_NO_FILE) {
+                        $errCode = $_FILES['file_bukti']['error'];
+                        $uploadErrMap = [
+                            UPLOAD_ERR_INI_SIZE => 'Ukuran file melebihi upload_max_filesize pada server.',
+                            UPLOAD_ERR_FORM_SIZE => 'Ukuran file melebihi batas form HTML.',
+                            UPLOAD_ERR_PARTIAL => 'File hanya terunggah sebagian. Silakan coba lagi.',
+                            UPLOAD_ERR_NO_TMP_DIR => 'Direktori sementara (tmp) server tidak ditemukan.',
+                            UPLOAD_ERR_CANT_WRITE => 'Gagal menulis file ke disk server.',
+                            UPLOAD_ERR_EXTENSION => 'Unggahan file dihentikan oleh ekstensi PHP.',
+                        ];
+                        $errors[] = 'Gagal mengunggah file bukti: ' . ($uploadErrMap[$errCode] ?? "Kode error upload: $errCode");
+                    } elseif ($_FILES['file_bukti']['error'] === UPLOAD_ERR_OK) {
+                        $ext = strtolower(pathinfo($_FILES['file_bukti']['name'], PATHINFO_EXTENSION));
                     $allowedExts = ['pdf', 'jpg', 'jpeg', 'png', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt'];
                     if (!in_array($ext, $allowedExts, true)) {
                         $errors[] = 'Format file bukti tidak didukung. Gunakan PDF, JPG, PNG, DOCX, XLSX, atau PPTX.';
@@ -67,6 +79,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                         }
                     }
                 }
+            }
 
                 if (empty($errors)) {
                     // BUG-TL-02: try/catch on insert
@@ -117,15 +130,24 @@ if ($filterMitraId > 0) {
 }
 
 $tindakLanjut = getTindakLanjut($pdo, $filterMitraId);
-// BUG-TL-05: Order by tenggat IS NULL, tenggat ASC so tasks with deadlines appear first
+// BUG-TL-05: Completed tasks (Selesai) placed at the bottom; valid imminent deadlines before NULL or '0000-00-00'
 usort($tindakLanjut, function($a, $b) {
-    $tA = empty($a['tenggat']) ? null : $a['tenggat'];
-    $tB = empty($b['tenggat']) ? null : $b['tenggat'];
-    if ($tA === null && $tB === null) return $b['id'] <=> $a['id'];
-    if ($tA === null) return 1;
-    if ($tB === null) return -1;
-    if ($tA === $tB) return $b['id'] <=> $a['id'];
-    return strcmp($tA, $tB);
+    $isDoneA = ($a['status'] ?? '') === 'Selesai';
+    $isDoneB = ($b['status'] ?? '') === 'Selesai';
+    if ($isDoneA !== $isDoneB) {
+        return $isDoneA ? 1 : -1;
+    }
+
+    $hasDateA = !empty($a['tenggat']) && $a['tenggat'] !== '0000-00-00';
+    $hasDateB = !empty($b['tenggat']) && $b['tenggat'] !== '0000-00-00';
+    if ($hasDateA && !$hasDateB) return -1;
+    if (!$hasDateA && $hasDateB) return 1;
+    if (!$hasDateA && !$hasDateB) return $b['id'] <=> $a['id'];
+
+    if ($a['tenggat'] === $b['tenggat']) {
+        return $b['id'] <=> $a['id'];
+    }
+    return strcmp($a['tenggat'], $b['tenggat']);
 });
 $allMitra = $pdo->query('SELECT id, kode, nama_mitra, judul, bidang FROM mitra_kinerja ORDER BY kode')->fetchAll();
 

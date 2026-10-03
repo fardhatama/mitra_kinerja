@@ -184,8 +184,8 @@ foreach ($all as $s) {
         <h3>Nilai Rata-rata Scorecard</h3>
         <div class="gauge-wrap">
             <canvas id="gaugeChart" width="220" height="130"></canvas>
-            <div class="gauge-center"><?= number_format($stats['rataRataNilai'], 1, ',', '.') ?></div>
-            <div class="gauge-subtitle"><?= kategoriDariNilai($stats['rataRataNilai']) ?></div>
+            <div class="gauge-center"><?= ($stats['nilaiCount'] ?? 0) > 0 ? number_format($stats['rataRataNilai'], 1, ',', '.') : '-' ?></div>
+            <div class="gauge-subtitle"><?= ($stats['nilaiCount'] ?? 0) > 0 ? kategoriDariNilai($stats['rataRataNilai']) : 'Belum Ada Penilaian' ?></div>
         </div>
     </div>
     <div class="chart-card">
@@ -456,10 +456,14 @@ function fetchInsight(force){
                 }
                 try{ localStorage.setItem('ai_dismissed',''); }catch(e){}
             } else {
-                var msg = d.message || 'Terjadi kesalahan';
-                if(d.detail) msg += '<br><small>' + d.detail + '</small>';
+                var rawMsg = d.message || 'Terjadi kesalahan';
+                var msg = escapeHtml(rawMsg);
+                if(d.detail) msg += '<br><small>' + escapeHtml(d.detail) + '</small>';
                 msg += '<br><small style="color:#64748b">Provider: Gemini → OpenRouter → Groq</small>';
-                if(d.debug_url) msg += '<br><a href="' + d.debug_url + '" target="_blank" style="font-size:11px;color:#2563eb">🔍 Buka Diagnostic Tool</a>';
+                if(d.debug_url) {
+                    var safeUrl = encodeURI(d.debug_url).replace(/["'<>]/g, '');
+                    msg += '<br><a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:#2563eb">🔍 Buka Diagnostic Tool</a>';
+                }
                 showError(msg);
             }
         })
@@ -468,6 +472,12 @@ function fetchInsight(force){
             showError('Tidak dapat terhubung ke server AI.');
         });
 }
+function escapeHtml(str){
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
 function showError(msg){
     aiErrorEl.style.display='flex';
     aiErrorEl.querySelector('.ai-error-msg').innerHTML = msg;
@@ -475,9 +485,7 @@ function showError(msg){
 function formatInsight(text){
     if (!text) return '';
     // Escape HTML characters before converting markdown bold to prevent DOM XSS
-    var div = document.createElement('div');
-    div.textContent = text;
-    var safeText = div.innerHTML;
+    var safeText = escapeHtml(text);
     // Convert markdown-like bold **text** to <strong>
     safeText = safeText.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
     // Split into paragraphs

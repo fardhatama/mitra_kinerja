@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.4] - 2026-10-04
+
+### Fixed
+- **Penguatan Menyeluruh Loop 3: Remediasi 53 Cacat Lanjutan, Integritas Nilai Evaluasi, dan Penyelarasan Penuh (v2.4.4):**
+  - **Kalkulasi & Logika Nilai Evaluasi (`includes/functions.php`, `includes/data.php`, `dashboard.php`):**
+    - Memperbaiki `hitungCekIndikator()` agar memperlakukan string kosong `""` setara dengan `null`, mencegah validasi palsu `'OK'` pada indikator tanpa skor dan mencegah galat `'HAPUS SKOR'` pada indikator BDN.
+    - Menyelaraskan hierarki keputusan `hitungRekomendasi()` agar status `PERPANJANG` dapat tercapai pada jendela H-30 bagi naskah berkinerja tinggi ($sisaHari \le 90$ dan $nilai \ge 75$) tanpa terblokir oleh evaluasi umum `E3`.
+    - Mengoreksi `ringkasanIndikator()` agar mengharuskan pemenuhan skor lengkap (`$skorLengkap`) sebelum menetapkan `nilaiFinal` dan kategori kinerja, mencegah penetapan dini status `KRITIS` pada naskah yang baru terisi sebagian.
+    - Mengamankan fungsi `hitungMasaBerlaku()` dan `hitungKebutuhanScorecard()` dari string waktu `0000-00-00 00:00:00` guna mencegah lonjakan memori siklus evaluasi.
+    - Menghilangkan *empty cell injection* pada pembaca shared strings OpenXML (`parseFullWorkbookXlsx`).
+    - Menambahkan perlindungan `TypeError` pada `hitungNilaiIndikator()` saat menerima skor bertipe string kosong.
+    - Memperbaiki logika penggabungan metrik *$isBerdampak* dan *$isAktif* agar tidak keliru mencocokkan frasa bernada negatif (`TIDAK AKTIF`, `BELUM BERDAMPAK`).
+    - Menyesuaikan pembacaan rata-rata nilai organisasi pada dasbor agar tidak menyertakan draf nilai naskah yang belum tuntas dinilai.
+  - **Scorecard, Validasi, dan Pengelolaan Naskah (`scorecard.php`, `mitra_edit.php`, `mitra_validasi.php`, `mitra_manage.php`):**
+    - Mengaktifkan pembatalan status validasi (`BELUM`) agar naskah dapat bertransisi keluar dari `FINAL/TERVALIDASI` kembali ke status telaah awal.
+    - Mencegah koersi dini status indikator yang belum diperiksa (`BELUM DITELAAH`) menjadi `BELUM DAPAT DINILAI` pada `mitra_edit.php`.
+    - Memperbarui label siklus evaluasi pada daftar penilaian agar beralih ke siklus aktif berikutnya (misal `SC-2`) saat `SC-1` telah berstatus selesai.
+    - Mencegah penumpukan awalan kata kunci rekomendasi bertingkat pada formulir penilaian.
+    - Menerapkan perlindungan token CSRF menyeluruh pada semua manipulasi POST di modul `scorecard.php`, `mitra_edit.php`, `mitra_validasi.php`, dan `mitra_manage.php`.
+    - Menyelaraskan status validasi naskah P04 pada data awal database (`seed_data.sql` dan dump) agar sesuai dengan status aslinya (`MASA IMPLEMENTASI AWAL`).
+    - Menambahkan konstrain indeks unik `UNIQUE KEY (mitra_id, siklus_ke)` pada tabel `siklus_monev`.
+    - Mengganti pemanggilan fungsi bawaan `mb_strimwidth()` dengan fungsi aman `singkat()` pada pemotongan teks rekomendasi.
+  - **Gate 0, Baseline, Impor, Tindak Lanjut, dan Antarmuka (`gate0.php`, `baseline.php`, `import.php`, `tindak_lanjut.php`, `public/js/searchable_dropdown.js`, `public/css/style.css`):**
+    - Memperbaiki pemetaan kolom pembacaan lembar kerja lawas (*Portofolio Pengayaan*) pada `import.php` agar tidak tertukar dengan bobot numerik.
+    - Mempertahankan tanggal cut-off historis saat impor lembar kerja baseline tanpa kolom tanggal.
+    - Mencegah penguncian status baseline sebelum seluruh 12 elemen terisi lengkap.
+    - Mengoreksi pemetaan berkas templat unduhan Scorecard untuk naskah P05 (STIT Mumtaz), C01 (STAIN SAR), dan C05 (STIE Cakrawala).
+    - Memperbaiki pengurutan buku kas tindak lanjut agar tugas yang telah selesai dan tugas tanpa tenggat tidak menempati urutan teratas.
+    - Mengaktifkan kembali tombol putusan pimpinan pada usulan Gate 0 yang berstatus *Dikembalikan untuk Revisi*.
+    - Menetapkan status awal baseline naskah hasil promosi Gate 0 menjadi `DALAM PROSES`.
+    - Menghilangkan *deprecation warning* PHP 8.4+ pada pembacaan aliran berkas CSV.
+    - Menambahkan kelas CSS `.badge-info` dan `.badge-outline` pada lembar gaya aplikasi.
+    - Memperbaiki penanganan tombol Enter pada komponen pencarian dropdown saat kursor berada pada posisi awal (`activeIndex === -1`).
+    - Mengamankan sanitasi output peringatan galat asisten AI pada dasbor dari potensi celah DOM XSS.
+
 ## [2.4.3] - 2026-10-04
 
 ### Fixed

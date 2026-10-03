@@ -307,15 +307,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
                     // BUG-BL-08: In Element 9 textarea, handle decode/encode safely on form save
                     if ($num === 9 && !empty($bukti)) {
-                        if (str_starts_with($bukti, '[') && str_ends_with($bukti, ']') && ($testDec = json_decode($bukti, true)) && is_array($testDec)) {
-                            $bukti = json_encode(array_values(array_filter($testDec)), JSON_UNESCAPED_UNICODE);
-                        } else {
-                            $lines = preg_split('/[
-\n;]+/', $bukti);
-                            $cleanLines = array_values(array_filter(array_map('trim', $lines)));
-                            if (count($cleanLines) > 1 || (count($cleanLines) === 1 && !empty($cleanLines[0]))) {
-                                $bukti = json_encode($cleanLines, JSON_UNESCAPED_UNICODE);
+                        $isJson = str_starts_with($bukti, '[') && str_ends_with($bukti, ']') && ($testDec = json_decode($bukti, true)) && is_array($testDec);
+                        $candidates = $isJson ? array_values(array_filter(array_map('trim', $testDec))) : array_values(array_filter(array_map('trim', preg_split('/[
+\n;]+/', $bukti))));
+                        
+                        $allPathsOrUrls = !empty($candidates);
+                        foreach ($candidates as $c) {
+                            $isPathOrUrl = filter_var($c, FILTER_VALIDATE_URL) !== false
+                                || str_starts_with($c, 'public/')
+                                || str_starts_with($c, 'uploads/')
+                                || (bool)preg_match('/\.(pdf|docx?|xlsx?|pptx?|png|jpe?g|txt)$/i', $c);
+                            if (!$isPathOrUrl) {
+                                $allPathsOrUrls = false;
+                                break;
                             }
+                        }
+                        if ($allPathsOrUrls) {
+                            $bukti = json_encode($candidates, JSON_UNESCAPED_UNICODE);
+                        } else {
+                            $bukti = implode("\n", $candidates);
                         }
                     }
 
@@ -509,7 +519,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 $cleanNamaPic = trim($cleanNamaPic);
                 $summaryPic = $cleanNamaPic . ($jabatanPic ? " ({$jabatanPic})" : '') . ($kontakPic ? " - HP/WA: {$kontakPic}" : '');
                 if ($picType === 'internal') {
-                    $detailFakta = "PIC Internal: {$namaPic}\nJabatan: " . ($jabatanPic ?: '-') . "\nUnit: " . ($unitPic ?: '-') . "\nKontak: " . ($kontakPic ?: '-') . "\nDasar Penetapan/SK: " . ($skPic ?: '-');
+                    $detailFakta = "PIC Internal: {$cleanNamaPic}\nJabatan: " . ($jabatanPic ?: '-') . "\nUnit: " . ($unitPic ?: '-') . "\nKontak: " . ($kontakPic ?: '-') . "\nDasar Penetapan/SK: " . ($skPic ?: '-');
                     $stmtM = $pdo->prepare('UPDATE mitra_kinerja SET pic_internal = ? WHERE id = ?');
                     $stmtM->execute([$summaryPic, $id]);
                     $stmtE = $pdo->prepare('UPDATE baseline_elemen SET fakta_pemeriksaan = ?, status = \'TERVERIFIKASI\' WHERE mitra_id = ? AND nomor_elemen = 7');
@@ -517,7 +527,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                     logAudit($id, $user['id'], 'UPDATE_PIC_INTERNAL', 'Update PIC Internal ' . $mitra['kode']);
                     $success = 'Data PIC Internal berhasil diperbarui dan diverifikasi.';
                 } elseif ($picType === 'mitra') {
-                    $detailFakta = "PIC Mitra: {$namaPic}\nJabatan: " . ($jabatanPic ?: '-') . "\nInstansi: " . ($unitPic ?: $mitra['nama_mitra']) . "\nKontak: " . ($kontakPic ?: '-') . "\nKeterangan: " . ($skPic ?: '-');
+                    $detailFakta = "PIC Mitra: {$cleanNamaPic}\nJabatan: " . ($jabatanPic ?: '-') . "\nInstansi: " . ($unitPic ?: $mitra['nama_mitra']) . "\nKontak: " . ($kontakPic ?: '-') . "\nKeterangan: " . ($skPic ?: '-');
                     $stmtM = $pdo->prepare('UPDATE mitra_kinerja SET pic_mitra = ? WHERE id = ?');
                     $stmtM->execute([$summaryPic, $id]);
                     $stmtE = $pdo->prepare('UPDATE baseline_elemen SET fakta_pemeriksaan = ?, status = \'TERVERIFIKASI\' WHERE mitra_id = ? AND nomor_elemen = 8');
@@ -1071,7 +1081,7 @@ if ($id > 0) {
                 <button type="button" onclick="document.getElementById('modalUploadMulti').style.display='none'" style="background:none;border:none;font-size:18px;cursor:pointer;">&times;</button>
             </div>
             <p style="font-size:12px;color:#475569;margin-top:0;">
-                Anda dapat memilih satu atau beberapa file PDF sekaligus. Sistem mendukung dokumen berukuran besar hingga 50 MB tanpa perlu menggabungkan secara manual.
+                Anda dapat memilih satu atau beberapa file PDF sekaligus. Sistem mendukung dokumen berukuran besar hingga 25 MB tanpa perlu menggabungkan secara manual.
             </p>
             <form method="post" enctype="multipart/form-data">
                 <input type="hidden" name="action" value="upload_baseline_pdf">
@@ -1190,6 +1200,12 @@ if ($id > 0) {
 
     function openPicModal(type) {
         document.getElementById('modalPicType').value = type;
+        document.getElementById('picNama').value = '';
+        document.getElementById('picJabatan').value = '';
+        document.getElementById('picUnit').value = '';
+        document.getElementById('picKontak').value = '';
+        document.getElementById('picSk').value = '';
+
         if (type === 'internal') {
             document.getElementById('modalPicTitle').innerText = 'Update Data PIC Internal (Kanwil Kepri)';
             document.getElementById('lblNamaPic').innerText = 'Nama PIC Internal *';

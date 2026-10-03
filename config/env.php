@@ -18,7 +18,22 @@ if (!defined('APP_ENV')) {
     if (!$env) {
         $serverHost = strtolower(preg_replace('/:\d+$/', '', $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? ''));
         $remoteAddr = $_SERVER['REMOTE_ADDR'] ?? '';
-        $forwardedFor = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
+
+        $forwardedHeaders = [
+            $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '',
+            $_SERVER['HTTP_X_FORWARDED_HOST'] ?? '',
+            $_SERVER['HTTP_X_FORWARDED_SERVER'] ?? '',
+            $_SERVER['HTTP_X_REAL_IP'] ?? '',
+            $_SERVER['HTTP_FORWARDED'] ?? '',
+            $_SERVER['HTTP_CLIENT_IP'] ?? '',
+        ];
+        $hasForwardedHeaders = false;
+        foreach ($forwardedHeaders as $hdr) {
+            if ($hdr !== '') {
+                $hasForwardedHeaders = true;
+                break;
+            }
+        }
 
         $isLocalHost = in_array($serverHost, ['localhost', '127.0.0.1', '::1'], true)
             || str_ends_with($serverHost, '.local')
@@ -27,7 +42,7 @@ if (!defined('APP_ENV')) {
         $isLoopbackIp = in_array($remoteAddr, ['127.0.0.1', '::1', ''], true);
 
         // Reverse proxy headers and production hostnames cannot spoof development mode
-        if ($isLocalHost && empty($forwardedFor) && $isLoopbackIp) {
+        if ($isLocalHost && !$hasForwardedHeaders && $isLoopbackIp) {
             $env = 'development';
         }
     }

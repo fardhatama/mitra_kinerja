@@ -17,17 +17,17 @@ $templateMap = [
     'P02' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P02_BNNP_MASA_IMPLEMENTASI_AWAL_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P02)'],
     'P03' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P03_PEMKOT_TANJUNGPINANG_FINAL_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P03)'],
     'P04' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P04_BAPPERIDA_BINTAN_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P04)'],
-    'P05' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P05_STAIN_SAR_KEPRI_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P05/STAIN)'],
+    'P05' => ['file' => 'public/templates/import_naskah/01_Pilot_Utama/P05_Scorecard_STIT_Mumtaz_Karimun.xlsx', 'label' => 'Scorecard Pilot (P05/STIT Mumtaz)'],
     'P06' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P06_UMRAH_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P06)'],
     'P07' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P07_STAI_ANAMBAS_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P07)'],
     'P08' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P08_POLIBATAM_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P08)'],
     'P09' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P09_STAI_NATUNA_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P09)'],
     'P10' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P10_STISIP_BATAM_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P10)'],
-    'C01' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P05_STAIN_SAR_KEPRI_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (STAIN SAR)'],
+    'C01' => ['file' => 'public/templates/import_naskah/02_Portofolio_Pengayaan/C01_Scorecard_STAIN_Sultan_Abdurrahman.xlsx', 'label' => 'Portofolio Pengayaan (C01)'],
     'C02' => ['file' => 'public/templates/import_naskah/02_Portofolio_Pengayaan/C02_Scorecard_Politeknik_Bintan_Cakrawala.xlsx', 'label' => 'Portofolio Pengayaan (C02)'],
     'C03' => ['file' => 'public/templates/import_naskah/02_Portofolio_Pengayaan/C03_Scorecard_Universitas_Ibnu_Sina.xlsx', 'label' => 'Portofolio Pengayaan (C03)'],
     'C04' => ['file' => 'public/templates/import_naskah/02_Portofolio_Pengayaan/C04_Scorecard_UNRIKA.xlsx', 'label' => 'Portofolio Pengayaan (C04)'],
-    'C05' => ['file' => 'public/templates/import_naskah/02_Baseline_Final/FINAL_BASELINE_MITRA_KINERJA_AUDIT_FINAL_28_AGUSTUS_2026.xlsx', 'label' => 'Baseline Final Audit (C05)'],
+    'C05' => ['file' => 'public/templates/template_scorecard_v2_1.xlsx', 'label' => 'Scorecard Template V2.1 (C05)'],
     'P11' => ['file' => 'public/templates/template_scorecard_v2_1.xlsx', 'label' => 'Scorecard Template V2.1 (P11)'],
     'P12' => ['file' => 'public/templates/template_scorecard_v2_1.xlsx', 'label' => 'Scorecard Template V2.1 (P12)'],
     'P13' => ['file' => 'public/templates/template_scorecard_v2_1.xlsx', 'label' => 'Scorecard Template V2.1 (P13)'],
@@ -184,7 +184,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                         }
                     }
                     if (!$cutoffDate) {
-                        $cutoffDate = date('Y-m-d');
+                        $cutoffDate = !empty($targetMitra['cutoff_date']) ? $targetMitra['cutoff_date'] : null;
                     }
 
                     // Loop baris elemen baseline (fleksibel baris 4 s.d 35)
@@ -238,9 +238,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                         }
                     }
 
-                    // Update ringkasan status baseline pada mitra_kinerja
-                    $updateSql = 'UPDATE mitra_kinerja SET baseline_status = \'TERVERIFIKASI / DIKUNCI\', baseline_locked_at = NOW(), baseline_locked_by = ?';
-                    $params = [$user['id']];
+                    // Update ringkasan status baseline pada mitra_kinerja (Kunci hanya jika minimal 12 elemen terisi)
+                    $stmtCnt = $pdo->prepare("SELECT COUNT(*) FROM baseline_elemen WHERE mitra_id = ? AND status != 'BELUM DIISI'");
+                    $stmtCnt->execute([$targetId]);
+                    $filledCount = (int)$stmtCnt->fetchColumn();
+
+                    if ($filledCount >= 12) {
+                        $updateSql = 'UPDATE mitra_kinerja SET baseline_status = \'TERVERIFIKASI / DIKUNCI\', baseline_locked_at = NOW(), baseline_locked_by = ?';
+                        $params = [$user['id']];
+                    } else {
+                        $updateSql = 'UPDATE mitra_kinerja SET baseline_status = \'DALAM PROSES\', baseline_locked_at = NULL, baseline_locked_by = NULL';
+                        $params = [];
+                    }
                     if (!empty($pemeriksaVal)) {
                         $updateSql .= ', baseline_pemeriksa = ?';
                         $params[] = $pemeriksaVal;
@@ -265,6 +274,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
 
                     // Bobot default V2.1
                     $weights = ['I1' => 10, 'I2' => 15, 'I3' => 15, 'I4' => 20, 'I5' => 20, 'I6' => 10, 'I7' => 10];
+                    $stdDescriptions = [
+                        'I1' => "Kejelasan Pengelolaan & Rencana Tindak Lanjut\nCara periksa: Apakah pelaksanaan kerja sama telah memiliki penanggung jawab yang jelas, rencana tindak lanjut yang dapat dilaksanakan, dan mekanisme koordinasi untuk memastikan tindak lanjut tersebut berjalan?",
+                        'I2' => "Kejelasan tindak lanjut\nCara periksa: Apakah terdapat rencana aksi nyata dan pembagian peran yang disepakati bersama?",
+                        'I3' => "Realisasi kegiatan terhadap rencana\nCara periksa: Apakah kegiatan terlaksana sesuai jadwal dan ruang lingkup?",
+                        'I4' => "Kelengkapan dan konsolidasi eviden\nCara periksa: Apakah arsip, dokumentasi pelaksanaan, dan bukti dukung tersedia lengkap?",
+                        'I5' => "Kontribusi terhadap kebutuhan kinerja organisasi\nCara periksa: Apakah kerja sama memberikan dampak/output nyata bagi organisasi?",
+                        'I6' => "Keberlanjutan dan risiko\nCara periksa: Apakah risiko teridentifikasi dan terdapat rencana mitigasi atau kelanjutan kerja sama?",
+                        'I7' => "Risiko & Keberlanjutan\nCara periksa: Evaluasi berkala siklus monev",
+                    ];
 
                     foreach ($scRows as $rIdx => $row) {
                         $col1 = strtoupper(trim($row[1] ?? ''));
@@ -279,16 +297,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                             $rawStatus = strtoupper(trim($row[6] ?? ''));
                             $evidenceLoc = trim($row[7] ?? '');
                             $rawSkor = trim($row[8] ?? '');
+                            $rawNilai = trim($row[9] ?? '');
                             $alasanSkor = trim($row[10] ?? '');
                             $catatanTl = trim($row[11] ?? '');
                         } else {
-                            $kondisiBaseline = trim($row[3] ?? '');
+                            $kondisiBaseline = trim($row[4] ?? '');
                             $rawStatus = strtoupper(trim($row[5] ?? ''));
+                            $evidenceLoc = trim($row[6] ?? '');
                             $kondisi = trim($row[6] ?? '');
                             $rawSkor = trim($row[7] ?? '');
                             $alasanSkor = trim($row[8] ?? '');
-                            $catatanTl = trim($row[9] ?? '');
-                            $evidenceLoc = '';
+                            $rawNilai = trim($row[9] ?? '');
+                            $catatanTl = '';
                         }
 
                         // BUG-IM-03: Normalisasi status pemeriksaan (cegah 'BUKTI BELUM CUKUP' menjadi 'BUKTI CUKUP')
@@ -304,17 +324,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                         }
 
                         $skor = is_numeric($rawSkor) ? max(0, min(4, (int)$rawSkor)) : null;
-                        $nilai = $skor !== null ? round(($skor / 4.0) * $bobot, 2) : null;
+                        if (is_numeric($rawNilai)) {
+                            $nilai = round((float)$rawNilai, 2);
+                        } else {
+                            $nilai = $skor !== null ? round(($skor / 4.0) * $bobot, 2) : null;
+                        }
+
+                        $descCandidate = $isPenilaianLayout ? trim(($row[1] ?? '') . "\nCara periksa: " . ($row[3] ?? '')) : trim($row[2] ?? '');
+                        $deskripsi = (!empty($descCandidate) && strlen($descCandidate) > 5) ? $descCandidate : ($stdDescriptions[$kodeInd] ?? "Indikator $kodeInd");
 
                         // Cek apakah indikator sudah ada
                         $stmtCheck = $pdo->prepare('SELECT id FROM indikator_skor WHERE mitra_id = ? AND kode_indikator = ?');
                         $stmtCheck->execute([$targetId, $kodeInd]);
                         if ($stmtCheck->fetch()) {
-                            $stmtU = $pdo->prepare('UPDATE indikator_skor SET status_pemeriksaan = ?, kondisi_baseline = ?, kondisi_saat_ini = ?, temuan_bukti = ?, skor = ?, alasan_skor = ?, catatan_tindak_lanjut = ?, nilai = ?, referensi_baseline = ? WHERE mitra_id = ? AND kode_indikator = ?');
-                            $stmtU->execute([$statusPem, $kondisiBaseline, $kondisi, $evidenceLoc, $skor, $alasanSkor, $catatanTl, $nilai, $kondisiBaseline, $targetId, $kodeInd]);
+                            $stmtU = $pdo->prepare('UPDATE indikator_skor SET bobot = ?, status_pemeriksaan = ?, kondisi_baseline = ?, kondisi_saat_ini = ?, temuan_bukti = COALESCE(NULLIF(?, \'\'), temuan_bukti), skor = ?, alasan_skor = ?, catatan_tindak_lanjut = ?, nilai = ?, referensi_baseline = ? WHERE mitra_id = ? AND kode_indikator = ?');
+                            $stmtU->execute([$bobot, $statusPem, $kondisiBaseline, $kondisi, $evidenceLoc, $skor, $alasanSkor, $catatanTl, $nilai, $kondisiBaseline, $targetId, $kodeInd]);
                         } else {
                             $stmtI = $pdo->prepare('INSERT INTO indikator_skor (mitra_id, kode_indikator, deskripsi, bobot, referensi_baseline, kondisi_baseline, status_pemeriksaan, kondisi_saat_ini, temuan_bukti, skor, alasan_skor, catatan_tindak_lanjut, nilai) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                            $stmtI->execute([$targetId, $kodeInd, "Indikator $kodeInd", $bobot, $kondisiBaseline, $kondisiBaseline, $statusPem, $kondisi, $evidenceLoc, $skor, $alasanSkor, $catatanTl, $nilai]);
+                            $stmtI->execute([$targetId, $kodeInd, $deskripsi, $bobot, $kondisiBaseline, $kondisiBaseline, $statusPem, $kondisi, $evidenceLoc, $skor, $alasanSkor, $catatanTl, $nilai]);
                         }
                         $updatedScorecard++;
                     }
@@ -372,14 +399,34 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                     $picRows = $parsedWb[$picSheetName];
                     $picInternalFound = '';
                     $picMitraFound = '';
+                    $currentSection = '';
                     foreach ($picRows as $pRow) {
-                        $label = strtolower(trim($pRow[1] ?? ''));
-                        $val = trim($pRow[2] ?? '');
+                        $col1 = trim((string)($pRow[1] ?? ''));
+                        $c1Upper = strtoupper($col1);
+                        if (str_contains($c1Upper, 'PIC UTAMA') || str_contains($c1Upper, 'PIC MITRA')) {
+                            $currentSection = 'mitra';
+                        } elseif (str_contains($c1Upper, 'PIC INTERNAL') || str_contains($c1Upper, 'PENGAMPU')) {
+                            $currentSection = 'internal';
+                        }
+
+                        $label = strtolower($col1);
+                        // Read column 3 for Portofolio workbooks, falling back to column 2
+                        $val = trim((string)($pRow[3] ?? ''));
+                        if ($val === '') {
+                            $val = trim((string)($pRow[2] ?? ''));
+                        }
+
                         // BUG-BL-06: Do not let "Nama Mitra" label overwrite pic_mitra with organization name
                         if (str_contains($label, 'pic mitra') || str_contains($label, 'focal point mitra') || (str_contains($label, 'pic') && str_contains($label, 'mitra'))) {
                             if (!empty($val)) $picMitraFound = $val;
                         } elseif (str_contains($label, 'pic internal') || str_contains($label, 'pengampu') || str_contains($label, 'focal point internal')) {
                             if (!empty($val)) $picInternalFound = $val;
+                        } elseif (str_contains($label, 'nama lengkap') || $label === 'nama') {
+                            if ($currentSection === 'mitra' && empty($picMitraFound) && !empty($val)) {
+                                $picMitraFound = $val;
+                            } elseif ($currentSection === 'internal' && empty($picInternalFound) && !empty($val)) {
+                                $picInternalFound = $val;
+                            }
                         }
                     }
                     if ($picInternalFound || $picMitraFound) {
@@ -538,7 +585,7 @@ require __DIR__ . '/includes/header.php';
                 <?php foreach ($daftarMitra as $m): 
                     $tInfo = $templateMap[$m['kode']] ?? null;
                     $isLocked = str_contains($m['baseline_status'] ?? '', 'DIKUNCI');
-                    $hasBaseline = $isLocked || ((int)($m['total_terverifikasi'] ?? 0) > 0);
+                    $hasBaseline = $isLocked;
                     $scorecardStatus = $m['status_scorecard'] ?? 'BELUM LENGKAP';
                 ?>
                 <tr style="border-bottom:1px solid #f1f5f9;transition:background 0.15s ease;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">

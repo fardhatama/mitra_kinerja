@@ -112,11 +112,17 @@ function getMitraSummary(PDO $pdo, array $mitra, bool $forceRecalculate = false)
     $warning = warningTertinggi($statusList);
     $hasilUji = hasilUjiIntervensi($pemicuRows, $warning['status']);
     $cekUsulan = cekUsulanIntervensi($pemicuRows, $hasilUji, $usulan['upaya_dilakukan'], $usulan['keputusan_diminta']);
-    $calculatedStatus = hitungStatusScorecard($ringkasan['skor_lengkap'], $ringkasan['cek_lengkap_ok'], $validasi['status'], $ringkasan['bukti_kurang_n'], $ringkasan['bdn_n'], $ringkasan['dapat_dinilai_n']);
+    $calculatedStatus = hitungStatusScorecard($ringkasan['skor_lengkap'], $ringkasan['cek_lengkap_ok'], $validasi['status'], $ringkasan['bukti_kurang_n'], $ringkasan['bdn_n'], $ringkasan['dapat_dinilai_n'], $ringkasan['all_evaluable']);
     if ($calculatedStatus === 'BUKTI BELUM MEMADAI') {
         $statusScorecard = 'BUKTI BELUM MEMADAI';
     } elseif ($validasi['status'] === 'PERLU PERBAIKAN') {
         $statusScorecard = 'PERLU PERBAIKAN';
+    } elseif ($ringkasan['bdn_n'] > 0 || !$ringkasan['all_evaluable']) {
+        // Do not let legacy DISETUJUI promote un-evaluable cards to FINAL/TERVALIDASI
+        $statusScorecard = $calculatedStatus;
+    } elseif ($forceRecalculate || $calculatedStatus === 'DALAM PENILAIAN') {
+        // Allow status_scorecard to revert from 'SIAP DIVALIDASI' to 'DALAM PENILAIAN'
+        $statusScorecard = $calculatedStatus;
     } elseif (!empty($mitra['status_scorecard']) && in_array($mitra['status_scorecard'], ['MASA IMPLEMENTASI AWAL', 'FINAL', 'FINAL/TERVALIDASI', 'SIAP DIVALIDASI'], true)) {
         if ($validasi['status'] === 'DISETUJUI') {
             $statusScorecard = 'FINAL/TERVALIDASI';
@@ -208,6 +214,10 @@ function getMitraSummary(PDO $pdo, array $mitra, bool $forceRecalculate = false)
                     $monev['target_evaluasi_terdekat'] = $nearestTarget;
                     $monev['hari_menuju_evaluasi'] = $nearestDiff;
                     $monev['warning_1_bulan'] = $warning1Bulan;
+                } else {
+                    $monev['target_evaluasi_terdekat'] = null;
+                    $monev['hari_menuju_evaluasi'] = null;
+                    $monev['warning_1_bulan'] = false;
                 }
             }
         }
@@ -318,7 +328,7 @@ function getDashboardStats(array $all): array {
 
         // Mendukung posisi portofolio deskriptif / hasil audit V3
         $pos = strtoupper(trim((string)($s['posisi_portofolio'] ?? '')));
-        $isBerdampak = str_contains($pos, 'BERDAMPAK') || (str_contains($pos, 'DAMPAK') && !str_contains($pos, 'BELUM') && !str_contains($pos, 'TIDAK'));
+        $isBerdampak = (str_contains($pos, 'BERDAMPAK') || str_contains($pos, 'DAMPAK')) && !str_contains($pos, 'BELUM') && !str_contains($pos, 'TIDAK');
         $isOutputOutcome = $isBerdampak 
             || (str_contains($pos, 'OUTCOME') && !str_contains($pos, 'BELUM') && !str_contains($pos, 'TIDAK'))
             || (str_contains($pos, 'OUTPUT') && !str_contains($pos, 'BELUM') && !str_contains($pos, 'TIDAK'));
@@ -341,12 +351,10 @@ function getDashboardStats(array $all): array {
         elseif ($efektivitas === 'Berisiko') $berisiko++;
         else $perluPerhatian++;
 
-        // Rata-rata nilai: gunakan nilai_final bila ada atau nilai evaluable lengkap, izinkan nilai sah 0.0
+        // Rata-rata nilai: hanya gunakan nilai_final jika tidak null dan skor_lengkap bernilai true
         $scoreToUse = null;
-        if (isset($s['nilai_final']) && $s['nilai_final'] !== null) {
+        if (isset($s['nilai_final']) && $s['nilai_final'] !== null && !empty($s['skor_lengkap'])) {
             $scoreToUse = (float)$s['nilai_final'];
-        } elseif (!empty($s['all_evaluable']) && isset($s['nilai_berjalan']) && $s['nilai_berjalan'] !== null) {
-            $scoreToUse = (float)$s['nilai_berjalan'];
         }
 
         if ($scoreToUse !== null) {
@@ -369,7 +377,7 @@ function getDashboardStats(array $all): array {
 
     return compact(
         'total', 'pilotCount', 'efektif', 'perluPerhatian', 'berisiko', 
-        'rataRataNilai', 'aspekRataRata',
+        'rataRataNilai', 'nilaiCount', 'aspekRataRata',
         'aktifCount', 'outputOutcomeCount', 'berdampakCount', 'rekomendasiCount'
     );
 }

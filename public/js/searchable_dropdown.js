@@ -224,10 +224,12 @@ function initSearchableDropdowns() {
                 // BUG-FA-01: Prevent default Enter submission when activeIndex is -1 or dropdown is open
                 if (wrap.classList.contains('open')) {
                     e.preventDefault();
-                    if (activeIndex >= 0 && activeIndex < items.length) {
-                        var chosen = items[activeIndex];
+                    if (items.length > 0) {
+                        var chosenIdx = (activeIndex >= 0 && activeIndex < items.length) ? activeIndex : 0;
+                        var chosen = items[chosenIdx];
                         var chosenVal = chosen.dataset.value || '';
-                        var chosenLabel = chosen.querySelector('.opt-title').textContent.trim();
+                        var titleEl = chosen.querySelector('.opt-title');
+                        var chosenLabel = titleEl ? titleEl.textContent.trim() : chosen.textContent.trim();
                         chooseOption(chosenVal, chosenVal ? chosenLabel : '');
                     }
                 }
