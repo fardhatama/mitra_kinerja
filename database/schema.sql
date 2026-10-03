@@ -196,7 +196,7 @@ CREATE TABLE `mitra_kinerja` (
   `foto_kerjasama` varchar(255) DEFAULT NULL,
   `pemeriksa_id` int(11) DEFAULT NULL,
   `tanggal_review` date DEFAULT NULL,
-  `status_scorecard` varchar(50) NOT NULL DEFAULT 'BELUM LENGKAP',
+  `status_scorecard` varchar(50) NOT NULL DEFAULT 'BELUM DINILAI',
   `posisi_portofolio` varchar(150) NOT NULL DEFAULT 'BELUM DAPAT DITENTUKAN',
   `rekomendasi` text DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),

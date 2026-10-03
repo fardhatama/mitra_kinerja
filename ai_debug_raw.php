@@ -8,6 +8,8 @@ require_once __DIR__ . '/includes/ai_config.php';
 requireLogin();
 requireRole(['admin']);
 
+session_write_close();
+
 header('Content-Type: application/json; charset=utf-8');
 
 $result = [

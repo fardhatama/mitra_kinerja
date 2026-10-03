@@ -15,10 +15,12 @@ require __DIR__ . '/includes/header.php';
         <h1 style="margin:0;font-size:20px;">Portofolio Kerja Sama</h1>
         <div class="muted" style="font-size:13px;">Rekap status dan evaluasi kerja sama</div>
     </div>
-    <a href="dashboard.php" class="btn btn-outline btn-sm">&larr; Dashboard</a>
-    <?php if (in_array(currentUser()['role'], ['admin','pemeriksa','pengampu'])): ?>
-    <a href="mitra_manage.php" class="btn btn-primary btn-sm">+ Tambah Naskah</a>
-    <?php endif; ?>
+    <div style="display:flex;gap:8px;">
+        <a href="dashboard.php" class="btn btn-outline btn-sm">&larr; Dashboard</a>
+        <?php if (in_array(currentUser()['role'], ['admin','pemeriksa','pengampu'])): ?>
+        <a href="mitra_manage.php" class="btn btn-primary btn-sm">+ Tambah Naskah</a>
+        <?php endif; ?>
+    </div>
 </div>
 
 <div class="card">
@@ -62,6 +64,7 @@ require __DIR__ . '/includes/header.php';
             <option value="PERPANJANG">Perpanjang</option>
             <option value="REPLIKASI">Replikasi</option>
             <option value="HENTIKAN">Hentikan</option>
+            <option value="BELUM DITENTUKAN">Belum Ditentukan</option>
         </select>
         <select id="fStatus">
             <option value="">Semua Status</option>
@@ -80,7 +83,11 @@ require __DIR__ . '/includes/header.php';
             <tr><th>Kode</th><th>Portofolio</th><th>Mitra</th><th>Bidang</th><th>Berlaku s.d.</th><th>Nilai</th><th>Kategori</th><th>Kelengkapan</th><th>Posisi</th><th>Rekomendasi</th><th>Status</th><th>Warning</th><th>Aksi</th></tr>
         </thead>
         <tbody>
-        <?php foreach ($all as $s): $m = $s['mitra']; ?>
+        <?php if (empty($all)): ?>
+            <tr id="emptyRow"><td colspan="13" class="muted" style="text-align:center;padding:20px;">Belum ada data kerja sama</td></tr>
+        <?php else: ?>
+            <tr id="noFilterMatchRow" style="display:none;"><td colspan="13" class="muted" style="text-align:center;padding:20px;">Tidak ada data yang sesuai dengan filter</td></tr>
+            <?php foreach ($all as $s): $m = $s['mitra']; ?>
             <tr data-portofolio="<?= h($m['portofolio']) ?>" data-bidang="<?= h($m['bidang'] ?? 'AHU') ?>" data-kategori="<?= h($s['kategori']) ?>" data-status="<?= h($s['status_scorecard']) ?>" data-posisi="<?= h($s['posisi_portofolio']) ?>" data-rekomendasi="<?= h($s['rekomendasi']) ?>" data-rekomendasi-key="<?= h(ekstrakKeywordRekomendasi($s['rekomendasi'])) ?>">
                 <td><strong><?= h($m['kode']) ?></strong></td>
                 <td><?= h($m['portofolio']) ?></td>
@@ -111,7 +118,8 @@ require __DIR__ . '/includes/header.php';
                     <?php endif; ?>
                 </td>
             </tr>
-        <?php endforeach; ?>
+            <?php endforeach; ?>
+        <?php endif; ?>
         </tbody>
     </table>
     </div>
@@ -126,7 +134,9 @@ function applyFilters() {
     var pos = document.getElementById('fPosisi').value;
     var rek = document.getElementById('fRekomendasi').value;
     var s = document.getElementById('fStatus').value;
-    document.querySelectorAll('#tblPortofolio tbody tr').forEach(function(tr) {
+    var visibleCount = 0;
+    var rows = document.querySelectorAll('#tblPortofolio tbody tr:not(#emptyRow):not(#noFilterMatchRow)');
+    rows.forEach(function(tr) {
         var matchQ = !q || tr.textContent.toLowerCase().indexOf(q) !== -1;
         var matchP = !p || tr.dataset.portofolio === p;
         var matchB = !b || tr.dataset.bidang === b;
@@ -136,18 +146,24 @@ function applyFilters() {
         var matchPos = !pos || tr.dataset.posisi === pos;
         if (pos && !matchPos) {
             var pUpper = (tr.dataset.posisi || '').toUpperCase();
-            if (pos === 'BERDAMPAK' && (pUpper.indexOf('DAMPAK') !== -1 || pUpper.indexOf('BERDAMPAK') !== -1)) matchPos = true;
-            else if (pos === 'OUTCOME TERBENTUK' && pUpper.indexOf('OUTCOME') !== -1) matchPos = true;
-            else if (pos === 'OUTPUT TERSEDIA' && pUpper.indexOf('OUTPUT') !== -1) matchPos = true;
-            else if (pos === 'AKTIF' && (pUpper.indexOf('AKTIF') !== -1 || (pUpper.indexOf('IMPLEMENTASI') !== -1 && pUpper.indexOf('BELUM') === -1 && pUpper.indexOf('MASA IMPLEMENTASI AWAL') === -1))) matchPos = true;
-            else if (pos === 'BELUM DAPAT DITENTUKAN' && (pUpper.indexOf('BELUM') !== -1 || pUpper.indexOf('MASA IMPLEMENTASI') !== -1)) matchPos = true;
+            if (pos === 'BERDAMPAK' && (pUpper.indexOf('DAMPAK') !== -1 || pUpper.indexOf('BERDAMPAK') !== -1) && pUpper.indexOf('BELUM') === -1 && pUpper.indexOf('TIDAK') === -1) matchPos = true;
+            else if (pos === 'OUTCOME TERBENTUK' && pUpper.indexOf('OUTCOME') !== -1 && pUpper.indexOf('BELUM') === -1 && pUpper.indexOf('TIDAK') === -1) matchPos = true;
+            else if (pos === 'OUTPUT TERSEDIA' && pUpper.indexOf('OUTPUT') !== -1 && pUpper.indexOf('BELUM') === -1 && pUpper.indexOf('TIDAK') === -1) matchPos = true;
+            else if (pos === 'AKTIF' && ((pUpper.indexOf('AKTIF') !== -1 && pUpper.indexOf('TIDAK') === -1 && pUpper.indexOf('BELUM') === -1) || (pUpper.indexOf('IMPLEMENTASI') !== -1 && pUpper.indexOf('BELUM') === -1 && pUpper.indexOf('TIDAK') === -1 && pUpper.indexOf('MASA IMPLEMENTASI AWAL') === -1))) matchPos = true;
+            else if (pos === 'BELUM DAPAT DITENTUKAN' && (pUpper.indexOf('BELUM') !== -1 || pUpper.indexOf('MASA IMPLEMENTASI') !== -1 || pUpper.indexOf('TIDAK') !== -1)) matchPos = true;
         }
 
-        // Cek apakah dataset.rekomendasi mengandung keyword terpilih (atau match key)
-        var matchRek = !rek || (tr.dataset.rekomendasi && tr.dataset.rekomendasi.toUpperCase().indexOf(rek.toUpperCase()) !== -1) || (tr.dataset.rekomendasiKey && tr.dataset.rekomendasiKey === rek);
+        // Cek kecocokan rekomendasi berdasarkan clean keyword
+        var matchRek = !rek || (tr.dataset.rekomendasiKey === rek);
         var matchS = !s || tr.dataset.status === s;
-        tr.style.display = (matchQ && matchP && matchB && matchK && matchPos && matchRek && matchS) ? '' : 'none';
+        var isVisible = (matchQ && matchP && matchB && matchK && matchPos && matchRek && matchS);
+        tr.style.display = isVisible ? '' : 'none';
+        if (isVisible) visibleCount++;
     });
+    var noMatch = document.getElementById('noFilterMatchRow');
+    if (noMatch) {
+        noMatch.style.display = (rows.length > 0 && visibleCount === 0) ? '' : 'none';
+    }
 }
 document.getElementById('fSearch').addEventListener('input', applyFilters);
 document.getElementById('fPortofolio').addEventListener('change', applyFilters);

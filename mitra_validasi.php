@@ -174,13 +174,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
              VALUES (?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE status=VALUES(status), validator_id=VALUES(validator_id), tanggal_validasi=VALUES(tanggal_validasi), catatan=VALUES(catatan)'
         );
-        $stmtV->execute([$id, $status, $valId, $tglVal, $catatan ?: null]);
-        if ($status === 'DISETUJUI') {
-            $pdo->prepare("UPDATE mitra_kinerja SET status_scorecard = 'FINAL/TERVALIDASI' WHERE id = ?")->execute([$id]);
+
+        try {
+            $pdo->beginTransaction();
+            $stmtV->execute([$id, $status, $valId, $tglVal, $catatan ?: null]);
+            if ($status === 'DISETUJUI') {
+                $pdo->prepare("UPDATE mitra_kinerja SET status_scorecard = 'FINAL/TERVALIDASI' WHERE id = ?")->execute([$id]);
+            } elseif ($status === 'PERLU PERBAIKAN') {
+                $pdo->prepare("UPDATE mitra_kinerja SET status_scorecard = 'PERLU PERBAIKAN' WHERE id = ?")->execute([$id]);
+            }
+            syncStatusScorecard($pdo, $id);
+            logAudit($id, $user['id'], 'VALIDASI', 'Status validasi diubah menjadi ' . $status);
+
+            $pdo->commit();
+            $saved = true;
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $errors[] = 'Gagal menyimpan keputusan validasi: ' . $e->getMessage();
         }
-        syncStatusScorecard($pdo, $id);
-        logAudit($id, $user['id'], 'VALIDASI', 'Status validasi diubah menjadi ' . $status);
-        $saved = true;
 
         // Re-fetch $mitra dari DB agar data state yang dirender selalu fresh
         $stmt = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
@@ -211,7 +224,21 @@ require __DIR__ . '/includes/header.php';
         <div class="kpi-card"><div class="kpi-value"><?= $summary['kelengkapan'] ?>%</div><div class="kpi-label">Kelengkapan</div></div>
         <div class="kpi-card"><span class="badge badge-<?= warnaKategori($summary['kategori']) ?>"><?= h($summary['kategori']) ?></span><div class="kpi-label">Kategori</div></div>
         <div class="kpi-card"><span class="badge badge-secondary" style="font-size:11px;"><?= h($summary['posisi_portofolio']) ?></span><div class="kpi-label">Posisi Portofolio</div></div>
-        <div class="kpi-card"><span class="badge badge-warning" style="font-size:11px;"><?= h($summary['rekomendasi']) ?></span><div class="kpi-label">Rekomendasi</div></div>
+        <?php
+        $rekFull = $summary['rekomendasi'] ?? '';
+        $cleanRekOpts = ['LANJUT', 'PERBAIKI', 'PERPANJANG', 'REPLIKASI', 'HENTIKAN', 'BELUM DITENTUKAN'];
+        $rekBadge = 'BELUM DITENTUKAN';
+        foreach ($cleanRekOpts as $ro) {
+            if (str_contains(strtoupper($rekFull), $ro)) {
+                $rekBadge = $ro;
+                break;
+            }
+        }
+        if ($rekBadge === 'BELUM DITENTUKAN' && !empty($rekFull)) {
+            $rekBadge = mb_strimwidth($rekFull, 0, 20, '...');
+        }
+        ?>
+        <div class="kpi-card"><span class="badge badge-warning" style="font-size:11px;" title="<?= h($rekFull) ?>"><?= h($rekBadge) ?></span><div class="kpi-label">Rekomendasi</div></div>
         <div class="kpi-card"><div style="font-weight:700;font-size:13px;"><?= h($summary['status_scorecard']) ?></div><div class="kpi-label">Status Scorecard</div></div>
     </div>
     <?php if ($summary['kelengkapan'] < 100): ?>

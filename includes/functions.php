@@ -243,9 +243,37 @@ function hitungRekomendasi(float $nilai, string $warningStatus, string $posisiPo
  * dari teks rekomendasi multi-baris / deskriptif / hasil audit.
  */
 function ekstrakKeywordRekomendasi(?string $teks): string {
-    if (!$teks || trim($teks) === '' || trim($teks) === '-' || stripos($teks, 'BELUM') !== false) {
+    if (!$teks || trim($teks) === '' || trim($teks) === '-') {
         return 'BELUM DITENTUKAN';
     }
+    // Periksa baris pertama / headline terlebih dahulu untuk mendeteksi keyword utama atau status BELUM
+    $firstLine = trim(explode("\n", trim($teks))[0]);
+    if ($firstLine === '' || $firstLine === '-') {
+        return 'BELUM DITENTUKAN';
+    }
+    $upperFirst = strtoupper($firstLine);
+    if (str_starts_with($upperFirst, 'BELUM') || str_contains($upperFirst, 'BELUM DITENTUKAN') || str_contains($upperFirst, 'BELUM DAPAT DITENTUKAN')) {
+        return 'BELUM DITENTUKAN';
+    }
+
+    // Uji kata kunci pada headline (PERCEPAT/BENTUK/AKTIFKAN sebelum LANJUT untuk mencegah collision)
+    if (str_contains($upperFirst, 'HENTIKAN') || str_contains($upperFirst, 'HENTI')) {
+        return 'HENTIKAN';
+    }
+    if (str_contains($upperFirst, 'PERPANJANG')) {
+        return 'PERPANJANG';
+    }
+    if (str_contains($upperFirst, 'REPLIKASI')) {
+        return 'REPLIKASI';
+    }
+    if (str_contains($upperFirst, 'PERBAIK') || str_contains($upperFirst, 'BENTUK') || str_contains($upperFirst, 'AKTIFKAN') || str_contains($upperFirst, 'PERCEPAT') || str_contains($upperFirst, 'MULAI')) {
+        return 'PERBAIKI';
+    }
+    if (str_contains($upperFirst, 'LANJUT')) {
+        return 'LANJUT';
+    }
+
+    // Jika belum ditemukan di headline, periksa teks keseluruhan tanpa terhalang 'belum' di rincian temuan
     $upper = strtoupper(trim($teks));
     if (str_contains($upper, 'HENTIKAN') || str_contains($upper, 'HENTI')) {
         return 'HENTIKAN';
@@ -256,13 +284,14 @@ function ekstrakKeywordRekomendasi(?string $teks): string {
     if (str_contains($upper, 'REPLIKASI')) {
         return 'REPLIKASI';
     }
-    if (str_contains($upper, 'LANJUT')) {
-        return 'LANJUT';
-    }
     if (str_contains($upper, 'PERBAIK') || str_contains($upper, 'BENTUK') || str_contains($upper, 'AKTIFKAN') || str_contains($upper, 'PERCEPAT') || str_contains($upper, 'MULAI')) {
         return 'PERBAIKI';
     }
-    return 'PERBAIKI';
+    if (str_contains($upper, 'LANJUT')) {
+        return 'LANJUT';
+    }
+
+    return 'BELUM DITENTUKAN';
 }
 
 /** Kategori Kinerja V3: KUAT ≥80, CUKUP/PERLU PENGUATAN 60-79, PERLU PERBAIKAN 40-59, KRITIS <40. */
@@ -278,13 +307,12 @@ function kategoriDariNilai(float $nilai): string {
  *   BUKTI BELUM MEMADAI > SIAP DIVALIDASI > MASA IMPLEMENTASI AWAL > BELUM DINILAI > DALAM PENILAIAN.
  */
 function hitungStatusScorecard(bool $skorLengkap, bool $cekLengkapOk, string $statusValidasi, int $buktiKurangN = 0, int $bdnN = 0, int $dapatDinilaiN = 0): string {
-    // V3: if any indicator has BUKTI BELUM MEMADAI, that status takes priority
     if ($buktiKurangN > 0) return 'BUKTI BELUM MEMADAI';
-    if ($dapatDinilaiN === 0) return 'BELUM DINILAI';
-    if (!$skorLengkap) return 'DALAM PENILAIAN';
-    if (!$cekLengkapOk) return 'DALAM PENILAIAN';
     if ($statusValidasi === 'DISETUJUI') return 'FINAL/TERVALIDASI';
     if ($statusValidasi === 'PERLU PERBAIKAN') return 'PERLU PERBAIKAN';
+    if ($bdnN > 0) return 'MASA IMPLEMENTASI AWAL';
+    if ($dapatDinilaiN === 0) return 'BELUM DINILAI';
+    if (!$skorLengkap || !$cekLengkapOk) return 'DALAM PENILAIAN';
     return 'SIAP DIVALIDASI';
 }
 

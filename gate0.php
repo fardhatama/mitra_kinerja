@@ -333,8 +333,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                         ->execute([$newMitraId, $n, $d['kelompok'], $d['nama'], $d['yang_diperiksa'], $d['sumber_minimum'], $statusInit, $faktaInit ?: null]);
                 }
 
-                // Inisialisasi Siklus Monev Berkala
-                $keb = hitungKebutuhanScorecard($mulaiPks, $selesaiPks, 3);
+                // Inisialisasi Siklus Monev Berkala (Triwulanan / 4x setahun)
+                $keb = hitungKebutuhanScorecard($mulaiPks, $selesaiPks, 4);
                 if (!empty($keb['milestones'])) {
                     foreach ($keb['milestones'] as $ms) {
                         $pdo->prepare('INSERT INTO siklus_monev (mitra_id, siklus_ke, nama_siklus, tanggal_target_evaluasi, status_siklus) VALUES (?, ?, ?, ?, ?)')
@@ -567,18 +567,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                             $qIdx = ($offsets[$kMajor] ?? 0) + $kMinor;
                         }
                         if ($qIdx >= 1 && $qIdx <= 18) {
-                            $ans = strtoupper($cVal) === 'TIDAK' ? 'TIDAK' : 'YA';
+                            $rawAns = strtoupper($cVal);
+                            if ($rawAns === 'YA') {
+                                $ans = 'YA';
+                            } elseif ($rawAns === 'TIDAK') {
+                                $ans = 'TIDAK';
+                            } else {
+                                $ans = 'BELUM DITELAAH';
+                            }
                             $pertanyaanUji["q{$qIdx}"] = [
                                 'jawab' => $ans,
-                                'bukti' => $cNote ?: 'Dokumen terverifikasi'
+                                'bukti' => $cNote ?: ($ans === 'BELUM DITELAAH' ? 'Belum ada data uji' : 'Dokumen terverifikasi')
                             ];
-                            if ($ans === 'TIDAK') {
-                                if ($qIdx <= 3) $kSummary['K1'] = 'TIDAK';
-                                elseif ($qIdx <= 7) $kSummary['K2'] = 'TIDAK';
-                                elseif ($qIdx <= 10) $kSummary['K3'] = 'TIDAK';
-                                elseif ($qIdx <= 14) $kSummary['K4'] = 'TIDAK';
-                                else $kSummary['K5'] = 'TIDAK';
-                            }
                         }
                     }
 
@@ -602,6 +602,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                 for ($q = 1; $q <= 18; $q++) {
                     if (!isset($pertanyaanUji["q{$q}"])) {
                         $pertanyaanUji["q{$q}"] = ['jawab' => 'BELUM DITELAAH', 'bukti' => 'Belum ada data uji'];
+                    }
+                }
+
+                // Evaluasi kriteria K1..K5 secara akurat dari pertanyaan uji
+                $kSummary = ['K1' => 'YA', 'K2' => 'YA', 'K3' => 'YA', 'K4' => 'YA', 'K5' => 'YA'];
+                for ($q = 1; $q <= 18; $q++) {
+                    $qAns = $pertanyaanUji["q{$q}"]['jawab'] ?? 'BELUM DITELAAH';
+                    if ($qAns !== 'YA') {
+                        if ($q <= 3) $kSummary['K1'] = 'TIDAK';
+                        elseif ($q <= 7) $kSummary['K2'] = 'TIDAK';
+                        elseif ($q <= 10) $kSummary['K3'] = 'TIDAK';
+                        elseif ($q <= 14) $kSummary['K4'] = 'TIDAK';
+                        else $kSummary['K5'] = 'TIDAK';
                     }
                 }
                 for ($t = 1; $t <= 7; $t++) {
@@ -681,13 +694,27 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                             ?, \'Menunggu Persetujuan Pimpinan\', ?
                         )
                         ON DUPLICATE KEY UPDATE
-                            calon_mitra=VALUES(calon_mitra), judul_rencana=VALUES(judul_rencana),
-                            tujuan_singkat=VALUES(tujuan_singkat), ruang_lingkup=VALUES(ruang_lingkup),
-                            perkiraan_mulai=VALUES(perkiraan_mulai), perkiraan_selesai=VALUES(perkiraan_selesai),
-                            k1_kesesuaian_strategis=VALUES(k1_kesesuaian_strategis), k2_kebutuhan_daya_ungkit=VALUES(k2_kebutuhan_daya_ungkit),
-                            k3_kelayakan_mitra=VALUES(k3_kelayakan_mitra), k4_kesiapan_sumber_daya=VALUES(k4_kesiapan_sumber_daya),
+                            tipe_kerjasama=VALUES(tipe_kerjasama),
+                            jenis_naskah=VALUES(jenis_naskah),
+                            unit_pemrakarsa=VALUES(unit_pemrakarsa),
+                            penanggung_jawab_usulan=VALUES(penanggung_jawab_usulan),
+                            calon_mitra=VALUES(calon_mitra),
+                            judul_rencana=VALUES(judul_rencana),
+                            tujuan_singkat=VALUES(tujuan_singkat),
+                            ruang_lingkup=VALUES(ruang_lingkup),
+                            penerima_manfaat=VALUES(penerima_manfaat),
+                            perkiraan_mulai=VALUES(perkiraan_mulai),
+                            perkiraan_selesai=VALUES(perkiraan_selesai),
+                            k1_kesesuaian_strategis=VALUES(k1_kesesuaian_strategis),
+                            k2_kebutuhan_daya_ungkit=VALUES(k2_kebutuhan_daya_ungkit),
+                            k3_kelayakan_mitra=VALUES(k3_kelayakan_mitra),
+                            k4_kesiapan_sumber_daya=VALUES(k4_kesiapan_sumber_daya),
                             k5_risiko_keberlanjutan=VALUES(k5_risiko_keberlanjutan),
-                            pertanyaan_uji=VALUES(pertanyaan_uji), trigger_khusus=VALUES(trigger_khusus),
+                            pertanyaan_uji=VALUES(pertanyaan_uji),
+                            trigger_khusus=VALUES(trigger_khusus),
+                            catatan_verifikasi=VALUES(catatan_verifikasi),
+                            gap_penyempurnaan=VALUES(gap_penyempurnaan),
+                            unit_review_tambahan=VALUES(unit_review_tambahan),
                             status_rekomendasi=VALUES(status_rekomendasi)
                     ');
                     $stmt->execute([
@@ -701,7 +728,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                         $rekomendasi, $user['id']
                     ]);
                     $importedCount = 1;
-                    $success = "Berhasil mengimpor 1 usulan dari formulir vertikal: <strong>{$noUsulan}</strong> ({$mitra}).";
+                    $success = "Berhasil mengimpor 1 usulan dari formulir vertikal: <strong>" . h($noUsulan) . "</strong> (" . h($mitra) . ").";
                 } catch (Throwable $e) {
                     $errors[] = "Gagal mengimpor usulan vertikal [{$noUsulan}]: " . $e->getMessage();
                 }
@@ -766,11 +793,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                                 $qAns = 'BELUM DITELAAH';
                                 $qBukti = 'Belum ada data uji';
                             } else {
-                                $qAns = strtoupper($valRaw) === 'TIDAK' ? 'TIDAK' : 'YA';
+                                $qAns = strtoupper($valRaw) === 'YA' ? 'YA' : (strtoupper($valRaw) === 'TIDAK' ? 'TIDAK' : 'BELUM DITELAAH');
                                 $qBukti = $getVal(["q{$q}_bukti"], 'Dokumen terverifikasi');
                             }
                             $pertanyaanUji["q{$q}"] = ['jawab' => $qAns, 'bukti' => $qBukti];
-                            if ($qAns === 'TIDAK') {
+                            if ($qAns !== 'YA') {
                                 if ($q <= 3) $kSummary['K1'] = 'TIDAK';
                                 elseif ($q <= 7) $kSummary['K2'] = 'TIDAK';
                                 elseif ($q <= 10) $kSummary['K3'] = 'TIDAK';
@@ -780,11 +807,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                         }
                     } else {
                         // Fallback kolom K1..K5 sederhana
-                        $kSummary['K1'] = strtoupper($getVal(['k1_kesesuaian_strategis', 11], 'BELUM DITELAAH'));
-                        $kSummary['K2'] = strtoupper($getVal(['k2_kebutuhan_daya_ungkit', 12], 'BELUM DITELAAH'));
-                        $kSummary['K3'] = strtoupper($getVal(['k3_kelayakan_mitra', 13], 'BELUM DITELAAH'));
-                        $kSummary['K4'] = strtoupper($getVal(['k4_kesiapan_sumber_daya', 14], 'BELUM DITELAAH'));
-                        $kSummary['K5'] = strtoupper($getVal(['k5_risiko_keberlanjutan', 15], 'BELUM DITELAAH'));
+                        $kSummary['K1'] = strtoupper($getVal(['k1_kesesuaian_strategis', 12], 'TIDAK')) === 'YA' ? 'YA' : 'TIDAK';
+                        $kSummary['K2'] = strtoupper($getVal(['k2_kebutuhan_daya_ungkit', 13], 'TIDAK')) === 'YA' ? 'YA' : 'TIDAK';
+                        $kSummary['K3'] = strtoupper($getVal(['k3_kelayakan_mitra', 14], 'TIDAK')) === 'YA' ? 'YA' : 'TIDAK';
+                        $kSummary['K4'] = strtoupper($getVal(['k4_kesiapan_sumber_daya', 15], 'TIDAK')) === 'YA' ? 'YA' : 'TIDAK';
+                        $kSummary['K5'] = strtoupper($getVal(['k5_risiko_keberlanjutan', 16], 'TIDAK')) === 'YA' ? 'YA' : 'TIDAK';
                         for ($q = 1; $q <= 18; $q++) {
                             $pertanyaanUji["q{$q}"] = ['jawab' => 'BELUM DITELAAH', 'bukti' => 'Belum ada data uji'];
                         }
@@ -799,7 +826,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                         if ($tAns === 'YA') $adaTrigger = true;
                     }
 
-                    $catatan = $getVal(['catatan_verifikasi', 16], 'Diimpor melalui template Excel/CSV');
+                    $catatan = $getVal(['catatan_verifikasi', 17], 'Diimpor melalui template Excel/CSV');
                     $gap = $getVal(['gap_penyempurnaan'], 'Tidak ada gap material.');
                     $unitRev = $getVal(['unit_review_tambahan'], 'Subbagian Humas, RB, dan TI');
 
@@ -871,7 +898,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                     }
                 }
                 if ($importedCount > 0) {
-                    $success = "Berhasil mengimpor $importedCount usulan Pra-PKS dari file $origName.";
+                    $success = "Berhasil mengimpor $importedCount usulan Pra-PKS dari file " . h($origName) . ".";
                 }
             }
         }

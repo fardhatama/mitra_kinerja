@@ -7,7 +7,7 @@ requireLogin();
 $pdo = getDB();
 $user = currentUser();
 $userRole = $user['role'] ?? 'pemeriksa';
-$canImport = in_array($userRole, ['admin', 'pemeriksa', 'pengampu'], true);
+$canImport = in_array($userRole, ['admin', 'pemeriksa'], true) || $userRole === 'pengampu';
 
 $success = '';
 $errors = [];
@@ -93,8 +93,27 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && in_array(($_POST['action'] 
         $stmtM->execute([$targetId]);
         $targetMitra = $stmtM->fetch();
 
+        // Bug 4: Enforce assignment check for role 'pengampu' matching mitra_edit.php
+        $isAssigned = $targetMitra && ((!empty($targetMitra['pemeriksa_id']) && (int)$targetMitra['pemeriksa_id'] === (int)$user['id'])
+            || (!empty($targetMitra['pic_internal']) && stripos($targetMitra['pic_internal'], $user['nama'] ?? $user['username'] ?? '') !== false));
+        $canImportThisMitra = in_array($userRole, ['admin', 'pemeriksa'], true)
+            || ($userRole === 'pengampu' && ($isAssigned || empty($targetMitra['pemeriksa_id'])));
+
+        // Bug 3: Prevent non-admin users from importing over finalized/validated scorecards
+        $targetValStatus = 'BELUM';
+        if ($targetId > 0) {
+            $stmtVal = $pdo->prepare('SELECT status FROM validasi WHERE mitra_id = ?');
+            $stmtVal->execute([$targetId]);
+            $targetValStatus = $stmtVal->fetchColumn() ?: 'BELUM';
+        }
+        $isLockedFinal = $targetMitra && (in_array($targetMitra['status_scorecard'] ?? '', ['FINAL/TERVALIDASI', 'FINAL'], true) || $targetValStatus === 'DISETUJUI');
+
         if (!$targetMitra) {
             $errors[] = 'Data naskah kerja sama tujuan tidak ditemukan.';
+        } elseif (!$canImportThisMitra) {
+            $errors[] = 'Akses ditolak: Sebagai role pengampu, Anda hanya diizinkan mengimpor scorecard untuk naskah yang ditugaskan kepada Anda.';
+        } elseif ($isLockedFinal && $userRole !== 'admin') {
+            $errors[] = 'Akses ditolak: Data naskah telah berstatus FINAL/TERVALIDASI atau disetujui validator. Hanya admin yang dapat mengubah atau mengimpor ulang data ini.';
         } elseif (!isset($_FILES['excel_file']) || $_FILES['excel_file']['error'] !== UPLOAD_ERR_OK) {
             $errors[] = 'Silakan pilih file spreadsheet Excel (.xlsx) yang valid untuk di-import.';
         } else {
@@ -176,13 +195,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && in_array(($_POST['action'] 
                                     $alasanSkor = trim((string)($row[10] ?? ''));
                                     $catatanTl = trim((string)($row[11] ?? ''));
                                 } else {
-                                    $kondisiBaseline = trim((string)($row[3] ?? ''));
+                                    // Legacy SCORECARD sheet column mapping:
+                                    // col 4 is baseline reference, col 5 is status, col 6 is evidence, col 7 is score, col 8 is reason, col 9 is value
+                                    $kondisiBaseline = trim((string)($row[4] ?? ''));
                                     $rawStatus = strtoupper(trim((string)($row[5] ?? '')));
-                                    $kondisi = trim((string)($row[6] ?? ''));
+                                    $evidenceLoc = trim((string)($row[6] ?? ''));
+                                    $kondisi = $evidenceLoc;
                                     $rawSkor = trim((string)($row[7] ?? ''));
                                     $alasanSkor = trim((string)($row[8] ?? ''));
-                                    $catatanTl = trim((string)($row[9] ?? ''));
-                                    $evidenceLoc = '';
+                                    $catatanTl = '';
                                 }
 
                                 // Normalisasi status pemeriksaan
@@ -191,10 +212,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && in_array(($_POST['action'] 
                                     $statusPem = 'BELUM DAPAT DINILAI';
                                 } elseif (str_contains($rawStatus, 'DAPAT DINILAI') || (str_contains($rawStatus, 'MEMADAI') && !str_contains($rawStatus, 'BELUM'))) {
                                     $statusPem = 'BUKTI MEMADAI';
-                                } elseif (str_contains($rawStatus, 'CUKUP')) {
-                                    $statusPem = 'BUKTI CUKUP';
-                                } elseif (str_contains($rawStatus, 'BELUM MEMADAI')) {
+                                } elseif (str_contains($rawStatus, 'BELUM MEMADAI') || str_contains($rawStatus, 'BELUM CUKUP')) {
                                     $statusPem = 'BUKTI BELUM MEMADAI';
+                                } elseif (str_contains($rawStatus, 'CUKUP') && !str_contains($rawStatus, 'BELUM')) {
+                                    $statusPem = 'BUKTI CUKUP';
                                 }
 
                                 // Bug 1.1: Range-clamp imported scores max(0, min(4, $rawSkor)), and set score to null if status is not DAPAT DINILAI / BUKTI MEMADAI
@@ -366,8 +387,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && in_array(($_POST['action'] 
                                 if ($kendaliSheetName && !empty($parsedWb[$kendaliSheetName])) {
                                     $kRows = $parsedWb[$kendaliSheetName];
                                     foreach ($kRows as $kRow) {
-                                        for ($c = 1; $c <= count($kRow); $c++) {
-                                            $cellVal = trim((string)($kRow[$c] ?? ''));
+                                        foreach ($kRow as $c => $cellVal) {
+                                            $cellVal = trim((string)$cellVal);
                                             if (empty($cellVal)) continue;
                                             if (str_contains(strtolower($cellVal), 'pic/focal point') || str_contains(strtolower($cellVal), 'focal point')) {
                                                 if (empty($picFocalPoint) && !empty($kRow[$c + 1])) {
@@ -664,15 +685,25 @@ require __DIR__ . '/includes/header.php';
                 </td>
                 <?php if ($canImport): 
                     $tmpl = getScorecardTemplate($m['kode']);
+                    $isRowLocked = (in_array($m['status_scorecard'] ?? '', ['FINAL/TERVALIDASI', 'FINAL'], true) || ($s['validasi']['status'] ?? '') === 'DISETUJUI');
+                    $isRowAssigned = (!empty($m['pemeriksa_id']) && (int)$m['pemeriksa_id'] === (int)$user['id'])
+                        || (!empty($m['pic_internal']) && stripos($m['pic_internal'], $user['nama'] ?? $user['username'] ?? '') !== false);
+                    $canImportRow = ($userRole === 'admin') || (!$isRowLocked && ($userRole === 'pemeriksa' || ($userRole === 'pengampu' && ($isRowAssigned || empty($m['pemeriksa_id'])))));
                 ?>
                 <td style="text-align:center;vertical-align:middle;white-space:nowrap;">
                     <div style="display:inline-flex;gap:6px;align-items:center;justify-content:center;">
                         <a href="<?= h($tmpl['file']) ?>" download="Template_Scorecard_<?= h($m['kode']) ?>.xlsx" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 8px;display:inline-flex;align-items:center;gap:3px;color:#047857;border-color:#a7f3d0;background:#ecfdf5;font-weight:600;" title="Unduh <?= h($tmpl['label']) ?>">
                             <span>⬇️</span> Template
                         </a>
+                        <?php if ($canImportRow): ?>
                         <button type="button" class="btn btn-primary btn-sm" onclick="openImportModal(<?= (int)$m['id'] ?>, <?= htmlspecialchars(json_encode((string)$m['kode']), ENT_QUOTES, 'UTF-8') ?>, <?= htmlspecialchars(json_encode((string)$m['nama_mitra']), ENT_QUOTES, 'UTF-8') ?>)" style="font-size:11px;padding:4px 9px;display:inline-flex;align-items:center;gap:3px;font-weight:600;" title="Import Data Scorecard (.xlsx)">
                             <span>📥</span> Import
                         </button>
+                        <?php else: ?>
+                        <button type="button" class="btn btn-sm" disabled style="font-size:11px;padding:4px 9px;display:inline-flex;align-items:center;gap:3px;opacity:0.5;cursor:not-allowed;" title="<?= $isRowLocked ? 'Terkunci (FINAL/TERVALIDASI)' : 'Tidak memiliki akses import' ?>">
+                            <span>🔒</span> Terkunci
+                        </button>
+                        <?php endif; ?>
                     </div>
                 </td>
                 <?php endif; ?>
@@ -756,9 +787,15 @@ require __DIR__ . '/includes/header.php';
                     <div id="modalMitraLabel" style="font-size:13.5px;font-weight:700;color:#1e3a8a;margin-bottom:8px;">-</div>
                     <label for="modalMitraSelect" style="display:block;font-size:11px;color:#475569;margin-bottom:4px;">Ganti target naskah jika diperlukan:</label>
                     <select name="mitra_id" id="modalMitraSelect" onchange="onMitraSelectChange(this)" style="width:100%;padding:7px 10px;font-size:12.5px;border:1px solid #cbd5e1;border-radius:6px;background:#ffffff;">
-                        <?php foreach ($all as $item): $im = $item['mitra']; ?>
-                            <option value="<?= (int)$im['id'] ?>" data-kode="<?= h($im['kode']) ?>" data-nama="<?= h($im['nama_mitra']) ?>">
-                                [<?= h($im['kode']) ?>] <?= h($im['nama_mitra']) ?>
+                        <?php foreach ($all as $item): 
+                            $im = $item['mitra'];
+                            $isItemLocked = (in_array($im['status_scorecard'] ?? '', ['FINAL/TERVALIDASI', 'FINAL'], true) || ($item['validasi']['status'] ?? '') === 'DISETUJUI');
+                            $isItemAssigned = (!empty($im['pemeriksa_id']) && (int)$im['pemeriksa_id'] === (int)$user['id'])
+                                || (!empty($im['pic_internal']) && stripos($im['pic_internal'], $user['nama'] ?? $user['username'] ?? '') !== false);
+                            $isOptionDisabled = ($userRole !== 'admin' && $isItemLocked) || ($userRole === 'pengampu' && !$isItemAssigned && !empty($im['pemeriksa_id']));
+                        ?>
+                            <option value="<?= (int)$im['id'] ?>" data-kode="<?= h($im['kode']) ?>" data-nama="<?= h($im['nama_mitra']) ?>" <?= $isOptionDisabled ? 'disabled' : '' ?>>
+                                [<?= h($im['kode']) ?>] <?= h($im['nama_mitra']) ?><?= $isItemLocked ? ' (Terkunci)' : '' ?>
                             </option>
                         <?php endforeach; ?>
                     </select>

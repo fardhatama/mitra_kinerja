@@ -17,7 +17,7 @@ function getAllMitraSummary(PDO $pdo): array {
 }
 
 /** Ambil ringkasan lengkap SATU naskah (dipakai juga oleh mitra_list & dashboard). */
-function getMitraSummary(PDO $pdo, array $mitra): array {
+function getMitraSummary(PDO $pdo, array $mitra, bool $forceRecalculate = false): array {
     $stmt = $pdo->prepare('SELECT * FROM indikator_skor WHERE mitra_id = ? ORDER BY kode_indikator');
     $stmt->execute([$mitra['id']]);
     $indikatorRows = $stmt->fetchAll();
@@ -113,7 +113,11 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
     $hasilUji = hasilUjiIntervensi($pemicuRows, $warning['status']);
     $cekUsulan = cekUsulanIntervensi($pemicuRows, $hasilUji, $usulan['upaya_dilakukan'], $usulan['keputusan_diminta']);
     $calculatedStatus = hitungStatusScorecard($ringkasan['skor_lengkap'], $ringkasan['cek_lengkap_ok'], $validasi['status'], $ringkasan['bukti_kurang_n'], $ringkasan['bdn_n'], $ringkasan['dapat_dinilai_n']);
-    if (!empty($mitra['status_scorecard']) && in_array($mitra['status_scorecard'], ['MASA IMPLEMENTASI AWAL', 'FINAL', 'FINAL/TERVALIDASI', 'SIAP DIVALIDASI'], true)) {
+    if ($calculatedStatus === 'BUKTI BELUM MEMADAI') {
+        $statusScorecard = 'BUKTI BELUM MEMADAI';
+    } elseif ($validasi['status'] === 'PERLU PERBAIKAN') {
+        $statusScorecard = 'PERLU PERBAIKAN';
+    } elseif (!empty($mitra['status_scorecard']) && in_array($mitra['status_scorecard'], ['MASA IMPLEMENTASI AWAL', 'FINAL', 'FINAL/TERVALIDASI', 'SIAP DIVALIDASI'], true)) {
         if ($validasi['status'] === 'DISETUJUI') {
             $statusScorecard = 'FINAL/TERVALIDASI';
         } else {
@@ -123,9 +127,12 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
         $statusScorecard = $calculatedStatus;
     }
 
-    $posisiPortofolio = (!empty($mitra['posisi_portofolio']) && $mitra['posisi_portofolio'] !== 'BELUM DAPAT DITENTUKAN') 
-        ? $mitra['posisi_portofolio'] 
-        : hitungPosisiPortofolio($indikatorRows);
+    $calculatedPosisi = hitungPosisiPortofolio($indikatorRows);
+    if ($forceRecalculate || !isset($mitra['posisi_portofolio']) || $mitra['posisi_portofolio'] === '') {
+        $posisiPortofolio = $calculatedPosisi;
+    } else {
+        $posisiPortofolio = $mitra['posisi_portofolio'];
+    }
 
     $sisaHari = null;
     foreach ($warningRows as $wr) {
@@ -135,9 +142,12 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
         }
     }
 
-    $rekomendasi = (!empty($mitra['rekomendasi']))
-        ? $mitra['rekomendasi']
-        : hitungRekomendasi($ringkasan['nilai_berjalan'], $warning['status'], $posisiPortofolio, $sisaHari);
+    $calculatedRekomendasi = hitungRekomendasi($ringkasan['nilai_berjalan'], $warning['status'], $posisiPortofolio, $sisaHari);
+    if ($forceRecalculate || !isset($mitra['rekomendasi']) || $mitra['rekomendasi'] === '') {
+        $rekomendasi = $calculatedRekomendasi;
+    } else {
+        $rekomendasi = $mitra['rekomendasi'];
+    }
 
     $evaluasiPerTahun = (int)($mitra['evaluasi_per_tahun'] ?? 4);
     $monev = hitungKebutuhanScorecard($mitra['tanggal_mulai'] ?? null, $mitra['tanggal_berakhir'] ?? null, $evaluasiPerTahun);
@@ -157,7 +167,7 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
                 $tgtStr = $rm['tanggal_target_evaluasi'];
                 $diff = (int)round((strtotime($tgtStr) - $todayTs) / 86400);
                 $isCompleted = in_array(strtolower(trim($rm['status_siklus'] ?? '')), ['selesai', 'selesai evaluasi'], true);
-                $isDueSoon = (!$isCompleted && $diff >= 0 && $diff <= 30);
+                $isDueSoon = (!$isCompleted && $diff <= 30);
                 $isPast = ($diff < 0);
                 $msList[] = [
                     'siklus_ke'     => (int)$rm['siklus_ke'],
@@ -168,11 +178,11 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
                     'is_past'       => $isPast,
                     'status_siklus' => $rm['status_siklus']
                 ];
-                // Milestone yang sudah selesai tidak boleh mengunci nearestTarget & membatalkan warning evaluasi mendatang
-                if (!$isCompleted && $nearestTarget === null && $diff >= 0) {
+                // Milestone belum selesai pertama (termasuk overdue dan mendekati tenggat <= 30 hari)
+                if (!$isCompleted && $nearestTarget === null) {
                     $nearestTarget = $tgtStr;
                     $nearestDiff = $diff;
-                    if ($isDueSoon) {
+                    if ($diff <= 30) {
                         $warning1Bulan = true;
                     }
                 }
@@ -184,6 +194,9 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
                     if (!$isCompleted) {
                         $nearestTarget = $ms['target_tgl'];
                         $nearestDiff = $ms['sisa_hari'];
+                        if ($ms['sisa_hari'] <= 30) {
+                            $warning1Bulan = true;
+                        }
                         break;
                     }
                 }
@@ -230,13 +243,13 @@ function getMitraSummary(PDO $pdo, array $mitra): array {
 }
 
 /** Sinkronkan status_scorecard yang tersimpan di tabel mitra_kinerja (dipanggil setiap kali data disimpan). */
-function syncStatusScorecard(PDO $pdo, int $mitraId): void {
+function syncStatusScorecard(PDO $pdo, int $mitraId, bool $forceRecalculate = false): void {
     $stmt = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
     $stmt->execute([$mitraId]);
     $mitra = $stmt->fetch();
     if (!$mitra) return;
 
-    $summary = getMitraSummary($pdo, $mitra);
+    $summary = getMitraSummary($pdo, $mitra, $forceRecalculate);
     $stmt = $pdo->prepare('UPDATE mitra_kinerja SET status_scorecard = ?, posisi_portofolio = ?, rekomendasi = ? WHERE id = ?');
     $stmt->execute([$summary['status_scorecard'], $summary['posisi_portofolio'], $summary['rekomendasi'], $mitraId]);
 }
@@ -262,7 +275,7 @@ function getTindakLanjut(PDO $pdo, ?int $mitraId = null, int $limit = 0, bool $e
     if (!empty($where)) {
         $sql .= ' WHERE ' . implode(' AND ', $where);
     }
-    $sql .= " ORDER BY CASE WHEN tl.status = 'Selesai' THEN 1 ELSE 0 END ASC, tl.tenggat ASC";
+    $sql .= " ORDER BY CASE WHEN tl.status = 'Selesai' THEN 1 ELSE 0 END ASC, CASE WHEN tl.tenggat IS NULL OR tl.tenggat = '0000-00-00' THEN 1 ELSE 0 END ASC, tl.tenggat ASC, tl.id DESC";
     if ($limit > 0) {
         $sql .= ' LIMIT ' . (int)$limit;
     }
@@ -305,9 +318,13 @@ function getDashboardStats(array $all): array {
 
         // Mendukung posisi portofolio deskriptif / hasil audit V3
         $pos = strtoupper(trim((string)($s['posisi_portofolio'] ?? '')));
-        $isBerdampak = str_contains($pos, 'BERDAMPAK') || (str_contains($pos, 'DAMPAK') && !str_contains($pos, 'BELUM'));
-        $isOutputOutcome = $isBerdampak || str_contains($pos, 'OUTCOME') || str_contains($pos, 'OUTPUT');
-        $isAktif = $isOutputOutcome || str_contains($pos, 'AKTIF') || (str_contains($pos, 'IMPLEMENTASI') && !str_contains($pos, 'BELUM') && !str_contains($pos, 'MASA IMPLEMENTASI AWAL'));
+        $isBerdampak = str_contains($pos, 'BERDAMPAK') || (str_contains($pos, 'DAMPAK') && !str_contains($pos, 'BELUM') && !str_contains($pos, 'TIDAK'));
+        $isOutputOutcome = $isBerdampak 
+            || (str_contains($pos, 'OUTCOME') && !str_contains($pos, 'BELUM') && !str_contains($pos, 'TIDAK'))
+            || (str_contains($pos, 'OUTPUT') && !str_contains($pos, 'BELUM') && !str_contains($pos, 'TIDAK'));
+        $isAktif = $isOutputOutcome 
+            || (str_contains($pos, 'AKTIF') && !str_contains($pos, 'TIDAK') && !str_contains($pos, 'BELUM')) 
+            || (str_contains($pos, 'IMPLEMENTASI') && !str_contains($pos, 'BELUM') && !str_contains($pos, 'TIDAK') && !str_contains($pos, 'MASA IMPLEMENTASI AWAL'));
 
         if ($isAktif) $aktifCount++;
         if ($isOutputOutcome) $outputOutcomeCount++;
@@ -373,9 +390,10 @@ function getOperationalStats(PDO $pdo, array $all): array {
     $belumLengkapValidasi = 0;
     foreach ($all as $s) {
         $vStatus = $s['validasi']['status'] ?? '';
-        if ($vStatus === 'DISETUJUI') {
+        $scStatus = $s['status_scorecard'] ?? '';
+        if ($vStatus === 'DISETUJUI' || $scStatus === 'FINAL/TERVALIDASI' || $scStatus === 'FINAL') {
             $disetujuiValidasi++;
-        } elseif ($vStatus !== 'PERLU PERBAIKAN' && ($s['kelengkapan'] ?? 0) >= 100) {
+        } elseif ($scStatus === 'SIAP DIVALIDASI') {
             $siapValidasi++;
         } else {
             $belumLengkapValidasi++;

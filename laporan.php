@@ -37,7 +37,7 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <!-- Ringkasan Statistik -->
-<div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);">
+<div class="kpi-row kpi-row-4">
     <div class="kpi-card"><div class="kpi-icon kpi-icon-blue">📄</div><div><div class="kpi-number"><?= $stats['total'] ?></div><div class="kpi-label">Total Naskah</div></div></div>
     <div class="kpi-card"><div class="kpi-icon kpi-icon-green">✅</div><div><div class="kpi-number"><?= $stats['efektif'] ?></div><div class="kpi-label">Efektif</div></div></div>
     <div class="kpi-card"><div class="kpi-icon kpi-icon-yellow">⚠️</div><div><div class="kpi-number"><?= $stats['perluPerhatian'] ?></div><div class="kpi-label">Perlu Perhatian</div></div></div>
@@ -53,7 +53,9 @@ require __DIR__ . '/includes/header.php';
             <tr><th>Kode</th><th>Portofolio</th><th>Mitra</th><th>Bidang</th><th>Berakhir</th><th>Nilai</th><th>Kategori</th><th>Posisi</th><th>Rekomendasi</th><th>Warning</th><th>Status</th></tr>
         </thead>
         <tbody>
-        <?php foreach ($all as $s): $m = $s['mitra']; ?>
+        <?php if (empty($all)): ?>
+            <tr><td colspan="11" class="muted" style="text-align:center;padding:20px;">Belum ada naskah kerja sama</td></tr>
+        <?php else: foreach ($all as $s): $m = $s['mitra']; ?>
             <tr>
                 <td><strong><?= h($m['kode']) ?></strong></td>
                 <td><?= h($m['portofolio']) ?></td>
@@ -62,7 +64,7 @@ require __DIR__ . '/includes/header.php';
                 <td><?= formatTanggal($m['tanggal_berakhir']) ?></td>
                 <td><?= $s['nilai_final'] !== null ? number_format($s['nilai_final'], 2) : '-' ?></td>
                 <td><span class="badge badge-<?= warnaKategori($s['kategori']) ?>"><?= h($s['kategori']) ?></span></td>
-                <td><span class="badge badge-secondary" style="font-size:11px;"><?= h($s['posisi_portofolio']) ?></span></td>
+                <td><span class="badge badge-secondary" style="font-size:11px;white-space:normal;max-width:180px;display:inline-block;"><?= h($s['posisi_portofolio']) ?></span></td>
                 <td>
                     <?php $rekHead = explode("\n", trim($s['rekomendasi'] ?? '-'))[0] ?: '-'; ?>
                     <span class="badge badge-warning" style="font-size:10.5px;max-width:160px;white-space:normal;display:inline-block;line-height:1.2;text-align:left;" title="<?= h($s['rekomendasi']) ?>">
@@ -72,7 +74,7 @@ require __DIR__ . '/includes/header.php';
                 <td><span class="badge badge-<?= warnaWarning($s['warning']['status']) ?>"><?= h($s['warning']['label']) ?></span></td>
                 <td><?= h($s['status_scorecard']) ?></td>
             </tr>
-        <?php endforeach; ?>
+        <?php endforeach; endif; ?>
         </tbody>
     </table>
     </div>

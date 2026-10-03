@@ -115,8 +115,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                         // Baca metadata pemeriksa & cut-off jika ada
                         $pemeriksaVal = trim((string)($baseRows[5][8] ?? $baseRows[5][7] ?? $baseRows[5][3] ?? ''));
                         $cutoffVal = trim((string)($baseRows[8][8] ?? $baseRows[8][7] ?? $baseRows[8][2] ?? ''));
-                        if (!empty($cutoffVal) && preg_match('/(\d{4}-\d{2}-\d{2})/', $cutoffVal, $mCut)) {
-                            $cutoffDate = $mCut[1];
+                        if (!empty($cutoffVal) && preg_match('/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/', $cutoffVal, $mCut)) {
+                            $cutoffDate = sprintf('%04d-%02d-%02d', (int)$mCut[1], (int)$mCut[2], (int)$mCut[3]);
+                        } elseif (!empty($cutoffVal) && preg_match('/(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/', $cutoffVal, $mCut)) {
+                            $cutoffDate = sprintf('%04d-%02d-%02d', (int)$mCut[3], (int)$mCut[2], (int)$mCut[1]);
                         } elseif (is_numeric($cutoffVal) && (int)$cutoffVal > 30000) {
                             $cutoffDate = gmdate('Y-m-d', ((int)$cutoffVal - 25569) * 86400);
                         } else {

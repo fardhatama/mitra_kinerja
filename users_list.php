@@ -9,46 +9,69 @@ $success = '';
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $csrfToken = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
     if (!verifyCsrfToken($csrfToken)) {
-        $errors[] = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
-    } else {
-        $action = isset($_POST['action']) && is_string($_POST['action']) ? $_POST['action'] : '';
-        if ($action === 'create') {
-            $rawNama = isset($_POST['nama']) && is_string($_POST['nama']) ? $_POST['nama'] : '';
-            $rawUsername = isset($_POST['username']) && is_string($_POST['username']) ? $_POST['username'] : '';
-            $rawPassword = isset($_POST['password']) && is_string($_POST['password']) ? $_POST['password'] : '';
-            $rawRole = isset($_POST['role']) && is_string($_POST['role']) ? $_POST['role'] : '';
+        $_SESSION['flash_error'] = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
+        header('Location: users_list.php');
+        exit;
+    }
 
-            $nama = trim($rawNama);
-            $username = trim($rawUsername);
-            $password = $rawPassword;
-            $role = trim($rawRole);
+    $action = isset($_POST['action']) && is_string($_POST['action']) ? $_POST['action'] : '';
+    $currUser = currentUser();
 
-            if ($nama === '' || $username === '' || strlen($password) < 6 || !in_array($role, ['admin','pemeriksa','validator','pimpinan','pengampu','pic'], true)) {
-                $errors[] = 'Lengkapi semua kolom. Password minimal 6 karakter.';
-            } else {
-                try {
-                    $stmt = $pdo->prepare('INSERT INTO users (nama, username, password_hash, role) VALUES (?,?,?,?)');
-                    $stmt->execute([$nama, $username, password_hash($password, PASSWORD_BCRYPT), $role]);
-                    $success = 'Pengguna baru berhasil dibuat.';
-                } catch (PDOException $e) {
-                    $errors[] = str_contains($e->getMessage(), 'Duplicate') ? 'Username sudah dipakai.' : 'Gagal membuat pengguna.';
-                }
-            }
-        } elseif ($action === 'toggle') {
-            $rawUserId = $_POST['user_id'] ?? 0;
-            $uid = is_numeric($rawUserId) ? (int)$rawUserId : 0;
-            $currUser = currentUser();
-            if ($uid <= 0) {
-                $errors[] = 'ID pengguna tidak valid.';
-            } elseif ($uid === (int)($currUser['id'] ?? 0)) {
-                $errors[] = 'Anda tidak dapat menonaktifkan akun Anda sendiri saat sedang login.';
-            } else {
-                $stmt = $pdo->prepare('UPDATE users SET aktif = 1 - aktif WHERE id = ?');
-                $stmt->execute([$uid]);
-                $success = 'Status pengguna berhasil diperbarui.';
+    if ($action === 'create') {
+        $rawNama = isset($_POST['nama']) && is_string($_POST['nama']) ? $_POST['nama'] : '';
+        $rawUsername = isset($_POST['username']) && is_string($_POST['username']) ? $_POST['username'] : '';
+        $rawPassword = isset($_POST['password']) && is_string($_POST['password']) ? $_POST['password'] : '';
+        $rawRole = isset($_POST['role']) && is_string($_POST['role']) ? $_POST['role'] : '';
+
+        $nama = trim($rawNama);
+        $username = trim($rawUsername);
+        $password = $rawPassword;
+        $role = trim($rawRole);
+
+        if ($nama === '' || $username === '' || strlen($password) < 6 || !in_array($role, ['admin','pemeriksa','validator','pimpinan','pengampu','pic'], true)) {
+            $_SESSION['flash_error'] = 'Lengkapi semua kolom. Password minimal 6 karakter.';
+        } else {
+            try {
+                $stmt = $pdo->prepare('INSERT INTO users (nama, username, password_hash, role) VALUES (?,?,?,?)');
+                $stmt->execute([$nama, $username, password_hash($password, PASSWORD_BCRYPT), $role]);
+                $newUserId = (int)$pdo->lastInsertId();
+                logAudit(null, (int)($currUser['id'] ?? null), 'CREATE_USER', "Menambahkan pengguna baru: $username ($role, ID: $newUserId)");
+                $_SESSION['flash_success'] = 'Pengguna baru berhasil dibuat.';
+            } catch (PDOException $e) {
+                $_SESSION['flash_error'] = str_contains($e->getMessage(), 'Duplicate') ? 'Username sudah dipakai.' : 'Gagal membuat pengguna.';
             }
         }
+        header('Location: users_list.php');
+        exit;
+    } elseif ($action === 'toggle') {
+        $rawUserId = $_POST['user_id'] ?? 0;
+        $uid = is_numeric($rawUserId) ? (int)$rawUserId : 0;
+        if ($uid <= 0) {
+            $_SESSION['flash_error'] = 'ID pengguna tidak valid.';
+        } elseif ($uid === (int)($currUser['id'] ?? 0)) {
+            $_SESSION['flash_error'] = 'Anda tidak dapat menonaktifkan akun Anda sendiri saat sedang login.';
+        } else {
+            $stmt = $pdo->prepare('UPDATE users SET aktif = 1 - aktif WHERE id = ?');
+            $stmt->execute([$uid]);
+            if ($stmt->rowCount() > 0) {
+                logAudit(null, (int)($currUser['id'] ?? null), 'TOGGLE_USER', "Mengubah status aktif user ID: $uid");
+                $_SESSION['flash_success'] = 'Status pengguna berhasil diperbarui.';
+            } else {
+                $_SESSION['flash_error'] = 'Pengguna tidak ditemukan atau tidak ada perubahan status.';
+            }
+        }
+        header('Location: users_list.php');
+        exit;
     }
+}
+
+if (!empty($_SESSION['flash_success'])) {
+    $success = $_SESSION['flash_success'];
+    unset($_SESSION['flash_success']);
+}
+if (!empty($_SESSION['flash_error'])) {
+    $errors[] = $_SESSION['flash_error'];
+    unset($_SESSION['flash_error']);
 }
 
 $users = $pdo->query('SELECT * FROM users ORDER BY role, nama')->fetchAll();

@@ -63,7 +63,8 @@ foreach ($all as $s) {
                 $msLabel = 'SC-1';
                 if (!empty($ds['monev']['milestones'])) {
                     foreach ($ds['monev']['milestones'] as $ms) {
-                        if (!empty($ms['is_due_soon'])) {
+                        $isCompleted = in_array(strtolower(trim($ms['status_siklus'] ?? '')), ['selesai', 'selesai evaluasi'], true);
+                        if (!$isCompleted && ($ms['target_tgl'] === ($ds['monev']['target_evaluasi_terdekat'] ?? '') || !empty($ms['is_due_soon']))) {
                             $msLabel = $ms['nama'];
                             break;
                         }
@@ -212,6 +213,9 @@ foreach ($all as $s) {
             <thead><tr><th>No</th><th>Nama Naskah</th><th>Mitra</th><th>Berlaku s.d.</th><th>Nilai</th><th>Status</th><th>Aksi</th></tr></thead>
             <tbody>
             <?php $pilot5 = array_slice($pilotOnly, 0, 5);
+            if (empty($pilot5)): ?>
+                <tr><td colspan="7" class="muted" style="text-align:center;padding:20px;">Belum ada naskah pilot</td></tr>
+            <?php else:
             $no = 0; foreach ($pilot5 as $s): $m = $s['mitra']; $no++; $ef = statusEfektivitas($s['kategori']); ?>
                 <tr>
                     <td><?= $no ?></td>
@@ -222,7 +226,7 @@ foreach ($all as $s) {
                     <td><span class="badge badge-<?= warnaEfektivitas($ef) ?>"><?= $ef ?></span></td>
                     <td><a href="mitra_edit.php?id=<?= $m['id'] ?>" class="btn btn-outline btn-sm">Detail</a></td>
                 </tr>
-            <?php endforeach; ?>
+            <?php endforeach; endif; ?>
             </tbody>
         </table>
         </div>
@@ -254,7 +258,7 @@ foreach ($all as $s) {
 </div>
 
 <!-- Operational Status & Pipeline Summary -->
-<div class="dash-tables" style="grid-template-columns: 1fr 1fr; margin-bottom: 24px;">
+<div class="dash-tables dash-tables-2col" style="margin-bottom: 24px;">
     <!-- Card 1: Pipeline Pra-Kerja Sama & Validasi -->
     <div class="dash-table-card">
         <div class="dtc-head">

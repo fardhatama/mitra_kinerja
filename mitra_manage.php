@@ -59,30 +59,34 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
     }
 }
 
-/* ── TAMBAH RENCANA KERJA DARI EDIT FORM ─────────────────── */
-if ($id > 0 && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'add_rencana_kerja') {
-    $judulRk = trim($_POST['judul_rencana'] ?? '');
-    $ruangRk = trim($_POST['ruang_lingkup'] ?? '');
-    $mulaiRk = $_POST['tanggal_mulai'] ?: date('Y-01-01');
-    $selesaiRk = ($_POST['tanggal_selesai'] ?? '') ?: date('Y-12-31');
-    $statusRk = $_POST['status'] ?? 'Disetujui';
-
-    if ($judulRk === '') {
-        $errors[] = 'Judul Rencana Kerja wajib diisi.';
-    } else {
-        $stmtR = $pdo->prepare('INSERT INTO rencana_kerja (mitra_id, judul_rencana, ruang_lingkup, tanggal_mulai, tanggal_selesai, status) VALUES (?, ?, ?, ?, ?, ?)');
-        $stmtR->execute([$id, $judulRk, $ruangRk, $mulaiRk, $selesaiRk, $statusRk]);
-        logAudit($id, $user['id'], 'ADD_RENCANA_KERJA', 'Tambah Rencana Kerja: ' . $judulRk);
-        $success = 'Rencana Kerja tahunan berhasil ditambahkan.';
-    }
-}
-
 /* ── EDIT (ada ?id=) ──────────────────────────────── */
 if ($id > 0) {
     $stmt = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
     $stmt->execute([$id]);
     $mitra = $stmt->fetch();
     if (!$mitra) { http_response_code(404); die('Naskah tidak ditemukan.'); }
+
+    /* ── TAMBAH RENCANA KERJA DARI EDIT FORM ─────────────────── */
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'add_rencana_kerja') {
+        $judulRk = trim($_POST['judul_rencana'] ?? '');
+        $ruangRk = trim($_POST['ruang_lingkup'] ?? '');
+        $mulaiRk = $_POST['tanggal_mulai'] ?: date('Y-01-01');
+        $selesaiRk = ($_POST['tanggal_selesai'] ?? '') ?: date('Y-12-31');
+        $statusRk = $_POST['status'] ?? 'Disetujui';
+
+        if ($judulRk === '') {
+            $errors[] = 'Judul Rencana Kerja wajib diisi.';
+        } else {
+            try {
+                $stmtR = $pdo->prepare('INSERT INTO rencana_kerja (mitra_id, judul_rencana, ruang_lingkup, tanggal_mulai, tanggal_selesai, status) VALUES (?, ?, ?, ?, ?, ?)');
+                $stmtR->execute([$id, $judulRk, $ruangRk, $mulaiRk, $selesaiRk, $statusRk]);
+                logAudit($id, $user['id'], 'ADD_RENCANA_KERJA', 'Tambah Rencana Kerja: ' . $judulRk);
+                $success = 'Rencana Kerja tahunan berhasil ditambahkan.';
+            } catch (Throwable $e) {
+                $errors[] = 'Gagal menambahkan rencana kerja: ' . $e->getMessage();
+            }
+        }
+    }
 
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
         $namaMitra  = trim($_POST['nama_mitra'] ?? '');
@@ -103,6 +107,25 @@ if ($id > 0) {
         $picInternal = trim($_POST['pic_internal'] ?? ($mitra['pic_internal'] ?? ''));
         $picMitra    = trim($_POST['pic_mitra'] ?? ($mitra['pic_mitra'] ?? ''));
         $evaluasiPerTahun = !empty($_POST['evaluasi_per_tahun']) ? (int)$_POST['evaluasi_per_tahun'] : 4;
+
+        // Validasi enum values
+        $validPortofolio = ['Pilot Utama', 'Cadangan'];
+        $validJenis = ['PKS', 'MoU'];
+        $validBidang = ['AHU', 'KI', 'P3H', 'PPL', 'Keuangan', 'Humas', 'SDM'];
+        $validStatusTanggal = ['TERVERIFIKASI', 'BELUM TERVERIFIKASI'];
+
+        if (!in_array($portofolio, $validPortofolio, true)) {
+            $portofolio = $mitra['portofolio'] ?? 'Pilot Utama';
+        }
+        if (!in_array($jenis, $validJenis, true)) {
+            $jenis = $mitra['jenis'] ?? 'PKS';
+        }
+        if (!in_array($bidang, $validBidang, true)) {
+            $bidang = $mitra['bidang'] ?? 'AHU';
+        }
+        if (!in_array($statusTgl, $validStatusTanggal, true)) {
+            $statusTgl = $mitra['status_tanggal'] ?? 'BELUM TERVERIFIKASI';
+        }
 
         // Upload File Naskah (Khusus PDF Scanned)
         $fileNaskah = $mitra['file_naskah'] ?? null;
@@ -145,19 +168,31 @@ if ($id > 0) {
         if ($namaMitra === '') {
             $errors[] = 'Nama Mitra wajib diisi.';
         } elseif (empty($errors)) {
-            $stmtU = $pdo->prepare('UPDATE mitra_kinerja SET nama_mitra=?, judul=?, portofolio=?, bidang=?, jenis=?, pks_induk_id=?, tanggal_mulai=?, tanggal_berakhir=?, status_tanggal=?, cutoff_date=?, sumber_baseline=?, pic_internal=?, pic_mitra=?, evaluasi_per_tahun=?, file_naskah=?, foto_kerjasama=? WHERE id=?');
-            $stmtU->execute([$namaMitra, $judul, $portofolio, $bidang, $jenis, $pksIndukId, $mulai, $berakhir, $statusTgl, $cutoff, $sumber, $picInternal, $picMitra, $evaluasiPerTahun, $fileNaskah, $fotoKerjasama, $id]);
-            // Bug 5.6: Hanya perbarui status baseline elemen 1 ke TERVERIFIKASI jika berkas baru benar-benar diunggah
-            if ($newFileUploaded && $fileNaskah) {
-                $stmtB = $pdo->prepare("UPDATE baseline_elemen SET link_sumber_bukti = ?, status = 'TERVERIFIKASI' WHERE mitra_id = ? AND nomor_elemen = 1");
-                $stmtB->execute([$fileNaskah, $id]);
+            try {
+                $pdo->beginTransaction();
+
+                $stmtU = $pdo->prepare('UPDATE mitra_kinerja SET nama_mitra=?, judul=?, portofolio=?, bidang=?, jenis=?, pks_induk_id=?, tanggal_mulai=?, tanggal_berakhir=?, status_tanggal=?, cutoff_date=?, sumber_baseline=?, pic_internal=?, pic_mitra=?, evaluasi_per_tahun=?, file_naskah=?, foto_kerjasama=? WHERE id=?');
+                $stmtU->execute([$namaMitra, $judul, $portofolio, $bidang, $jenis, $pksIndukId, $mulai, $berakhir, $statusTgl, $cutoff, $sumber, $picInternal, $picMitra, $evaluasiPerTahun, $fileNaskah, $fotoKerjasama, $id]);
+                // Bug 5.6: Hanya perbarui status baseline elemen 1 ke TERVERIFIKASI jika berkas baru benar-benar diunggah
+                if ($newFileUploaded && $fileNaskah) {
+                    $stmtB = $pdo->prepare("UPDATE baseline_elemen SET link_sumber_bukti = ?, status = 'TERVERIFIKASI' WHERE mitra_id = ? AND nomor_elemen = 1");
+                    $stmtB->execute([$fileNaskah, $id]);
+                }
+                syncStatusScorecard($pdo, $id);
+                logAudit($id, $user['id'], 'UPDATE_MITRA', 'Data naskah ' . $mitra['kode'] . ' diperbarui');
+
+                $pdo->commit();
+                $success = 'Data naskah berhasil diperbarui.';
+
+                $stmt = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
+                $stmt->execute([$id]);
+                $mitra = $stmt->fetch();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                $errors[] = 'Gagal memperbarui data naskah: ' . $e->getMessage();
             }
-            syncStatusScorecard($pdo, $id);
-            logAudit($id, $user['id'], 'UPDATE_MITRA', 'Data naskah ' . $mitra['kode'] . ' diperbarui');
-            $success = 'Data naskah berhasil diperbarui.';
-            $stmt = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
-            $stmt->execute([$id]);
-            $mitra = $stmt->fetch();
         }
     }
 

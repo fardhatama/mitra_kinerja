@@ -58,10 +58,19 @@ function generateInsightPayload(PDO $pdo, array $all, array $stats): array {
     $stmt->execute([$now]);
     $terlambat = $stmt->fetchColumn();
     
-    // Hitung early warning aktif (E2 & E3)
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM early_warning WHERE status IN ('E2', 'E3')");
-    $stmt->execute();
-    $warningAktif = $stmt->fetchColumn();
+    // Hitung early warning aktif (E2 & E3) dari $all (termasuk kalkulasi dinamis masa berlaku)
+    $warningAktif = 0;
+    foreach ($all as $s) {
+        if (!empty($s['warning_rows']) && is_array($s['warning_rows'])) {
+            foreach ($s['warning_rows'] as $w) {
+                if (in_array($w['status'] ?? '', ['E2', 'E3'], true)) {
+                    $warningAktif++;
+                }
+            }
+        } elseif (isset($s['warning']['status']) && in_array($s['warning']['status'], ['E2', 'E3'], true)) {
+            $warningAktif++;
+        }
+    }
     
     // Breakdown status scorecard — supaya AI tahu KENAPA naskah belum efektif
     $statusBreakdown = [];

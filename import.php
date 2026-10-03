@@ -303,7 +303,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                             $statusPem = 'BUKTI CUKUP';
                         }
 
-                        $skor = is_numeric($rawSkor) ? (int)$rawSkor : null;
+                        $skor = is_numeric($rawSkor) ? max(0, min(4, (int)$rawSkor)) : null;
                         $nilai = $skor !== null ? round(($skor / 4.0) * $bobot, 2) : null;
 
                         // Cek apakah indikator sudah ada
@@ -360,7 +360,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                     // Sinkronkan total skor dan status scorecard
                     syncStatusScorecard($pdo, $targetId);
                     // BUG-IM-04: Ensure syncStatusScorecard preserves 'SIAP DIVALIDASI' status
-                    if (!empty($rawScStatus) && (str_contains(strtoupper($rawScStatus), 'SIAP') || strtoupper($rawScStatus) === 'SIAP DIVALIDASI')) {
+                    if (!empty($rawScStatus) && !str_contains(strtoupper($rawScStatus), 'BELUM') && (str_contains(strtoupper($rawScStatus), 'SIAP') || strtoupper($rawScStatus) === 'SIAP DIVALIDASI')) {
                         $pdo->prepare('UPDATE mitra_kinerja SET status_scorecard = ? WHERE id = ?')->execute(['SIAP DIVALIDASI', $targetId]);
                     } elseif (!empty($rawScStatus)) {
                         $pdo->prepare('UPDATE mitra_kinerja SET status_scorecard = ? WHERE id = ?')->execute([$rawScStatus, $targetId]);
@@ -398,18 +398,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
 
                 if ($importType === 'baseline') {
                     logAudit($targetId, $user['id'], 'IMPORT_BASELINE', "Import Baseline untuk {$targetMitra['kode']}: {$updatedBaseline} elemen diperbarui.");
-                    $success = "Data Baseline FIX (12 Elemen) untuk <strong>{$targetMitra['kode']} - {$targetMitra['nama_mitra']}</strong> berhasil di-import!<br>"
+                    $success = "Data Baseline FIX (12 Elemen) untuk <strong>" . h($targetMitra['kode']) . " - " . h($targetMitra['nama_mitra']) . "</strong> berhasil di-import!<br>"
                              . "&bull; {$updatedBaseline} elemen Baseline FIX diperbarui dan diverifikasi.<br>"
                              . "&bull; Status Baseline naskah telah dikunci (TERVERIFIKASI / DIKUNCI).<br>"
                              . ($fileNaskahExtracted ? "&bull; Tautan naskah resmi P2MA terhubung secara otomatis.<br>" : "");
                 } elseif ($importType === 'scorecard') {
                     logAudit($targetId, $user['id'], 'IMPORT_SCORECARD', "Import Scorecard untuk {$targetMitra['kode']}: {$updatedScorecard} indikator diperbarui.");
-                    $success = "Data Scorecard untuk <strong>{$targetMitra['kode']} - {$targetMitra['nama_mitra']}</strong> berhasil di-import!<br>"
+                    $success = "Data Scorecard untuk <strong>" . h($targetMitra['kode']) . " - " . h($targetMitra['nama_mitra']) . "</strong> berhasil di-import!<br>"
                              . "&bull; {$updatedScorecard} indikator Scorecard disinkronkan ke sistem.<br>"
                              . (!empty($rawScStatus) ? "&bull; Status Scorecard: <strong>" . h($rawScStatus) . "</strong>.<br>" : "");
                 } else {
                     logAudit($targetId, $user['id'], 'IMPORT_EXCEL', "Import workbook Excel untuk {$targetMitra['kode']}: {$updatedBaseline} elemen baseline, {$updatedScorecard} indikator scorecard diperbarui.");
-                    $success = "Data untuk naskah <strong>{$targetMitra['kode']} - {$targetMitra['nama_mitra']}</strong> berhasil di-import!<br>"
+                    $success = "Data untuk naskah <strong>" . h($targetMitra['kode']) . " - " . h($targetMitra['nama_mitra']) . "</strong> berhasil di-import!<br>"
                              . ($updatedBaseline ? "&bull; {$updatedBaseline} elemen Baseline FIX diperbarui.<br>" : "")
                              . ($updatedScorecard ? "&bull; {$updatedScorecard} indikator Scorecard disinkronkan ke sistem.<br>" : "")
                              . ($fileNaskahExtracted ? "&bull; Tautan naskah resmi P2MA terhubung secara otomatis.<br>" : "");
@@ -718,6 +718,12 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <script>
+function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+}
+
 function openImportModal(id, kode, nama, type) {
     type = type || 'scorecard';
     document.getElementById('modalMitraId').value = id;
@@ -732,7 +738,7 @@ function openImportModal(id, kode, nama, type) {
     if (type === 'baseline') {
         titleEl.textContent = 'Import Data Baseline FIX (12 Elemen)';
         targetLabelEl.textContent = 'Target Naskah Kerja Sama (Modul Baseline):';
-        document.getElementById('modalMitraLabel').innerHTML = '<strong>[' + kode + ']</strong> ' + nama + ' <span class="badge badge-info" style="font-size:10px;margin-left:6px;background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;">Modul Baseline</span>';
+        document.getElementById('modalMitraLabel').innerHTML = '<strong>[' + escapeHtml(kode) + ']</strong> ' + escapeHtml(nama) + ' <span class="badge badge-info" style="font-size:10px;margin-left:6px;background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;">Modul Baseline</span>';
         helpEl.innerHTML = 'Format didukung: <strong>.xlsx</strong> (Maks. 25 MB). Gunakan template <code>template_baseline_12_elemen.xlsx</code>.';
         infoItemsEl.innerHTML = '&bull; <strong>12 Elemen Baseline:</strong> Status pemeriksaan, fakta audit, dan tautan bukti.<br>' +
                                 '&bull; <strong>Kunci Status:</strong> Otomatis mengunci status baseline menjadi <em>TERVERIFIKASI / DIKUNCI</em>.<br>' +
@@ -744,7 +750,7 @@ function openImportModal(id, kode, nama, type) {
     } else {
         titleEl.textContent = 'Import Data Scorecard Kinerja (V2.1)';
         targetLabelEl.textContent = 'Target Naskah Kerja Sama (Modul Scorecard):';
-        document.getElementById('modalMitraLabel').innerHTML = '<strong>[' + kode + ']</strong> ' + nama + ' <span class="badge badge-primary" style="font-size:10px;margin-left:6px;">Modul Scorecard</span>';
+        document.getElementById('modalMitraLabel').innerHTML = '<strong>[' + escapeHtml(kode) + ']</strong> ' + escapeHtml(nama) + ' <span class="badge badge-primary" style="font-size:10px;margin-left:6px;">Modul Scorecard</span>';
         helpEl.innerHTML = 'Format didukung: <strong>.xlsx</strong> (Maks. 25 MB). Gunakan template evaluasi <code>Scorecard_*.xlsx</code>.';
         infoItemsEl.innerHTML = '&bull; <strong>Indikator I1–I7:</strong> Status penilaian, kondisi saat ini, skor & alasan skor.<br>' +
                                 '&bull; <strong>Rekomendasi & Posisi:</strong> Posisi portofolio dan telaah tindak lanjut.<br>' +

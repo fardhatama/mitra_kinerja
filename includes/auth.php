@@ -28,7 +28,6 @@ function currentUser(bool $forceRefresh = false): ?array {
     if ($forceRefresh) {
         $cachedUser = null;
         $hasChecked = false;
-        return null;
     }
 
     if ($hasChecked) {
@@ -108,9 +107,16 @@ function attemptLogin(string $username, string $password): bool {
     ];
 
     $isValid = false;
-    if ($user && !empty($user['aktif']) && password_verify($password, $user['password_hash'])) {
-        $isValid = true;
-    } elseif (defined('APP_ENV') && APP_ENV === 'development' && isset($demoUsers[$username]) && $password === $username . '123') {
+    $dummyHash = '$2y$12$I9etv6Uk10J47jr/70NiU.nScEgbBP/oVv0LpqIM2S3z6sO/ZxXuq';
+    if ($user) {
+        $pwMatches = password_verify($password, $user['password_hash'] ?? '');
+        if ($pwMatches && !empty($user['aktif'])) {
+            $isValid = true;
+        }
+    } else {
+        password_verify($password, $dummyHash);
+    }
+    if (!$isValid && defined('APP_ENV') && APP_ENV === 'development' && isset($demoUsers[$username]) && $password === $username . '123') {
         // Auto-heal demo account jika password cocok username123 (hanya di mode development)
         $demo = $demoUsers[$username];
         $newHash = password_hash($password, PASSWORD_BCRYPT);
@@ -168,6 +174,12 @@ function doLogout(): void {
 }
 
 function logAudit(?int $mitraId, ?int $userId, string $aksi, string $detail = ''): void {
+    if ($mitraId !== null && $mitraId <= 0) {
+        $mitraId = null;
+    }
+    if ($userId !== null && $userId <= 0) {
+        $userId = null;
+    }
     try {
         $pdo = getDB();
         $stmt = $pdo->prepare('INSERT INTO audit_log (mitra_id, user_id, aksi, detail) VALUES (?, ?, ?, ?)');

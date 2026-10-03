@@ -49,7 +49,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $statusTanggal = in_array($_POST['status_tanggal'] ?? '', ['TERVERIFIKASI','BELUM TERVERIFIKASI'], true)
             ? $_POST['status_tanggal'] : ($mitra['status_tanggal'] ?? 'BELUM TERVERIFIKASI');
         $posisiPortofolio = trim($_POST['posisi_portofolio'] ?? '') ?: 'BELUM DAPAT DITENTUKAN';
-        $rekomendasi = trim($_POST['rekomendasi'] ?? '') ?: 'BELUM DITENTUKAN';
+
+        // Preserve rich multi-line audit recommendation narrative
+        $rawRek = trim($_POST['rekomendasi'] ?? '');
+        $kwRek  = trim($_POST['rekomendasi_keyword'] ?? '');
+        $existRek = trim($mitra['rekomendasi'] ?? '');
+        if ($rawRek !== '') {
+            $rekomendasi = $rawRek;
+        } elseif ($kwRek !== '') {
+            if ($existRek !== '' && strlen($existRek) > 50 && !str_contains(strtoupper($existRek), $kwRek)) {
+                $rekomendasi = $kwRek . " — " . $existRek;
+            } elseif ($existRek !== '' && strlen($existRek) > 50) {
+                $rekomendasi = $existRek;
+            } else {
+                $rekomendasi = $kwRek;
+            }
+        } else {
+            $rekomendasi = $existRek ?: 'BELUM DITENTUKAN';
+        }
+
         $picFocalPoint = trim($_POST['pic_focal_point'] ?? '');
 
         $reviewerIdToSave = !empty($mitra['pemeriksa_id']) ? $mitra['pemeriksa_id'] : $user['id'];
@@ -129,15 +147,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
         // --- E. Uji kebutuhan intervensi pimpinan (5 pemicu) ---
         // Bug 2.3: Gunakan INSERT ... ON DUPLICATE KEY UPDATE
+        $standarPemicu = [
+            1 => 'Perlu keputusan perpanjangan/addendum/evaluasi/pengakhiran',
+            2 => 'Hambatan lintas unit di luar kewenangan PIC/unit',
+            3 => 'Butuh anggaran/SDM/fasilitas di luar kewenangan unit',
+            4 => 'Komitmen material mitra tidak dipenuhi',
+            5 => 'Ada risiko hukum, reputasi, atau strategis yang material',
+        ];
         for ($no = 1; $no <= 5; $no++) {
             $jawaban = $_POST['pemicu_' . $no] ?? 'BELUM DIPASTIKAN';
             $bukti   = trim($_POST['pemicu_bukti_' . $no] ?? '');
+            $teksPemicu = $standarPemicu[$no] ?? '';
             $stmtP = $pdo->prepare(
                 'INSERT INTO intervensi_pimpinan (mitra_id, no_pemicu, pemicu_teks, jawaban, bukti_alasan)
                  VALUES (?, ?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE jawaban=VALUES(jawaban), bukti_alasan=VALUES(bukti_alasan)'
             );
-            $stmtP->execute([$id, $no, 'Pemicu ' . $no, $jawaban, $bukti ?: null]);
+            $stmtP->execute([$id, $no, $teksPemicu, $jawaban, $bukti ?: null]);
         }
 
         $kendala   = trim($_POST['uraian_kendala'] ?? '');
@@ -152,6 +178,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
         // Bug 2.1: Call syncStatusScorecard inside the try-catch block before or alongside commit
         syncStatusScorecard($pdo, $id);
+
+        // Allow 'BELUM DAPAT DITENTUKAN' and rich recommendation to be preserved without automatic forced reversion
+        $stmtPreserve = $pdo->prepare('UPDATE mitra_kinerja SET posisi_portofolio = ?, rekomendasi = ? WHERE id = ?');
+        $stmtPreserve->execute([$posisiPortofolio, $rekomendasi, $id]);
+
         $pdo->commit();
         logAudit($id, $user['id'], 'SIMPAN_SCORECARD', 'Menyimpan penilaian naskah ' . $mitra['kode']);
         $saved = true;
@@ -169,6 +200,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 }
 
 $summary = getMitraSummary($pdo, $mitra);
+if (!empty($mitra['posisi_portofolio']) && $mitra['posisi_portofolio'] === 'BELUM DAPAT DITENTUKAN') {
+    $summary['posisi_portofolio'] = 'BELUM DAPAT DITENTUKAN';
+}
+if (!empty($mitra['rekomendasi'])) {
+    $summary['rekomendasi'] = $mitra['rekomendasi'];
+}
 
 // Hitung total kegiatan tindak lanjut terkait PKS ini
 $stmtTLCount = $pdo->prepare('SELECT COUNT(*) FROM tindak_lanjut WHERE mitra_id = ?');
@@ -447,29 +484,39 @@ $monev = $summary['monev'];
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="field">
+        <div class="field" style="grid-column: 1 / -1;">
             <label>Rekomendasi Tindak Lanjut</label>
-            <select name="rekomendasi" <?= $canEdit ? '' : 'disabled' ?>>
-                <?php
-                // Bug 2.4: Hanya tampilkan opsi bersih, jangan inject teks panjang ke dalam <option>
-                $cleanRekOpts = ['BELUM DITENTUKAN', 'LANJUT', 'PERBAIKI', 'PERPANJANG', 'REPLIKASI', 'HENTIKAN'];
-                $curRek = strtoupper(trim((string)($summary['rekomendasi'] ?? '')));
-                $selectedRek = 'BELUM DITENTUKAN';
-                foreach ($cleanRekOpts as $ro) {
-                    if ($curRek === $ro || (strlen($ro) > 4 && str_contains($curRek, $ro))) {
-                        $selectedRek = $ro;
-                        break;
+            <div style="display:flex;gap:10px;margin-bottom:6px;align-items:center;">
+                <select id="rekomendasi_keyword" name="rekomendasi_keyword" onchange="applyRekomKeyword(this.value)" <?= $canEdit ? '' : 'disabled' ?> style="max-width:220px;">
+                    <?php
+                    $cleanRekOptions = ['BELUM DITENTUKAN', 'LANJUT', 'PERBAIKI', 'PERPANJANG', 'REPLIKASI', 'HENTIKAN'];
+                    $curRek = strtoupper(trim((string)($summary['rekomendasi'] ?? '')));
+                    $selectedRek = 'BELUM DITENTUKAN';
+                    foreach ($cleanRekOptions as $ro) {
+                        if ($curRek === $ro || (strlen($ro) > 4 && str_contains($curRek, $ro))) {
+                            $selectedRek = $ro;
+                            break;
+                        }
                     }
-                }
-                foreach ($cleanRekOpts as $opt): ?>
-                <option value="<?= h($opt) ?>" <?= $selectedRek === $opt ? 'selected' : '' ?>><?= h($opt) ?></option>
-                <?php endforeach; ?>
-            </select>
-            <?php if (!empty($summary['rekomendasi']) && !in_array($summary['rekomendasi'], $cleanRekOpts, true)): ?>
-            <div class="muted" style="font-size:11px;margin-top:4px;">
-                <strong>Catatan Rekomendasi/Audit:</strong><br><?= nl2br(h(mb_strimwidth($summary['rekomendasi'], 0, 200, '...'))) ?>
+                    foreach ($cleanRekOptions as $opt): ?>
+                    <option value="<?= h($opt) ?>" <?= $selectedRek === $opt ? 'selected' : '' ?>><?= h($opt) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <span class="muted" style="font-size:11.5px;">Pilih kata kunci di atas atau sunting narasi rekomendasi/audit lengkap di bawah:</span>
             </div>
-            <?php endif; ?>
+            <textarea name="rekomendasi" id="textarea_rekomendasi" rows="4" style="width:100%;font-size:12.5px;line-height:1.4;" <?= $canEdit ? '' : 'readonly' ?>><?= h($summary['rekomendasi'] ?? '') ?></textarea>
+            <script>
+            function applyRekomKeyword(val) {
+                const ta = document.getElementById('textarea_rekomendasi');
+                if (!ta) return;
+                let cur = ta.value.trim();
+                if (!cur || cur === 'BELUM DITENTUKAN') {
+                    ta.value = val;
+                } else if (!cur.toUpperCase().startsWith(val)) {
+                    ta.value = val + " — " + cur;
+                }
+            }
+            </script>
         </div>
     </div>
 </div>

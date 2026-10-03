@@ -165,7 +165,7 @@ require __DIR__ . '/includes/header.php';
         <div class="form-grid">
             <div class="field" style="grid-column: span 2;">
                 <label>Naskah / Judul Kerja Sama * (Ketik untuk mencari)</label>
-                <select name="mitra_id" class="searchable-select" placeholder="Ketik nama mitra / kode PKS / pilih naskah...">
+                <select name="mitra_id" class="searchable-select" placeholder="Ketik nama mitra / kode PKS / pilih naskah..." required>
                     <option value="">Pilih Naskah...</option>
                     <?php foreach ($allMitra as $m): ?>
                     <option value="<?= $m['id'] ?>" data-sub="Judul: <?= h(singkat($m['judul'] ?: '-', 50)) ?> | Bidang: <?= h($m['bidang'] ?? 'AHU') ?>" <?= $filterMitraId === (int)$m['id'] ? 'selected' : '' ?>>

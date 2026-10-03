@@ -10,11 +10,21 @@ function ensureDatabaseSchema(PDO $pdo): void {
     if ($checked) return;
 
     // ── 0. FAST-PATH HEALTH CHECK (Sub-millisecond) ─────────────────────────
-    // Jika database sudah aktif, memiliki mitra_kinerja, bidang, dan pra_pks,
-    // langsung return tanpa menjalankan DDL / ALTER TABLE apa pun.
+    // Pastikan seluruh tabel dan kolom migrasi V2.1 tersedia lengkap
+    // sebelum melewati DDL / ALTER TABLE.
     try {
-        $pdo->query("SELECT bidang, evaluasi_per_tahun FROM mitra_kinerja LIMIT 1");
+        $pdo->query("SELECT bidang, pks_induk_id, baseline_status, baseline_locked_at, baseline_locked_by, baseline_pemeriksa, baseline_catatan_ringkasan, pic_internal, pic_mitra, pic_focal_point, evaluasi_per_tahun FROM mitra_kinerja LIMIT 1");
         $pdo->query("SELECT id FROM pra_pks LIMIT 1");
+        $pdo->query("SELECT id FROM baseline_elemen LIMIT 1");
+        $pdo->query("SELECT id FROM rencana_kerja LIMIT 1");
+        $pdo->query("SELECT id FROM siklus_monev LIMIT 1");
+        $pdo->query("SELECT file_bukti FROM tindak_lanjut LIMIT 1");
+        $pdo->query("SELECT uraian_kendala FROM intervensi_usulan LIMIT 1");
+        $pdo->query("SELECT kondisi_baseline, kondisi_saat_ini FROM indikator_skor LIMIT 1");
+        $roleCol = $pdo->query("SHOW COLUMNS FROM users LIKE 'role'")->fetch();
+        if (!$roleCol || !str_contains($roleCol['Type'] ?? '', 'pengampu') || !str_contains($roleCol['Type'] ?? '', 'pic')) {
+            throw new Exception("Role migration needed");
+        }
         $checked = true;
         return;
     } catch (Throwable $e) {

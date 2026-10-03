@@ -14,12 +14,20 @@ if (!defined('APP_ENV')) {
     if (!$env && file_exists(__DIR__ . '/env.local.php')) {
         $env = trim((string) include __DIR__ . '/env.local.php');
     }
-    // Auto-detect development mode on localhost or local LAN
+    // Auto-detect development mode only on direct local development hostnames
     if (!$env) {
-        $serverName = $_SERVER['SERVER_NAME'] ?? '';
+        $serverHost = strtolower(preg_replace('/:\d+$/', '', $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? ''));
         $remoteAddr = $_SERVER['REMOTE_ADDR'] ?? '';
-        $isPrivate172 = (bool) preg_match('/^172\.(1[6-9]|2[0-9]|3[0-1])\./', $remoteAddr);
-        if ($serverName === 'localhost' || $remoteAddr === '127.0.0.1' || $remoteAddr === '::1' || str_starts_with($remoteAddr, '192.168.') || str_starts_with($remoteAddr, '10.') || $isPrivate172) {
+        $forwardedFor = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
+
+        $isLocalHost = in_array($serverHost, ['localhost', '127.0.0.1', '::1'], true)
+            || str_ends_with($serverHost, '.local')
+            || str_ends_with($serverHost, '.test');
+
+        $isLoopbackIp = in_array($remoteAddr, ['127.0.0.1', '::1', ''], true);
+
+        // Reverse proxy headers and production hostnames cannot spoof development mode
+        if ($isLocalHost && empty($forwardedFor) && $isLoopbackIp) {
             $env = 'development';
         }
     }

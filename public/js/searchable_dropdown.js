@@ -88,6 +88,9 @@ function initSearchableDropdowns() {
                         emptyTitle.style.color = '#94a3b8';
                         emptyTitle.textContent = label || '-- Kosongkan Pilihan --';
                         emptyItem.appendChild(emptyTitle);
+                        emptyItem.addEventListener('mousedown', function (e) {
+                            e.preventDefault();
+                        });
                         emptyItem.addEventListener('click', function (e) {
                             e.stopPropagation();
                             chooseOption('', '');
@@ -115,6 +118,9 @@ function initSearchableDropdowns() {
                         item.appendChild(subDiv);
                     }
 
+                    item.addEventListener('mousedown', function (e) {
+                        e.preventDefault();
+                    });
                     item.addEventListener('click', function (e) {
                         e.stopPropagation();
                         chooseOption(val, label);
@@ -184,10 +190,14 @@ function initSearchableDropdowns() {
             }
         });
 
-        // BUG-FA-10: Close dropdown on Tab / focusout
+        // BUG-FA-10: Close dropdown on Tab / focusout (delay prevents race condition with option click)
         wrap.addEventListener('focusout', function (e) {
             if (!wrap.contains(e.relatedTarget)) {
-                closeDropdown();
+                setTimeout(function () {
+                    if (!wrap.contains(document.activeElement)) {
+                        closeDropdown();
+                    }
+                }, 150);
             }
         });
 
@@ -208,7 +218,7 @@ function initSearchableDropdowns() {
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
                 if (items.length === 0) return;
-                activeIndex = (activeIndex - 1 + items.length) % items.length;
+                activeIndex = (activeIndex <= 0) ? (items.length - 1) : (activeIndex - 1);
                 updateActiveItem(items);
             } else if (e.key === 'Enter') {
                 // BUG-FA-01: Prevent default Enter submission when activeIndex is -1 or dropdown is open

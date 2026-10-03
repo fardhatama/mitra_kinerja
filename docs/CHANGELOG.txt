@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.3] - 2026-10-04
+
+### Fixed
+- **Penguatan Menyeluruh Loop 2: Remediasi 56 Cacat Lanjutan, Integritas Alur Kerja, dan Keandalan Frontend (v2.4.3):**
+  - **Autentikasi, Sesi, dan Keamanan Server (`logout.php`, `includes/auth.php`, `config/env.php`, `config/database.php`, `users_list.php`):**
+    - Memperbaiki validasi CSRF pada `logout.php` agar penolakan HTTP 403 terjadi jika token tidak disertakan.
+    - Melindungi `currentUser(true)` agar memuat ulang dan mengembalikan data pengguna terbaru tanpa mengembalikan `null`.
+    - Mengamankan fungsi `logAudit()` saat menerima `mitraId <= 0` dengan mengonversinya menjadi `NULL` guna mencegah pelanggaran *foreign key constraint*.
+    - Mencegah manipulasi mode pengembangan palsu melalui reverse proxy pada `config/env.php`.
+    - Menghilangkan *timing attack* enumerasi nama pengguna pada `attemptLogin()` menggunakan verifikasi hash *constant-time*.
+    - Menerapkan pola Post-Redirect-Get (PRG) pada `users_list.php` dan menambahkan pencatatan audit log untuk tindakan pengguna.
+  - **Layanan AI dan Diagnostik (`includes/ai_service.php`, `includes/ai_config.php`, `ai_debug.php`, `ai_debug_raw.php`):**
+    - Mengisolasi sesi PHP (`session_write_close()`) pada `ai_debug_raw.php` sebelum memanggil API eksternal guna mencegah pembekuan koneksi konkuren.
+    - Memperbaiki URL slug model bawaan OpenRouter ke `meta-llama/llama-3.3-70b-instruct`.
+    - Memperbaiki agregasi peringatan dini AI payload agar bersumber secara dinamis dari `$all`.
+    - Menyesuaikan antarmuka `ai_debug.php` agar dapat menguji penyedia OpenRouter dan Groq saat kunci Gemini belum dikonfigurasi.
+  - **Logika Bisnis & Tata Letak (`includes/functions.php`, `includes/data.php`, `dashboard.php`, `portofolio.php`, `laporan.php`):**
+    - Memperbaiki ekstraksi kata kunci rekomendasi pada naskah audit bertingkat agar kata "belum" pada uraian temuan tidak membatalkan rekomendasi utama.
+    - Memperbaiki urutan prioritas kata kunci (`PERCEPAT`, `BENTUK`, `AKTIFKAN` didahulukan sebelum `LANJUT`).
+    - Menyertakan evaluasi yang terlambat/jatuh tempo (`$diff < 0`) pada radar evaluasi dasbor.
+    - Menyelaraskan kriteria status `siapValidasi` agar hanya menghitung naskah dengan `status_scorecard === 'SIAP DIVALIDASI'`.
+    - Mengaktifkan pengembalian status `MASA IMPLEMENTASI AWAL` dari fungsi kalkulasi saat indikator BDN terdeteksi.
+    - Memperbaiki pembungkusan tombol aksi pada `portofolio.php` dan menambahkan penanganan status kosong (*empty state*) pada tabel dasbor, laporan, dan portofolio.
+  - **Modul Scorecard, Validasi, dan Pengelolaan Naskah (`scorecard.php`, `mitra_edit.php`, `mitra_validasi.php`, `mitra_manage.php`):**
+    - Menjamin transisi status penolakan validator (`PERLU PERBAIKAN`) tersimpan secara konsisten tanpa terhalang *whitelist*.
+    - Melindungi narasi rekomendasi audit multi-paragraf agar tidak terhapus saat formulir `mitra_edit.php` disimpan.
+    - Menutup celah pengunggahan naskah evaluasi yang telah tervalidasi bagi pengguna non-admin pada `scorecard.php`.
+    - Membungkus pembaruan data naskah pada `mitra_manage.php` dan keputusan pada `mitra_validasi.php` ke dalam transaksi atomik PDO.
+    - Mengoreksi pemetaan kolom lembar kerja spreadsheet lawas (*Portofolio Pengayaan*) agar tidak menimpa teks bukti dan uraian dasar.
+  - **Gate 0, Baseline, Tindak Lanjut, dan Komponen Dropdown (`gate0.php`, `baseline.php`, `import.php`, `tindak_lanjut.php`, `public/js/searchable_dropdown.js`):**
+    - Mengeliminasi *race condition* `focusout` pada komponen dropdown pencarian sehingga pemilihan item menggunakan klik mouse berfungsi andal.
+    - Memperbaiki navigasi tombol panah atas (`ArrowUp`) pada dropdown agar membungkus ke opsi terakhir dengan benar.
+    - Mengoreksi indeks kolom pada impor horizontal Gate 0 agar tanggal tidak tertukar dengan kriteria K1.
+    - Memperbaiki pengenalan format tanggal Indonesia (`DD/MM/YYYY`) pada impor Baseline.
+    - Mengamankan output pemberitahuan sukses dari potensi kerentanan Stored XSS pada Gate 0 dan modul impor.
+    - Mengoreksi frekuensi siklus evaluasi berkala hasil promosi Gate 0 menjadi 4 triwulan per tahun.
+
 ## [2.4.2] - 2026-10-04
 
 ### Fixed

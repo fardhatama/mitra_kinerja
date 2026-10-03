@@ -23,10 +23,21 @@ require_once __DIR__ . '/includes/ai_config.php';
 </div>
 <div class="c p">PHP: <?= phpversion() ?></div>
 
-<h2>2. API Key</h2>
-<?php $ph = empty(GEMINI_API_KEY) || GEMINI_API_KEY === 'ISI_API_KEY_ANDA_DI_SINI'; ?>
-<div class="c <?= $ph?'f':'p' ?>">
-    Key: <?= $ph?'❌ BELUM DIISI':'✅ '.substr(GEMINI_API_KEY,0,8).'...' ?>
+<h2>2. API Keys</h2>
+<?php
+$geminiActive = !empty(GEMINI_API_KEY) && GEMINI_API_KEY !== 'ISI_API_KEY_ANDA_DI_SINI';
+$openrouterActive = !empty(OPENROUTER_API_KEY);
+$groqActive = !empty(GROQ_API_KEY);
+$anyProviderActive = $geminiActive || $openrouterActive || $groqActive;
+?>
+<div class="c <?= $geminiActive ? 'p' : 'w' ?>">
+    Gemini: <?= $geminiActive ? '✅ ' . htmlspecialchars(substr(GEMINI_API_KEY, 0, 8)) . '...' : '❌ BELUM DIISI (Primary)' ?>
+</div>
+<div class="c <?= $openrouterActive ? 'p' : 'w' ?>">
+    OpenRouter: <?= $openrouterActive ? '✅ ' . htmlspecialchars(substr(OPENROUTER_API_KEY, 0, 8)) . '...' : '❌ BELUM DIISI (Fallback #1)' ?>
+</div>
+<div class="c <?= $groqActive ? 'p' : 'w' ?>">
+    Groq: <?= $groqActive ? '✅ ' . htmlspecialchars(substr(GROQ_API_KEY, 0, 8)) . '...' : '❌ BELUM DIISI (Fallback #2)' ?>
 </div>
 
 <h2>3. Cache</h2>
@@ -38,14 +49,14 @@ require_once __DIR__ . '/includes/ai_config.php';
     Writable: <?= is_writable($cd)?'✅ Ya':'❌ Tidak' ?>
 </div>
 
-<?php if (!$ph && function_exists('curl_init')): ?>
+<?php if ($anyProviderActive && function_exists('curl_init')): ?>
 <h2>4. Test API</h2>
-<button onclick="doTest()" style="padding:12px 24px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer">🚀 Test Gemini API</button>
+<button onclick="doTest()" style="padding:12px 24px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer">🚀 Test AI API</button>
 <div id="res" style="margin-top:16px"></div>
 <script>
 function doTest(){
     var el=document.getElementById('res');
-    el.innerHTML='<div class="c w">⏳ Menghubungi Gemini API...</div>';
+    el.innerHTML='<div class="c w">⏳ Menghubungi AI API...</div>';
     fetch('ai_debug_raw.php').then(function(r){return r.json()}).then(function(d){
         if(d.success){
             var resp = (d.gemini && d.gemini.ai_response) || (d.openrouter && d.openrouter.ai_response) || (d.groq && d.groq.ai_response) || d.ai_response || '';
