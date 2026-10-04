@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.5] - 2026-10-04
+
+### Fixed
+- **Penguatan Menyeluruh & Remidiasi Komprehensif Berbasis Adjudikasi Yudisial (v2.4.5):**
+  - **Autentikasi, Keamanan Sesi, dan Proteksi Akses:**
+    - Menerapkan perlindungan token CSRF wajib pada formulir `login.php` dan `logout.php` (POST-enforced dengan antarmuka konfirmasi).
+    - Membatasi laju percobaan login (*rate limiting*) pada `login.php` (kunci 60 detik setelah 5 kegagalan) dan mencatat kegagalan autentikasi pada `audit_log`.
+    - Menerapkan kedaluwarsa sesi otomatis saat pengguna tidak aktif selama 30 menit (*idle timeout*).
+    - Memperbaiki `currentUser()` agar aman saat kueri database gagal (*fail closed*).
+    - Memperbaiki validasi masukan nama pengguna pada `users_list.php` (maksimal 50 karakter dan format alfanumerik aman).
+    - Mengoreksi penulisan header `Authorization: Bearer ` pada integrasi API OpenRouter dan Groq di `includes/ai_service.php` dan `ai_debug_raw.php`.
+    - Menambahkan perlindungan *buffer* pemotongan teks multi-byte (`mb_substr`) dan parameter `JSON_INVALID_UTF8_SUBSTITUTE` untuk mencegah kegagalan JSON.
+    - Menambahkan pembatasan laju pembaruan paksa (*force refresh*) pada `ai_insight.php` (jeda minimal 5 detik) dan validasi token CSRF.
+  - **Integritas Metrik, Fungsi Inti, dan Tata Letak Dasbor:**
+    - Memisahkan jadwal evaluasi yang telah lewat waktu (*overdue*) dengan label jelas "Terlewat X hari lalu", sehingga tidak keliru masuk ke peringatan "Mendatang (< 30 Hari)".
+    - Memperbaiki fungsi `ekstrakKeywordRekomendasi()` agar mengenali frasa negatif terpisah (misal "TIDAK ... DILANJUTKAN") sebagai `HENTIKAN`.
+    - Memperbaiki perenderan bilah kemajuan aspek kinerja pada `laporan.php` agar tampil dengan tinggi dan latar belakang yang proporsional.
+    - Menyelaraskan filter posisi portofolio pada `portofolio.php` agar setiap baris terpetakan secara eksklusif tanpa tumpang tindih.
+    - Mengamankan tautan berkas pada `formatLinkSumberBukti()` dengan hanya mengizinkan skema aman (`http`, `https`, atau berkas lokal).
+    - Mendukung berkas PDF hasil pemindaian resmi yang memiliki *UTF-8 BOM* atau spasi awal sesuai standar ISO 32000-1.
+    - Menyediakan tombol menu navigasi ponsel (*mobile hamburger menu*) pada tampilan layar kecil ($\le 768$px).
+    - Menyelaraskan pewarnaan dinamis lencana rekomendasi (`warnaRekomendasi`) pada portofolio dan laporan.
+    - Melengkapi identitas pejabat penandatangan (Koordinator Tim Efektif) pada lembar cetak laporan eksekutif.
+  - **Alur Kerja Scorecard, Pengelolaan Mitra, dan Validasi:**
+    - Menghilangkan jebakan status `MASA IMPLEMENTASI AWAL` sehingga naskah yang seluruh indikatornya selesai dinilai dapat bertransisi ke `SIAP DIVALIDASI`.
+    - Mengizinkan pembatalan penolakan validasi (`PERLU PERBAIKAN`) agar evaluasi dapat diperbaiki dan dikirimkan kembali.
+    - Menyelaraskan pembaruan tanggal perjanjian di `mitra_manage.php` dengan sinkronisasi otomatis jadwal `siklus_monev`.
+    - Memperbarui status siklus evaluasi (`status_siklus = 'Selesai'`) saat telaah indikator disimpan.
+    - Mencegah penimpaan berkas Elemen 1 Baseline yang telah berstatus terkunci melalui formulir cepat maupun ubah naskah.
+    - Memperbaiki data awal database (`seed_data.sql` dan dump) dengan menghapus tanggal `'0000-00-00'` agar kompatibel dengan mode ketat MySQL.
+    - Mengoreksi templat unduhan naskah P05 dan C01 pada `scorecard.php` dan `import.php`.
+    - Mencegah pengguna non-admin mengimpor status `FINAL/TERVALIDASI` tanpa persetujuan validator.
+  - **Alur Kerja Baseline, Gate 0, dan Dropdown Pencarian:**
+    - Menerapkan perlindungan token CSRF pada seluruh pengendali formulir di `baseline.php`, `gate0.php`, `tindak_lanjut.php`, dan `import.php`.
+    - Memperbaiki penanganan aksi POST pada `baseline.php` agar parameter ID dalam badan permintaan diproses tanpa memerlukan query string di URL.
+    - Mendukung pembacaan berkas spreadsheet OpenXML dinamis pada `gate0.php` tanpa terpaku pada nama bagian `sheet1.xml`.
+    - Mengoreksi penanganan tombol Enter dan Tab pada komponen dropdown pencarian (`searchable_dropdown.js`) agar pilihan yang disorot tersimpan dengan benar.
+    - Mengaktifkan kembali tombol putusan pimpinan pada usulan Gate 0 yang dikembalikan untuk revisi.
+    - Menetapkan status awal baseline naskah hasil promosi Gate 0 menjadi `DALAM PROSES`.
+    - Memperbaiki pemetaan kolom lembar kerja pada `import.php` agar narasi telaah kualitatif tidak tertimpa bobot angka.
+
 ## [2.4.4] - 2026-10-04
 
 ### Fixed

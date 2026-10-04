@@ -20,13 +20,13 @@ function getScorecardTemplate(string $kode): array {
         'P02' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P02_BNNP_MASA_IMPLEMENTASI_AWAL_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P02)'],
         'P03' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P03_PEMKOT_TANJUNGPINANG_FINAL_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P03)'],
         'P04' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P04_BAPPERIDA_BINTAN_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P04)'],
-        'P05' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P05_STAIN_SAR_KEPRI_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P05/STAIN)'],
+        'P05' => ['file' => 'public/templates/import_naskah/01_Pilot_Utama/P05_Scorecard_STIT_Mumtaz_Karimun.xlsx', 'label' => 'Scorecard (P05/STIT Mumtaz)'],
         'P06' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P06_UMRAH_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P06)'],
         'P07' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P07_STAI_ANAMBAS_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P07)'],
         'P08' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P08_POLIBATAM_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P08)'],
         'P09' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P09_STAI_NATUNA_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P09)'],
         'P10' => ['file' => 'public/templates/import_naskah/01_Scorecard_Final_27_Sep/Scorecard_P10_STISIP_BATAM_27_Sep_2026.xlsx', 'label' => 'Scorecard Final (P10)'],
-        'C01' => ['file' => 'public/templates/import_naskah/02_Portofolio_Pengayaan/C01_Scorecard_STAIN_Sultan_Abdurrahman.xlsx', 'label' => 'Portofolio Pengayaan (C01)'],
+        'C01' => ['file' => 'public/templates/import_naskah/02_Portofolio_Pengayaan/C01_Scorecard_STAIN_Sultan_Abdurrahman.xlsx', 'label' => 'Portofolio Pengayaan (C01/STAIN SAR)'],
         'C02' => ['file' => 'public/templates/import_naskah/02_Portofolio_Pengayaan/C02_Scorecard_Politeknik_Bintan_Cakrawala.xlsx', 'label' => 'Portofolio Pengayaan (C02)'],
         'C03' => ['file' => 'public/templates/import_naskah/02_Portofolio_Pengayaan/C03_Scorecard_Universitas_Ibnu_Sina.xlsx', 'label' => 'Portofolio Pengayaan (C03)'],
         'C04' => ['file' => 'public/templates/import_naskah/02_Portofolio_Pengayaan/C04_Scorecard_UNRIKA.xlsx', 'label' => 'Portofolio Pengayaan (C04)'],
@@ -320,10 +320,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && in_array(($_POST['action'] 
                                     }
                                 }
 
-                                // Bug 7.4: Map imported posisi_portofolio and rekomendasi appropriately
+                                // Bug 7.4 & Bug 14: Map imported posisi_portofolio and rekomendasi appropriately
                                 if (!empty($posisiPortofolio)) {
                                     $uPos = strtoupper(trim($posisiPortofolio));
-                                    if (str_contains($uPos, 'BERDAMPAK')) {
+                                    if (str_contains($uPos, 'BELUM') || str_contains($uPos, 'TIDAK')) {
+                                        $posisiPortofolio = 'BELUM DAPAT DITENTUKAN';
+                                    } elseif (str_contains($uPos, 'BERDAMPAK')) {
                                         $posisiPortofolio = 'BERDAMPAK';
                                     } elseif (str_contains($uPos, 'OUTCOME')) {
                                         $posisiPortofolio = 'OUTCOME TERBENTUK';
@@ -331,14 +333,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && in_array(($_POST['action'] 
                                         $posisiPortofolio = 'OUTPUT TERSEDIA';
                                     } elseif (str_contains($uPos, 'AKTIF') || str_contains($uPos, 'IMPLEMENTASI') || str_contains($uPos, 'BERJALAN')) {
                                         $posisiPortofolio = 'AKTIF';
-                                    } elseif (in_array($uPos, ['BELUM DAPAT DITENTUKAN', 'BELUM DITENTUKAN'], true)) {
+                                    } else {
                                         $posisiPortofolio = 'BELUM DAPAT DITENTUKAN';
                                     }
                                 }
 
+                                // Bug 16: Periksa status validasi untuk pembatasan import status FINAL bagi non-admin
+                                $stmtValChk = $pdo->prepare('SELECT status FROM validasi WHERE mitra_id = ?');
+                                $stmtValChk->execute([$targetId]);
+                                $isValApproved = ($stmtValChk->fetchColumn() === 'DISETUJUI');
+                                $importerRole = $user['role'] ?? 'pemeriksa';
+
                                 $uSqlParts = [];
                                 $uParams = [];
                                 if (!empty($rawScStatus)) {
+                                    $checkFinal = strtoupper(trim((string)$rawScStatus));
+                                    if ((str_contains($checkFinal, 'FINAL') || str_contains($checkFinal, 'TERVALIDASI')) && $importerRole !== 'admin' && !$isValApproved) {
+                                        $rawScStatus = 'SIAP DIVALIDASI';
+                                    }
                                     $uSqlParts[] = 'status_scorecard = ?';
                                     $uParams[] = $rawScStatus;
                                 }
@@ -455,7 +467,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && in_array(($_POST['action'] 
                                         $normStatus = 'MASA IMPLEMENTASI AWAL';
                                     }
                                     if (in_array($normStatus, $allowedScStatuses, true)) {
-                                        $validScStatus = $normStatus;
+                                        // Bug 16: Do not allow non-admin users to import 'FINAL/TERVALIDASI' without validator sign-off; clamp to 'SIAP DIVALIDASI'
+                                        if (in_array($normStatus, ['FINAL', 'FINAL/TERVALIDASI'], true) && $importerRole !== 'admin' && !$isValApproved) {
+                                            $validScStatus = 'SIAP DIVALIDASI';
+                                        } else {
+                                            $validScStatus = $normStatus;
+                                        }
                                     }
                                 }
 

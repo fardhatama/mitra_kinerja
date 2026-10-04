@@ -21,6 +21,13 @@ if ($id > 0 && $userRole === 'pemeriksa') {
 /* ── LIST VIEW (Jika tidak ada ?id=) ──────────────────────── */
 if ($id <= 0) {
     $all = getAllMitraSummary($pdo);
+    // Urutkan Pilot Utama terlebih dahulu (P01..P13), disusul Cadangan (C01..C05)
+    usort($all, function($a, $b) {
+        $pA = ($a['mitra']['portofolio'] === 'Pilot Utama' || $a['mitra']['portofolio'] === 'PILOT') ? 0 : 1;
+        $pB = ($b['mitra']['portofolio'] === 'Pilot Utama' || $b['mitra']['portofolio'] === 'PILOT') ? 0 : 1;
+        if ($pA !== $pB) return $pA <=> $pB;
+        return strnatcasecmp($a['mitra']['kode'], $b['mitra']['kode']);
+    });
     $pageTitle = 'Penilaian';
     require __DIR__ . '/includes/header.php';
     ?>
@@ -54,18 +61,33 @@ if ($id <= 0) {
                 $msTarget = $monev['target_evaluasi_terdekat'] ?? $m['tanggal_berakhir'];
                 $msDays = $monev['hari_menuju_evaluasi'] ?? 0;
                 $isDuePast = false;
+                $allMilestonesCompleted = false;
+                $activeMsFound = false;
 
                 if (!empty($monev['milestones'])) {
+                    $completedCount = 0;
+                    $lastCompletedMs = null;
                     foreach ($monev['milestones'] as $ms) {
                         $isCompleted = in_array(strtolower(trim($ms['status_siklus'] ?? '')), ['selesai', 'selesai evaluasi'], true);
                         if ($isCompleted) {
+                            $completedCount++;
+                            $lastCompletedMs = $ms;
                             continue;
                         }
-                        $msLabel = $ms['nama'];
-                        $msTarget = $ms['target_tgl'];
-                        $msDays = $ms['sisa_hari'];
-                        $isDuePast = !empty($ms['is_past']);
-                        break;
+                        if (!$activeMsFound) {
+                            $msLabel = $ms['nama'];
+                            $msTarget = $ms['target_tgl'];
+                            $msDays = $ms['sisa_hari'];
+                            $isDuePast = !empty($ms['is_past']);
+                            $activeMsFound = true;
+                        }
+                    }
+                    if ($completedCount === count($monev['milestones']) && count($monev['milestones']) > 0) {
+                        $allMilestonesCompleted = true;
+                        $msLabel = 'Semua Siklus Selesai';
+                        if ($lastCompletedMs) {
+                            $msTarget = $lastCompletedMs['target_tgl'];
+                        }
                     }
                 }
             ?>
@@ -76,11 +98,19 @@ if ($id <= 0) {
                         <span class="badge badge-secondary" style="font-size:10px;margin-top:2px;"><?= h($m['bidang'] ?? 'AHU') ?> &bull; <?= h($m['jenis']) ?></span>
                     </td>
                     <td>
-                        <strong style="color:#1e40af;"><?= h($msLabel) ?></strong>
-                        <div class="muted" style="font-size:11px;margin-top:2px;">Target: <?= formatTanggal($msTarget) ?></div>
+                        <?php if ($allMilestonesCompleted): ?>
+                            <strong style="color:#16a34a;"><?= h($msLabel) ?></strong>
+                            <div class="muted" style="font-size:11px;margin-top:2px;">Selesai (<?= count($monev['milestones']) ?>/<?= count($monev['milestones']) ?> Siklus)</div>
+                        <?php else: ?>
+                            <strong style="color:#1e40af;"><?= h($msLabel) ?></strong>
+                            <div class="muted" style="font-size:11px;margin-top:2px;">Target: <?= formatTanggal($msTarget) ?></div>
+                        <?php endif; ?>
                     </td>
                     <td>
-                        <?php if ($isDuePast || ($msDays !== null && $msDays < 0)): ?>
+                        <?php if ($allMilestonesCompleted): ?>
+                            <span class="badge badge-success" style="font-size:10.5px;">✓ Siklus Tuntas</span>
+                            <div class="muted" style="font-size:10px;margin-top:2px;">Semua evaluasi selesai</div>
+                        <?php elseif ($isDuePast || ($msDays !== null && $msDays < 0)): ?>
                             <span class="badge badge-success" style="font-size:10.5px;">✓ Siap Dinilai (Lewat Tenggat)</span>
                             <div class="muted" style="font-size:10px;margin-top:2px;"><?= abs($msDays) ?> hari setelah tenggat</div>
                         <?php elseif ($msDays !== null && $msDays <= 30): ?>
@@ -111,9 +141,15 @@ if ($id <= 0) {
                     <td>
                         <div style="display:flex;flex-direction:column;gap:4px;">
                             <?php if ($userRole === 'pemeriksa' || $userRole === 'admin'): ?>
-                                <a href="mitra_edit.php?id=<?= $m['id'] ?>" class="btn btn-primary btn-sm" style="font-size:11px;padding:3px 7px;">
-                                    📝 Nilai <?= h(explode(':', $msLabel)[0]) ?> &rarr;
-                                </a>
+                                <?php if ($allMilestonesCompleted): ?>
+                                    <a href="mitra_edit.php?id=<?= $m['id'] ?>" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 7px;">
+                                        📊 Lihat Scorecard &rarr;
+                                    </a>
+                                <?php else: ?>
+                                    <a href="mitra_edit.php?id=<?= $m['id'] ?>" class="btn btn-primary btn-sm" style="font-size:11px;padding:3px 7px;">
+                                        📝 Nilai <?= h(explode(':', $msLabel)[0]) ?> &rarr;
+                                    </a>
+                                <?php endif; ?>
                             <?php endif; ?>
                             <?php if ($userRole === 'validator' || $userRole === 'admin'): ?>
                                 <a href="mitra_validasi.php?id=<?= $m['id'] ?>" class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 7px;">

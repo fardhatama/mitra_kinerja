@@ -6,6 +6,7 @@ require_once __DIR__ . '/includes/data.php';
 
 $pdo = getDB();
 $user = currentUser();
+$isAdmin = ($user['role'] ?? '') === 'admin';
 $pageTitle = 'Import Data Naskah';
 
 $success = '';
@@ -35,54 +36,58 @@ $templateMap = [
 
 // ── PROSES IMPORT WORKBOOK EXCEL ──────────────────────────────────────────
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'import_naskah') {
-    $targetId = (int)($_POST['mitra_id'] ?? 0);
-    $stmtM = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
-    $stmtM->execute([$targetId]);
-    $targetMitra = $stmtM->fetch();
-
-    if (!$targetMitra) {
-        $errors[] = 'Data naskah kerja sama tujuan tidak ditemukan.';
-    } elseif (!isset($_FILES['excel_file']) || $_FILES['excel_file']['error'] !== UPLOAD_ERR_OK) {
-        $errors[] = 'Silakan pilih file Excel (.xlsx) yang valid untuk di-import.';
+    $csrfToken = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
+    if (!verifyCsrfToken($csrfToken)) {
+        $errors[] = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
     } else {
-        $fileInfo = $_FILES['excel_file'];
-        $ext = strtolower(pathinfo($fileInfo['name'], PATHINFO_EXTENSION));
+        $targetId = (int)($_POST['mitra_id'] ?? 0);
+        $stmtM = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
+        $stmtM->execute([$targetId]);
+        $targetMitra = $stmtM->fetch();
 
-        if ($ext !== 'xlsx') {
-            $errors[] = 'Format file tidak didukung. Harap unggah file spreadsheet Excel dengan ekstensi .xlsx.';
-        } elseif ($fileInfo['size'] > 25 * 1024 * 1024) {
-            $errors[] = 'Ukuran file melebihi batas maksimum 25 MB.';
+        if (!$targetMitra) {
+            $errors[] = 'Data naskah kerja sama tujuan tidak ditemukan.';
+        } elseif (!isset($_FILES['excel_file']) || $_FILES['excel_file']['error'] !== UPLOAD_ERR_OK) {
+            $errors[] = 'Silakan pilih file Excel (.xlsx) yang valid untuk di-import.';
         } else {
-            try {
-                $parsedWb = parseFullWorkbookXlsx($fileInfo['tmp_name']);
-            } catch (Throwable $e) {
-                error_log('parseFullWorkbookXlsx error: ' . $e->getMessage());
-                $parsedWb = [];
-            }
-            if (empty($parsedWb)) {
-                $errors[] = 'Gagal membaca isi file Excel. Pastikan file tidak terkunci atau rusak.';
+            $fileInfo = $_FILES['excel_file'];
+            $ext = strtolower(pathinfo($fileInfo['name'], PATHINFO_EXTENSION));
+
+            if ($ext !== 'xlsx') {
+                $errors[] = 'Format file tidak didukung. Harap unggah file spreadsheet Excel dengan ekstensi .xlsx.';
+            } elseif ($fileInfo['size'] > 25 * 1024 * 1024) {
+                $errors[] = 'Ukuran file melebihi batas maksimum 25 MB.';
             } else {
-                $importType = trim($_POST['import_type'] ?? 'all');
-                $targetCode = strtoupper(trim($targetMitra['kode']));
-
-                // BUG-IM-01: Server-side check on isTargetLocked before importing baseline
-                $isTargetLocked = str_contains($targetMitra['baseline_status'] ?? '', 'DIKUNCI');
-                if ($importType === 'baseline' && $isTargetLocked) {
-                    $errors[] = "Data Baseline untuk naskah {$targetMitra['kode']} telah dikunci (TERVERIFIKASI / DIKUNCI) dan tidak dapat di-import ulang.";
+                try {
+                    $parsedWb = parseFullWorkbookXlsx($fileInfo['tmp_name']);
+                } catch (Throwable $e) {
+                    error_log('parseFullWorkbookXlsx error: ' . $e->getMessage());
+                    $parsedWb = [];
+                }
+                if (empty($parsedWb)) {
+                    $errors[] = 'Gagal membaca isi file Excel. Pastikan file tidak terkunci atau rusak.';
                 } else {
-                    // BUG-IM-05: Wrap multi-table import in a database transaction
-                    $pdo->beginTransaction();
-                    try {
-                        // Temukan Sheet Baseline & Sheet Scorecard
-                        $baseSheetName = '';
-                        $scSheetName = '';
-                        $rekSheetName = '';
-                        $picSheetName = '';
-                        $kegSheetName = '';
-                        $utlSheetName = '';
+                    $importType = trim($_POST['import_type'] ?? 'all');
+                    $targetCode = strtoupper(trim($targetMitra['kode']));
 
-                        // 1. Deteksi Sheet Baseline (skip jika target locked dan importType === 'all')
-                        if ($importType !== 'scorecard' && !$isTargetLocked) {
+                    // BUG-IM-01 & Bug 5: Allow admin ($isAdmin) to import baseline data on locked records matching baseline.php
+                    $isTargetLocked = str_contains($targetMitra['baseline_status'] ?? '', 'DIKUNCI');
+                    if ($importType === 'baseline' && $isTargetLocked && !$isAdmin) {
+                        $errors[] = "Data Baseline untuk naskah {$targetMitra['kode']} telah dikunci (TERVERIFIKASI / DIKUNCI) dan tidak dapat di-import ulang.";
+                    } else {
+                        // BUG-IM-05: Wrap multi-table import in a database transaction
+                        $pdo->beginTransaction();
+                        try {
+                            // Temukan Sheet Baseline & Sheet Scorecard
+                            $baseSheetName = '';
+                            $scSheetName = '';
+                            $rekSheetName = '';
+                            $picSheetName = '';
+                            $kegSheetName = '';
+                            $utlSheetName = '';
+
+                            // 1. Deteksi Sheet Baseline (skip jika target locked dan bukan admin, dan importType === 'all')
+                            if ($importType !== 'scorecard' && (!$isTargetLocked || $isAdmin)) {
                     // a. Cocokkan dengan kode naskah (misal: P01_DEKRANASDA, P02, dll)
                     foreach (array_keys($parsedWb) as $sName) {
                         $upper = strtoupper($sName);
@@ -170,7 +175,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                     }
 
                     $cutoffVal = $baseRows[8][8] ?? $baseRows[8][7] ?? $baseRows[8][2] ?? '';
-                    // BUG-IM-02: Convert Excel serial dates for cut-off date instead of overwriting with today's date
+                    // BUG-IM-02 & Bug 10: Convert Excel serial dates & support textual Indonesian date formats
                     $cutoffDate = null;
                     if (!empty($cutoffVal)) {
                         $cStr = trim((string)$cutoffVal);
@@ -181,6 +186,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                             $cutoffDate = sprintf('%04d-%02d-%02d', $mCut[1], $mCut[2], $mCut[3]);
                         } elseif (preg_match('/(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/', $cStr, $mCut)) {
                             $cutoffDate = sprintf('%04d-%02d-%02d', $mCut[3], $mCut[2], $mCut[1]);
+                        } elseif ($textCutoff = parseIndonesianDateText($cStr)) {
+                            $cutoffDate = $textCutoff;
                         }
                     }
                     if (!$cutoffDate) {
@@ -323,11 +330,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                             $statusPem = 'BUKTI CUKUP';
                         }
 
-                        $skor = is_numeric($rawSkor) ? max(0, min(4, (int)$rawSkor)) : null;
-                        if (is_numeric($rawNilai)) {
-                            $nilai = round((float)$rawNilai, 2);
+                        // Bug 22: In scorecard import, if status is not evaluable (e.g. BDN or Belum Memadai), force $skor = null and $nilai = null to prevent 'HAPUS SKOR' validation error
+                        if (!in_array($statusPem, ['BUKTI MEMADAI', 'BUKTI CUKUP'], true)) {
+                            $skor = null;
+                            $nilai = null;
                         } else {
-                            $nilai = $skor !== null ? round(($skor / 4.0) * $bobot, 2) : null;
+                            $skor = is_numeric($rawSkor) ? max(0, min(4, (int)$rawSkor)) : null;
+                            if (is_numeric($rawNilai)) {
+                                $nilai = round((float)$rawNilai, 2);
+                            } else {
+                                $nilai = $skor !== null ? round(($skor / 4.0) * $bobot, 2) : null;
+                            }
                         }
 
                         $descCandidate = $isPenilaianLayout ? trim(($row[1] ?? '') . "\nCara periksa: " . ($row[3] ?? '')) : trim($row[2] ?? '');
@@ -440,26 +453,39 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                     }
                 }
 
-                // Commit transaction (BUG-IM-05)
-                $pdo->commit();
-
-                if ($importType === 'baseline') {
-                    logAudit($targetId, $user['id'], 'IMPORT_BASELINE', "Import Baseline untuk {$targetMitra['kode']}: {$updatedBaseline} elemen diperbarui.");
-                    $success = "Data Baseline FIX (12 Elemen) untuk <strong>" . h($targetMitra['kode']) . " - " . h($targetMitra['nama_mitra']) . "</strong> berhasil di-import!<br>"
-                             . "&bull; {$updatedBaseline} elemen Baseline FIX diperbarui dan diverifikasi.<br>"
-                             . "&bull; Status Baseline naskah telah dikunci (TERVERIFIKASI / DIKUNCI).<br>"
-                             . ($fileNaskahExtracted ? "&bull; Tautan naskah resmi P2MA terhubung secara otomatis.<br>" : "");
-                } elseif ($importType === 'scorecard') {
-                    logAudit($targetId, $user['id'], 'IMPORT_SCORECARD', "Import Scorecard untuk {$targetMitra['kode']}: {$updatedScorecard} indikator diperbarui.");
-                    $success = "Data Scorecard untuk <strong>" . h($targetMitra['kode']) . " - " . h($targetMitra['nama_mitra']) . "</strong> berhasil di-import!<br>"
-                             . "&bull; {$updatedScorecard} indikator Scorecard disinkronkan ke sistem.<br>"
-                             . (!empty($rawScStatus) ? "&bull; Status Scorecard: <strong>" . h($rawScStatus) . "</strong>.<br>" : "");
+                // Commit transaction (BUG-IM-05 & Bug 16)
+                $totalUpdated = $updatedBaseline + $updatedScorecard;
+                if ($totalUpdated === 0) {
+                    if ($pdo->inTransaction()) {
+                        $pdo->rollBack();
+                    }
+                    $errors[] = 'Gagal memproses import: Tidak ada lembar kerja (sheet) target yang cocok atau 0 baris elemen baseline / indikator scorecard yang berhasil diperbarui.';
                 } else {
-                    logAudit($targetId, $user['id'], 'IMPORT_EXCEL', "Import workbook Excel untuk {$targetMitra['kode']}: {$updatedBaseline} elemen baseline, {$updatedScorecard} indikator scorecard diperbarui.");
-                    $success = "Data untuk naskah <strong>" . h($targetMitra['kode']) . " - " . h($targetMitra['nama_mitra']) . "</strong> berhasil di-import!<br>"
-                             . ($updatedBaseline ? "&bull; {$updatedBaseline} elemen Baseline FIX diperbarui.<br>" : "")
-                             . ($updatedScorecard ? "&bull; {$updatedScorecard} indikator Scorecard disinkronkan ke sistem.<br>" : "")
-                             . ($fileNaskahExtracted ? "&bull; Tautan naskah resmi P2MA terhubung secara otomatis.<br>" : "");
+                    $pdo->commit();
+
+                    if ($importType === 'baseline') {
+                        logAudit($targetId, $user['id'], 'IMPORT_BASELINE', "Import Baseline untuk {$targetMitra['kode']}: {$updatedBaseline} elemen diperbarui.");
+                        // Bug 17: Only claim status is locked if $filledCount >= 12 and status was actually locked
+                        $statusClaim = (isset($filledCount) && $filledCount >= 12)
+                            ? "&bull; Status Baseline naskah telah dikunci (TERVERIFIKASI / DIKUNCI).<br>"
+                            : "&bull; Status Baseline naskah: DALAM PROSES (" . ($filledCount ?? 0) . "/12 elemen terisi).<br>";
+                        $success = "Data Baseline FIX (12 Elemen) untuk <strong>" . h($targetMitra['kode']) . " - " . h($targetMitra['nama_mitra']) . "</strong> berhasil di-import!<br>"
+                                 . "&bull; {$updatedBaseline} elemen Baseline FIX diperbarui dan diverifikasi.<br>"
+                                 . $statusClaim
+                                 . ($fileNaskahExtracted ? "&bull; Tautan naskah resmi P2MA terhubung secara otomatis.<br>" : "");
+                    } elseif ($importType === 'scorecard') {
+                        logAudit($targetId, $user['id'], 'IMPORT_SCORECARD', "Import Scorecard untuk {$targetMitra['kode']}: {$updatedScorecard} indikator diperbarui.");
+                        $success = "Data Scorecard untuk <strong>" . h($targetMitra['kode']) . " - " . h($targetMitra['nama_mitra']) . "</strong> berhasil di-import!<br>"
+                                 . "&bull; {$updatedScorecard} indikator Scorecard disinkronkan ke sistem.<br>"
+                                 . (!empty($rawScStatus) ? "&bull; Status Scorecard: <strong>" . h($rawScStatus) . "</strong>.<br>" : "");
+                    } else {
+                        logAudit($targetId, $user['id'], 'IMPORT_EXCEL', "Import workbook Excel untuk {$targetMitra['kode']}: {$updatedBaseline} elemen baseline, {$updatedScorecard} indikator scorecard diperbarui.");
+                        $baseLockNote = $updatedBaseline ? ((isset($filledCount) && $filledCount >= 12) ? ' (Status: DIKUNCI)' : ' (Status: DALAM PROSES)') : '';
+                        $success = "Data untuk naskah <strong>" . h($targetMitra['kode']) . " - " . h($targetMitra['nama_mitra']) . "</strong> berhasil di-import!<br>"
+                                 . ($updatedBaseline ? "&bull; {$updatedBaseline} elemen Baseline FIX diperbarui{$baseLockNote}.<br>" : "")
+                                 . ($updatedScorecard ? "&bull; {$updatedScorecard} indikator Scorecard disinkronkan ke sistem.<br>" : "")
+                                 . ($fileNaskahExtracted ? "&bull; Tautan naskah resmi P2MA terhubung secara otomatis.<br>" : "");
+                    }
                 }
                     } catch (Throwable $e) {
                         if ($pdo->inTransaction()) {
@@ -471,6 +497,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
             }
         }
     }
+}
 }
 
 // Ambil daftar seluruh naskah kerja sama
@@ -722,6 +749,7 @@ require __DIR__ . '/includes/header.php';
         </div>
 
         <form method="POST" enctype="multipart/form-data" style="margin:0;">
+            <?= csrfField() ?>
             <input type="hidden" name="action" value="import_naskah">
             <input type="hidden" name="mitra_id" id="modalMitraId" value="0">
             <input type="hidden" name="import_type" id="modalImportType" value="scorecard">

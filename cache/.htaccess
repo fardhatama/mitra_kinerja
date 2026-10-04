@@ -6,3 +6,7 @@
     Order deny,allow
     Deny from all
 </IfModule>
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^.*$ - [F,L]
+</IfModule>

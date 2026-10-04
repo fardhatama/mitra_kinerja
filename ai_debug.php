@@ -65,7 +65,9 @@ function renderProviderBox(title, p) {
         var resp = p.ai_response ? '<pre>' + String(p.ai_response).replace(/</g, '&lt;') + '</pre>' : '';
         return '<div class="c p"><strong>' + title + ':</strong> ✅ BERHASIL (HTTP ' + (p.http_code || 200) + ')' + resp + '</div>';
     }
-    var errText = p.error || (p.curl_error ? ('cURL Error: ' + p.curl_error) : ('HTTP ' + (p.http_code || 'Error')));
+    var errText = (p.curl_error && (!p.error || p.error === 'HTTP 0')) 
+        ? ('cURL Error: ' + p.curl_error) 
+        : (p.error || (p.curl_error ? ('cURL Error: ' + p.curl_error) : ('HTTP ' + (p.http_code || 'Error'))));
     var extra = p.response ? '<pre>' + String(p.response).replace(/</g, '&lt;') + '</pre>' : '';
     return '<div class="c f"><strong>' + title + ':</strong> ❌ GAGAL (' + errText + ')' + extra + '</div>';
 }

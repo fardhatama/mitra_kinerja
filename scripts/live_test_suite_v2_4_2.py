@@ -20,21 +20,29 @@ def test(name, condition, detail=""):
         print(f"  [FAIL] {name} -- {detail}")
 
 print("=" * 70)
-print("MITRA KINERJA v2.4.2 -- LIVE EXTENSIVE VERIFICATION SUITE")
+print("MITRA KINERJA v2.4.5 -- LIVE EXTENSIVE VERIFICATION SUITE")
 print("=" * 70)
+
+def get_csrf(s, path="/login.php"):
+    r = s.get(f"{BASE}{path}")
+    m = re.search(r'name="csrf_token" value="([^"]+)"', r.text)
+    return m.group(1) if m else ""
 
 # 1. AUTHENTICATION & LOGIN
 print("\n[1] AUTHENTICATION & CSRF")
 r = session.get(f"{BASE}/login.php")
 test("Login page loads HTTP 200", r.status_code == 200)
 
-# Submit valid demo admin
-r_post = session.post(f"{BASE}/login.php", data={"username": "admin", "password": "admin123"}, allow_redirects=True)
+csrf_token = get_csrf(session, "/login.php")
+test("Login page includes CSRF token", bool(csrf_token))
+
+# Submit valid demo admin with CSRF token
+r_post = session.post(f"{BASE}/login.php", data={"username": "admin", "password": "admin123", "csrf_token": csrf_token}, allow_redirects=True)
 test("Admin login succeeds", "dashboard.php" in r_post.url or "MITRA KINERJA" in r_post.text)
 test("Session cookie set", "PHPSESSID" in session.cookies)
 
 # Test PHP 8 TypeError protection on array POST parameter
-r_array = requests.post(f"{BASE}/login.php", data={"username[]": "admin", "password": "123"})
+r_array = requests.post(f"{BASE}/login.php", data={"username[]": "admin", "password": "123", "csrf_token": csrf_token})
 test("Type safety: array POST parameter handled gracefully (no 500)", r_array.status_code in [200, 302])
 
 # 2. DASHBOARD & KPIS
@@ -118,7 +126,8 @@ print("\n[12] ROLE ACCESS GATING")
 roles = ["validator", "pemeriksa", "pimpinan", "pengampu", "pic"]
 for role in roles:
     s_role = requests.Session()
-    s_role.post(f"{BASE}/login.php", data={"username": role, "password": f"{role}123"})
+    c_tok = get_csrf(s_role, "/login.php")
+    s_role.post(f"{BASE}/login.php", data={"username": role, "password": f"{role}123", "csrf_token": c_tok})
     r_role_sc = s_role.get(f"{BASE}/scorecard.php")
     test(f"Role '{role}' can view Scorecard", r_role_sc.status_code == 200)
     

@@ -20,6 +20,42 @@ header('Content-Type: application/json; charset=utf-8');
 
 $forceRefresh = (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST');
 
+if ($forceRefresh) {
+    $csrfToken = $_POST['csrf_token'] 
+        ?? $_SERVER['HTTP_X_CSRF_TOKEN'] 
+        ?? null;
+    if (!$csrfToken) {
+        $jsonInput = json_decode(file_get_contents('php://input'), true);
+        if (is_array($jsonInput) && isset($jsonInput['csrf_token']) && is_string($jsonInput['csrf_token'])) {
+            $csrfToken = $jsonInput['csrf_token'];
+        }
+    }
+
+    if (!$csrfToken || !verifyCsrfToken($csrfToken)) {
+        http_response_code(403);
+        echo json_encode([
+            'success' => false,
+            'error' => 'CSRF_INVALID',
+            'message' => 'Token CSRF tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.'
+        ]);
+        exit;
+    }
+
+    // Cooldown / throttle: minimal 5 detik jeda antar force-refresh
+    $now = time();
+    $lastRefresh = (int)($_SESSION['ai_last_refresh'] ?? 0);
+    if (($now - $lastRefresh) < 5) {
+        http_response_code(429);
+        echo json_encode([
+            'success' => false,
+            'error' => 'RATE_LIMITED',
+            'message' => 'Terlalu sering merefresh. Harap tunggu minimal 5 detik sebelum mencoba lagi.'
+        ]);
+        exit;
+    }
+    $_SESSION['ai_last_refresh'] = $now;
+}
+
 if (!defined('AI_ENABLED') || !AI_ENABLED) {
     echo json_encode([
         'success' => false,
@@ -46,7 +82,7 @@ if (!$geminiOk && !$openrouterOk && !$groqOk) {
 // Coba ambil dari cache dulu SEBELUM query database yang berat
 if (!$forceRefresh) {
     $cached = getCachedInsight();
-    if ($cached) {
+    if ($cached && isset($cached['insight'])) {
         echo json_encode([
             'success' => true,
             'cached' => true,

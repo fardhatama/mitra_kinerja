@@ -187,8 +187,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         );
         $stmtU3->execute([$id, $kendala ?: null, $upaya ?: null, $keputusan ?: null]);
 
+        // Bug 2: Reset validasi status to 'BELUM' jika sebelumnya berstatus 'PERLU PERBAIKAN' (revisi baru dari pemeriksa)
+        resetValidasiJikaPerluPerbaikan($pdo, $id);
+
+        // Bug 4: Update active siklus_monev record when assessment is submitted and saved
+        $stmtActiveSM = $pdo->prepare("SELECT id FROM siklus_monev WHERE mitra_id = ? AND status_siklus != 'Selesai' ORDER BY siklus_ke ASC LIMIT 1");
+        $stmtActiveSM->execute([$id]);
+        $activeSMId = $stmtActiveSM->fetchColumn();
+        if ($activeSMId) {
+            $stmtInd = $pdo->prepare('SELECT * FROM indikator_skor WHERE mitra_id = ?');
+            $stmtInd->execute([$id]);
+            $indRows = $stmtInd->fetchAll();
+            $rInd = ringkasanIndikator($indRows);
+            $nilaiBerjalan = $rInd['nilai_berjalan'];
+
+            $stmtUpdSM = $pdo->prepare("UPDATE siklus_monev SET status_siklus = 'Selesai', nilai_siklus = ?, tanggal_realisasi_evaluasi = ? WHERE id = ?");
+            $stmtUpdSM->execute([round($nilaiBerjalan, 2), date('Y-m-d'), $activeSMId]);
+        }
+
         // Bug 2.1: Call syncStatusScorecard inside the try-catch block before or alongside commit
-        syncStatusScorecard($pdo, $id);
+        syncStatusScorecard($pdo, $id, true);
 
         // Allow 'BELUM DAPAT DITENTUKAN' and rich recommendation to be preserved without automatic forced reversion
         $stmtPreserve = $pdo->prepare('UPDATE mitra_kinerja SET posisi_portofolio = ?, rekomendasi = ? WHERE id = ?');
@@ -510,13 +528,9 @@ $monev = $summary['monev'];
                 <select id="rekomendasi_keyword" name="rekomendasi_keyword" onchange="applyRekomKeyword(this.value)" <?= $canEdit ? '' : 'disabled' ?> style="max-width:220px;">
                     <?php
                     $cleanRekOptions = ['BELUM DITENTUKAN', 'LANJUT', 'PERBAIKI', 'PERPANJANG', 'REPLIKASI', 'HENTIKAN'];
-                    $curRek = strtoupper(trim((string)($summary['rekomendasi'] ?? '')));
-                    $selectedRek = 'BELUM DITENTUKAN';
-                    foreach ($cleanRekOptions as $ro) {
-                        if ($curRek === $ro || (strlen($ro) > 4 && str_contains($curRek, $ro))) {
-                            $selectedRek = $ro;
-                            break;
-                        }
+                    $selectedRek = ekstrakKeywordRekomendasi($summary['rekomendasi'] ?? null);
+                    if (!in_array($selectedRek, $cleanRekOptions, true)) {
+                        $selectedRek = 'BELUM DITENTUKAN';
                     }
                     foreach ($cleanRekOptions as $opt): ?>
                     <option value="<?= h($opt) ?>" <?= $selectedRek === $opt ? 'selected' : '' ?>><?= h($opt) ?></option>

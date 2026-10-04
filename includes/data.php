@@ -123,7 +123,7 @@ function getMitraSummary(PDO $pdo, array $mitra, bool $forceRecalculate = false)
     } elseif ($forceRecalculate || $calculatedStatus === 'DALAM PENILAIAN') {
         // Allow status_scorecard to revert from 'SIAP DIVALIDASI' to 'DALAM PENILAIAN'
         $statusScorecard = $calculatedStatus;
-    } elseif (!empty($mitra['status_scorecard']) && in_array($mitra['status_scorecard'], ['MASA IMPLEMENTASI AWAL', 'FINAL', 'FINAL/TERVALIDASI', 'SIAP DIVALIDASI'], true)) {
+    } elseif (!empty($mitra['status_scorecard']) && in_array($mitra['status_scorecard'], ['FINAL', 'FINAL/TERVALIDASI', 'SIAP DIVALIDASI'], true)) {
         if ($validasi['status'] === 'DISETUJUI') {
             $statusScorecard = 'FINAL/TERVALIDASI';
         } else {
@@ -148,7 +148,9 @@ function getMitraSummary(PDO $pdo, array $mitra, bool $forceRecalculate = false)
         }
     }
 
-    $calculatedRekomendasi = hitungRekomendasi($ringkasan['nilai_berjalan'], $warning['status'], $posisiPortofolio, $sisaHari);
+    $calculatedRekomendasi = ($ringkasan['dapat_dinilai_n'] === 0 || $ringkasan['nilai_berjalan'] <= 0 || $posisiPortofolio === 'BELUM DAPAT DITENTUKAN')
+        ? 'BELUM DITENTUKAN'
+        : hitungRekomendasi($ringkasan['nilai_berjalan'], $warning['status'], $posisiPortofolio, $sisaHari);
     if ($forceRecalculate || !isset($mitra['rekomendasi']) || $mitra['rekomendasi'] === '') {
         $rekomendasi = $calculatedRekomendasi;
     } else {
@@ -165,16 +167,31 @@ function getMitraSummary(PDO $pdo, array $mitra, bool $forceRecalculate = false)
         $realMilestones = $stmtSM->fetchAll();
         if (!empty($realMilestones)) {
             $todayTs = strtotime(date('Y-m-d'));
-            $nearestTarget = null;
-            $nearestDiff = null;
+            $nearestUpcomingTarget = null;
+            $nearestUpcomingDiff = null;
+            $hasOverdue = false;
+            $overdueList = [];
             $warning1Bulan = false;
             $msList = [];
             foreach ($realMilestones as $rm) {
                 $tgtStr = $rm['tanggal_target_evaluasi'];
                 $diff = (int)round((strtotime($tgtStr) - $todayTs) / 86400);
                 $isCompleted = in_array(strtolower(trim($rm['status_siklus'] ?? '')), ['selesai', 'selesai evaluasi'], true);
-                $isDueSoon = (!$isCompleted && $diff <= 30);
+                $isDueSoon = (!$isCompleted && $diff >= 0 && $diff <= 30);
                 $isPast = ($diff < 0);
+                $isOverdue = (!$isCompleted && $diff < 0);
+
+                if ($isOverdue) {
+                    $hasOverdue = true;
+                    $overdueList[] = [
+                        'siklus_ke'     => (int)$rm['siklus_ke'],
+                        'nama'          => $rm['nama_siklus'],
+                        'target_tgl'    => $tgtStr,
+                        'sisa_hari'     => $diff,
+                        'status_siklus' => $rm['status_siklus'],
+                    ];
+                }
+
                 $msList[] = [
                     'siklus_ke'     => (int)$rm['siklus_ke'],
                     'nama'          => $rm['nama_siklus'],
@@ -182,41 +199,46 @@ function getMitraSummary(PDO $pdo, array $mitra, bool $forceRecalculate = false)
                     'sisa_hari'     => $diff,
                     'is_due_soon'   => $isDueSoon,
                     'is_past'       => $isPast,
+                    'is_overdue'    => $isOverdue,
                     'status_siklus' => $rm['status_siklus']
                 ];
-                // Milestone belum selesai pertama (termasuk overdue dan mendekati tenggat <= 30 hari)
-                if (!$isCompleted && $nearestTarget === null) {
-                    $nearestTarget = $tgtStr;
-                    $nearestDiff = $diff;
+
+                // Milestone mendatang (diff >= 0) belum selesai pertama
+                if (!$isCompleted && $diff >= 0 && $nearestUpcomingTarget === null) {
+                    $nearestUpcomingTarget = $tgtStr;
+                    $nearestUpcomingDiff = $diff;
                     if ($diff <= 30) {
                         $warning1Bulan = true;
                     }
                 }
             }
-            // Jika tidak ada target aktif mendatang, cari target pending/aktif terdekat yang masih menunggu/overdue
-            if ($nearestTarget === null) {
-                foreach ($msList as $ms) {
-                    $isCompleted = in_array(strtolower(trim($ms['status_siklus'] ?? '')), ['selesai', 'selesai evaluasi'], true);
-                    if (!$isCompleted) {
-                        $nearestTarget = $ms['target_tgl'];
-                        $nearestDiff = $ms['sisa_hari'];
-                        if ($ms['sisa_hari'] <= 30) {
-                            $warning1Bulan = true;
-                        }
-                        break;
-                    }
-                }
-            }
+
             if (!empty($msList)) {
                 $monev['milestones'] = $msList;
                 $monev['total_siklus'] = count($msList);
-                if ($nearestTarget !== null) {
-                    $monev['target_evaluasi_terdekat'] = $nearestTarget;
-                    $monev['hari_menuju_evaluasi'] = $nearestDiff;
+                $monev['has_overdue'] = $hasOverdue;
+                $monev['overdue_milestones'] = $overdueList;
+
+                if ($nearestUpcomingTarget !== null) {
+                    $monev['target_evaluasi_terdekat'] = $nearestUpcomingTarget;
+                    $monev['hari_menuju_evaluasi'] = $nearestUpcomingDiff;
                     $monev['warning_1_bulan'] = $warning1Bulan;
                 } else {
-                    $monev['target_evaluasi_terdekat'] = null;
-                    $monev['hari_menuju_evaluasi'] = null;
+                    // Jika tidak ada target aktif mendatang, cari target pending/aktif terdekat
+                    $lastUnfinished = null;
+                    foreach ($msList as $ms) {
+                        $isCompleted = in_array(strtolower(trim($ms['status_siklus'] ?? '')), ['selesai', 'selesai evaluasi'], true);
+                        if (!$isCompleted) {
+                            $lastUnfinished = $ms;
+                        }
+                    }
+                    if ($lastUnfinished) {
+                        $monev['target_evaluasi_terdekat'] = $lastUnfinished['target_tgl'];
+                        $monev['hari_menuju_evaluasi'] = $lastUnfinished['sisa_hari'];
+                    } else {
+                        $monev['target_evaluasi_terdekat'] = null;
+                        $monev['hari_menuju_evaluasi'] = null;
+                    }
                     $monev['warning_1_bulan'] = false;
                 }
             }
@@ -262,6 +284,17 @@ function syncStatusScorecard(PDO $pdo, int $mitraId, bool $forceRecalculate = fa
     $summary = getMitraSummary($pdo, $mitra, $forceRecalculate);
     $stmt = $pdo->prepare('UPDATE mitra_kinerja SET status_scorecard = ?, posisi_portofolio = ?, rekomendasi = ? WHERE id = ?');
     $stmt->execute([$summary['status_scorecard'], $summary['posisi_portofolio'], $summary['rekomendasi'], $mitraId]);
+}
+
+/** Reset status validasi jika sebelumnya berstatus 'PERLU PERBAIKAN' karena adanya revisi baru dari pemeriksa. */
+function resetValidasiJikaPerluPerbaikan(PDO $pdo, int $mitraId): bool {
+    $stmt = $pdo->prepare('SELECT status FROM validasi WHERE mitra_id = ?');
+    $stmt->execute([$mitraId]);
+    if ($stmt->fetchColumn() === 'PERLU PERBAIKAN') {
+        $pdo->prepare("UPDATE validasi SET status = 'BELUM', validator_id = NULL, tanggal_validasi = NULL, catatan = NULL WHERE mitra_id = ?")->execute([$mitraId]);
+        return true;
+    }
+    return false;
 }
 
 /* ============================================================

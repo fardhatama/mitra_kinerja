@@ -30,6 +30,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
         if ($nama === '' || $username === '' || strlen($password) < 6 || !in_array($role, ['admin','pemeriksa','validator','pimpinan','pengampu','pic'], true)) {
             $_SESSION['flash_error'] = 'Lengkapi semua kolom. Password minimal 6 karakter.';
+        } elseif (strlen($username) > 50 || !preg_match('/^[a-zA-Z0-9_\-\.]+$/', $username)) {
+            $_SESSION['flash_error'] = 'Format username tidak valid (maksimal 50 karakter, hanya huruf, angka, garis bawah, minus, dan titik).';
         } else {
             try {
                 $stmt = $pdo->prepare('INSERT INTO users (nama, username, password_hash, role) VALUES (?,?,?,?)');
@@ -96,7 +98,7 @@ require __DIR__ . '/includes/header.php';
         <input type="hidden" name="action" value="create">
         <div class="form-grid">
             <div class="field"><label>Nama</label><input type="text" name="nama" required></div>
-            <div class="field"><label>Username</label><input type="text" name="username" required></div>
+            <div class="field"><label>Username</label><input type="text" name="username" required maxlength="50" pattern="^[a-zA-Z0-9_\-\.]+$"></div>
             <div class="field"><label>Password</label><input type="password" name="password" required minlength="6"></div>
             <div class="field">
                 <label>Role</label>

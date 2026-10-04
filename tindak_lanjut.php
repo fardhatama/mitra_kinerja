@@ -10,112 +10,124 @@ $canEdit = in_array($user['role'], ['admin', 'pemeriksa'], true);
 $errors = [];
 $success = '';
 
-// Handle create
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'create') {
-    if (!$canEdit) { $errors[] = 'Tidak memiliki akses.'; }
-    else {
-        $mitraId = (int)($_POST['mitra_id'] ?? 0);
-        $tindakan = trim($_POST['tindakan'] ?? '');
-        $tenggat = $_POST['tenggat'] ?? null;
-        if ($mitraId <= 0 || $tindakan === '') {
-            $errors[] = 'Pilih naskah dan isi tindakan.';
-        } else {
-            // BUG-TL-02: FK validation
-            $chk = $pdo->prepare('SELECT id FROM mitra_kinerja WHERE id = ?');
-            $chk->execute([$mitraId]);
-            if (!$chk->fetch()) {
-                $errors[] = 'Naskah yang dipilih tidak valid atau tidak ditemukan dalam database.';
-            } else {
-                // Upload File Bukti Kegiatan
-                $fileBukti = null;
-                if (isset($_FILES['file_bukti'])) {
-                    if ($_FILES['file_bukti']['error'] !== UPLOAD_ERR_OK && $_FILES['file_bukti']['error'] !== UPLOAD_ERR_NO_FILE) {
-                        $errCode = $_FILES['file_bukti']['error'];
-                        $uploadErrMap = [
-                            UPLOAD_ERR_INI_SIZE => 'Ukuran file melebihi upload_max_filesize pada server.',
-                            UPLOAD_ERR_FORM_SIZE => 'Ukuran file melebihi batas form HTML.',
-                            UPLOAD_ERR_PARTIAL => 'File hanya terunggah sebagian. Silakan coba lagi.',
-                            UPLOAD_ERR_NO_TMP_DIR => 'Direktori sementara (tmp) server tidak ditemukan.',
-                            UPLOAD_ERR_CANT_WRITE => 'Gagal menulis file ke disk server.',
-                            UPLOAD_ERR_EXTENSION => 'Unggahan file dihentikan oleh ekstensi PHP.',
-                        ];
-                        $errors[] = 'Gagal mengunggah file bukti: ' . ($uploadErrMap[$errCode] ?? "Kode error upload: $errCode");
-                    } elseif ($_FILES['file_bukti']['error'] === UPLOAD_ERR_OK) {
-                        $ext = strtolower(pathinfo($_FILES['file_bukti']['name'], PATHINFO_EXTENSION));
-                    $allowedExts = ['pdf', 'jpg', 'jpeg', 'png', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt'];
-                    if (!in_array($ext, $allowedExts, true)) {
-                        $errors[] = 'Format file bukti tidak didukung. Gunakan PDF, JPG, PNG, DOCX, XLSX, atau PPTX.';
-                    } elseif ($_FILES['file_bukti']['size'] > 25 * 1024 * 1024) {
-                        $errors[] = 'Ukuran file bukti melebihi batas maksimum 25MB.';
-                    } else {
-                        // BUG-TL-01: Validasi keaslian file (magic bytes)
-                        $tmpPath = $_FILES['file_bukti']['tmp_name'];
-                        $magicOk = false;
-                        if ($ext === 'pdf') {
-                            $magicOk = function_exists('isPdfValid') ? isPdfValid($tmpPath) : (str_starts_with((string)file_get_contents($tmpPath, false, null, 0, 4), '%PDF'));
-                        } elseif (in_array($ext, ['jpg', 'jpeg', 'png'], true)) {
-                            $magicOk = function_exists('isImageValid') ? isImageValid($tmpPath) : (@getimagesize($tmpPath) !== false);
-                        } elseif (in_array($ext, ['docx', 'xlsx', 'pptx'], true)) {
-                            $header = (string)file_get_contents($tmpPath, false, null, 0, 4);
-                            $magicOk = str_starts_with($header, "PK\x03\x04") || str_starts_with($header, 'PK');
-                        } elseif (in_array($ext, ['doc', 'xls', 'ppt'], true)) {
-                            $header = (string)file_get_contents($tmpPath, false, null, 0, 4);
-                            $magicOk = str_starts_with($header, "\xD0\xCF\x11\xE0") || str_starts_with($header, 'PK');
-                        }
-                        if (!$magicOk) {
-                            $errors[] = 'File tidak lolos validasi keaslian (magic-byte). Pastikan file tidak rusak atau dimanipulasi.';
-                        } else {
-                            $uploadDir = __DIR__ . '/public/uploads/tindak_lanjut/';
-                            if (!is_dir($uploadDir)) {
-                                mkdir($uploadDir, 0777, true);
-                            }
-                            $cleanBase = preg_replace('/[^a-zA-Z0-9_\.-]/', '_', pathinfo($_FILES['file_bukti']['name'], PATHINFO_FILENAME));
-                            $targetFile = 'bukti_' . $mitraId . '_' . time() . '_' . $cleanBase . '.' . $ext;
-                            if (move_uploaded_file($_FILES['file_bukti']['tmp_name'], $uploadDir . $targetFile)) {
-                                $fileBukti = 'public/uploads/tindak_lanjut/' . $targetFile;
-                            } else {
-                                $errors[] = 'Gagal menyimpan file bukti kegiatan di server.';
-                            }
-                        }
-                    }
-                }
-            }
+// Handle POST requests
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    $csrfToken = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
+    if (!verifyCsrfToken($csrfToken)) {
+        $errors[] = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
+    } else {
+        $action = $_POST['action'] ?? '';
 
-                if (empty($errors)) {
-                    // BUG-TL-02: try/catch on insert
-                    try {
-                        $stmt = $pdo->prepare('INSERT INTO tindak_lanjut (mitra_id, tindakan, tenggat, file_bukti) VALUES (?, ?, ?, ?)');
-                        $stmt->execute([$mitraId, $tindakan, $tenggat ?: null, $fileBukti]);
-                        logAudit($mitraId, $user['id'], 'TINDAK_LANJUT', 'Tambah tindak lanjut baru: ' . $tindakan);
-                        $success = 'Tindak lanjut berhasil ditambahkan.';
-                    } catch (Throwable $e) {
-                        $errors[] = 'Gagal menyimpan tindak lanjut: ' . $e->getMessage();
+        // Handle create
+        if ($action === 'create') {
+            if (!$canEdit) { $errors[] = 'Tidak memiliki akses.'; }
+            else {
+                $mitraId = (int)($_POST['mitra_id'] ?? 0);
+                $tindakan = trim($_POST['tindakan'] ?? '');
+                $tenggat = $_POST['tenggat'] ?? null;
+                if ($mitraId <= 0 || $tindakan === '') {
+                    $errors[] = 'Pilih naskah dan isi tindakan.';
+                } else {
+                    // BUG-TL-02: FK validation
+                    $chk = $pdo->prepare('SELECT id FROM mitra_kinerja WHERE id = ?');
+                    $chk->execute([$mitraId]);
+                    if (!$chk->fetch()) {
+                        $errors[] = 'Naskah yang dipilih tidak valid atau tidak ditemukan dalam database.';
+                    } else {
+                        // Upload File Bukti Kegiatan
+                        $fileBukti = null;
+                        if (isset($_FILES['file_bukti'])) {
+                            if ($_FILES['file_bukti']['error'] !== UPLOAD_ERR_OK && $_FILES['file_bukti']['error'] !== UPLOAD_ERR_NO_FILE) {
+                                $errCode = $_FILES['file_bukti']['error'];
+                                $uploadErrMap = [
+                                    UPLOAD_ERR_INI_SIZE => 'Ukuran file melebihi upload_max_filesize pada server.',
+                                    UPLOAD_ERR_FORM_SIZE => 'Ukuran file melebihi batas form HTML.',
+                                    UPLOAD_ERR_PARTIAL => 'File hanya terunggah sebagian. Silakan coba lagi.',
+                                    UPLOAD_ERR_NO_TMP_DIR => 'Direktori sementara (tmp) server tidak ditemukan.',
+                                    UPLOAD_ERR_CANT_WRITE => 'Gagal menulis file ke disk server.',
+                                    UPLOAD_ERR_EXTENSION => 'Unggahan file dihentikan oleh ekstensi PHP.',
+                                ];
+                                $errors[] = 'Gagal mengunggah file bukti: ' . ($uploadErrMap[$errCode] ?? "Kode error upload: $errCode");
+                            } elseif ($_FILES['file_bukti']['error'] === UPLOAD_ERR_OK) {
+                                $ext = strtolower(pathinfo($_FILES['file_bukti']['name'], PATHINFO_EXTENSION));
+                                $allowedExts = ['pdf', 'jpg', 'jpeg', 'png', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt'];
+                                if (!in_array($ext, $allowedExts, true)) {
+                                    $errors[] = 'Format file bukti tidak didukung. Gunakan PDF, JPG, PNG, DOCX, XLSX, atau PPTX.';
+                                } elseif ($_FILES['file_bukti']['size'] > 25 * 1024 * 1024) {
+                                    $errors[] = 'Ukuran file bukti melebihi batas maksimum 25MB.';
+                                } else {
+                                    // BUG-TL-01: Validasi keaslian file (magic bytes)
+                                    $tmpPath = $_FILES['file_bukti']['tmp_name'];
+                                    $magicOk = false;
+                                    if ($ext === 'pdf') {
+                                        $magicOk = function_exists('isPdfValid') ? isPdfValid($tmpPath) : (str_starts_with((string)file_get_contents($tmpPath, false, null, 0, 4), '%PDF'));
+                                    } elseif (in_array($ext, ['jpg', 'jpeg', 'png'], true)) {
+                                        $magicOk = function_exists('isImageValid') ? isImageValid($tmpPath) : (@getimagesize($tmpPath) !== false);
+                                    } elseif (in_array($ext, ['docx', 'xlsx', 'pptx'], true)) {
+                                        $header = (string)file_get_contents($tmpPath, false, null, 0, 4);
+                                        $magicOk = str_starts_with($header, "PK\x03\x04") || str_starts_with($header, 'PK');
+                                    } elseif (in_array($ext, ['doc', 'xls', 'ppt'], true)) {
+                                        $header = (string)file_get_contents($tmpPath, false, null, 0, 4);
+                                        $magicOk = str_starts_with($header, "\xD0\xCF\x11\xE0") || str_starts_with($header, 'PK');
+                                    }
+                                    if (!$magicOk) {
+                                        $errors[] = 'File tidak lolos validasi keaslian (magic-byte). Pastikan file tidak rusak atau dimanipulasi.';
+                                    } else {
+                                        $uploadDir = __DIR__ . '/public/uploads/tindak_lanjut/';
+                                        if (!is_dir($uploadDir)) {
+                                            mkdir($uploadDir, 0777, true);
+                                        }
+                                        $cleanBase = preg_replace('/[^a-zA-Z0-9_\.-]/', '_', pathinfo($_FILES['file_bukti']['name'], PATHINFO_FILENAME));
+                                        $targetFile = 'bukti_' . $mitraId . '_' . time() . '_' . $cleanBase . '.' . $ext;
+                                        if (move_uploaded_file($_FILES['file_bukti']['tmp_name'], $uploadDir . $targetFile)) {
+                                            $fileBukti = 'public/uploads/tindak_lanjut/' . $targetFile;
+                                        } else {
+                                            $errors[] = 'Gagal menyimpan file bukti kegiatan di server.';
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (empty($errors)) {
+                            // BUG-TL-02: try/catch on insert
+                            try {
+                                $stmt = $pdo->prepare('INSERT INTO tindak_lanjut (mitra_id, tindakan, tenggat, file_bukti) VALUES (?, ?, ?, ?)');
+                                $stmt->execute([$mitraId, $tindakan, $tenggat ?: null, $fileBukti]);
+                                logAudit($mitraId, $user['id'], 'TINDAK_LANJUT', 'Tambah tindak lanjut baru: ' . $tindakan);
+                                $success = 'Tindak lanjut berhasil ditambahkan.';
+                            } catch (Throwable $e) {
+                                $errors[] = 'Gagal menyimpan tindak lanjut: ' . $e->getMessage();
+                            }
+                        }
                     }
                 }
             }
         }
-    }
-}
 
-// Handle status update (BUG-TL-04: allow re-opening completed tasks or status toggling)
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'update_status') {
-    if (!$canEdit) { $errors[] = 'Tidak memiliki akses.'; }
-    else {
-        $tlId = (int)($_POST['tl_id'] ?? 0);
-        $newStatus = $_POST['new_status'] ?? '';
-        if (in_array($newStatus, ['Belum', 'Proses', 'Selesai'], true)) {
-            try {
-                $stmt = $pdo->prepare('UPDATE tindak_lanjut SET status = ? WHERE id = ?');
-                $stmt->execute([$newStatus, $tlId]);
-                $stmtG = $pdo->prepare('SELECT mitra_id, tindakan FROM tindak_lanjut WHERE id = ?');
-                $stmtG->execute([$tlId]);
-                $tlRow = $stmtG->fetch();
-                if ($tlRow) {
-                    logAudit($tlRow['mitra_id'], $user['id'], 'TINDAK_LANJUT', 'Ubah status tindak lanjut #' . $tlId . ' menjadi ' . $newStatus);
+        // Handle status update (BUG-TL-04: allow re-opening completed tasks or status toggling; Bug 4: verify existence)
+        elseif ($action === 'update_status') {
+            if (!$canEdit) { $errors[] = 'Tidak memiliki akses.'; }
+            else {
+                $tlId = (int)($_POST['tl_id'] ?? 0);
+                $newStatus = $_POST['new_status'] ?? '';
+                if (in_array($newStatus, ['Belum', 'Proses', 'Selesai'], true)) {
+                    try {
+                        $stmtG = $pdo->prepare('SELECT mitra_id, tindakan FROM tindak_lanjut WHERE id = ?');
+                        $stmtG->execute([$tlId]);
+                        $tlRow = $stmtG->fetch();
+                        if (!$tlRow) {
+                            $errors[] = 'Data tindak lanjut tidak ditemukan.';
+                        } else {
+                            $stmt = $pdo->prepare('UPDATE tindak_lanjut SET status = ? WHERE id = ?');
+                            $stmt->execute([$newStatus, $tlId]);
+                            logAudit($tlRow['mitra_id'], $user['id'], 'TINDAK_LANJUT', 'Ubah status tindak lanjut #' . $tlId . ' menjadi ' . $newStatus);
+                            $success = 'Status tindak lanjut diperbarui menjadi: ' . $newStatus;
+                        }
+                    } catch (Throwable $e) {
+                        $errors[] = 'Gagal memperbarui status: ' . $e->getMessage();
+                    }
                 }
-                $success = 'Status tindak lanjut diperbarui menjadi: ' . $newStatus;
-            } catch (Throwable $e) {
-                $errors[] = 'Gagal memperbarui status: ' . $e->getMessage();
             }
         }
     }
@@ -161,6 +173,8 @@ require __DIR__ . '/includes/header.php';
         <div class="muted" style="font-size:13px;">
             <?php if ($filteredMitra): ?>
                 Menampilkan tindak lanjut khusus naskah: <strong><?= h($filteredMitra['kode']) ?> &mdash; <?= h($filteredMitra['nama_mitra']) ?></strong>
+            <?php elseif ($filterMitraId > 0): ?>
+                <span style="color:#b91c1c;">Naskah kerja sama dengan ID <?= $filterMitraId ?> tidak ditemukan.</span>
             <?php else: ?>
                 Pantau dan kelola progres perbaikan per naskah
             <?php endif; ?>
@@ -170,6 +184,9 @@ require __DIR__ . '/includes/header.php';
         <?php if ($filteredMitra): ?>
             <a href="tindak_lanjut.php" class="btn btn-outline btn-sm">Tampilkan Semua</a>
             <a href="baseline.php?id=<?= $filterMitraId ?>" class="btn btn-outline btn-sm">&larr; Kembali ke Baseline</a>
+        <?php elseif ($filterMitraId > 0): ?>
+            <a href="tindak_lanjut.php" class="btn btn-primary btn-sm">Tampilkan Semua / Reset Filter</a>
+            <a href="dashboard.php" class="btn btn-outline btn-sm">&larr; Dashboard</a>
         <?php else: ?>
             <a href="dashboard.php" class="btn btn-outline btn-sm">&larr; Dashboard</a>
         <?php endif; ?>
@@ -183,6 +200,7 @@ require __DIR__ . '/includes/header.php';
 <div class="card">
     <h2>Tambah Tindak Lanjut</h2>
     <form method="post" enctype="multipart/form-data">
+        <?= csrfField() ?>
         <input type="hidden" name="action" value="create">
         <div class="form-grid">
             <div class="field" style="grid-column: span 2;">
@@ -252,6 +270,7 @@ require __DIR__ . '/includes/header.php';
                     <?php if ($canEdit): ?>
                         <?php if ($tl['status'] === 'Belum'): ?>
                         <form method="post" style="display:inline;">
+                            <?= csrfField() ?>
                             <input type="hidden" name="action" value="update_status">
                             <input type="hidden" name="tl_id" value="<?= $tl['id'] ?>">
                             <input type="hidden" name="new_status" value="Proses">
@@ -259,6 +278,7 @@ require __DIR__ . '/includes/header.php';
                         </form>
                         <?php elseif ($tl['status'] === 'Proses'): ?>
                         <form method="post" style="display:inline;">
+                            <?= csrfField() ?>
                             <input type="hidden" name="action" value="update_status">
                             <input type="hidden" name="tl_id" value="<?= $tl['id'] ?>">
                             <input type="hidden" name="new_status" value="Selesai">
@@ -267,6 +287,7 @@ require __DIR__ . '/includes/header.php';
                         <?php elseif ($tl['status'] === 'Selesai'): ?>
                         <span class="muted" style="font-size:11.5px;margin-right:6px;">✓ Tuntas</span>
                         <form method="post" style="display:inline;">
+                            <?= csrfField() ?>
                             <input type="hidden" name="action" value="update_status">
                             <input type="hidden" name="tl_id" value="<?= $tl['id'] ?>">
                             <input type="hidden" name="new_status" value="Proses">

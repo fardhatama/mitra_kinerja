@@ -1,4 +1,10 @@
 <?php
+// Mencegah akses langsung via web browser
+if (basename($_SERVER['SCRIPT_FILENAME'] ?? '') === 'database.php' || (isset($_SERVER['SCRIPT_FILENAME']) && realpath(__FILE__) === realpath($_SERVER['SCRIPT_FILENAME']))) {
+    http_response_code(403);
+    die('Akses langsung ditolak.');
+}
+
 /**
  * Konfigurasi koneksi database — aman dipakai di dev maupun production
  * TANPA mengubah kode, cukup lewat salah satu dari dua cara ini:

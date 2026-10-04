@@ -146,7 +146,7 @@ function callGeminiAPI(string $prompt): ?string {
             'Content-Type: application/json',
         ],
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 30,
+        CURLOPT_TIMEOUT => 15,
         CURLOPT_SSL_VERIFYPEER => true,
     ]);
     
@@ -232,7 +232,7 @@ function callGroqAPI(string $prompt): ?string {
             'Authorization: Bearer ' . GROQ_API_KEY,
         ],
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 30,
+        CURLOPT_TIMEOUT => 15,
         CURLOPT_SSL_VERIFYPEER => true,
     ]);
     
@@ -311,7 +311,7 @@ function callOpenRouterAPI(string $prompt): ?string {
             'X-Title: Mitra Kinerja - Kanwil Kementerian Hukum Kepri',
         ],
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 45, // OpenRouter free models can be slower
+        CURLOPT_TIMEOUT => 15,
         CURLOPT_SSL_VERIFYPEER => true,
     ]);
     
@@ -358,7 +358,7 @@ function getCachedInsight(): ?array {
     }
     
     $cache = json_decode(file_get_contents(AI_CACHE_FILE), true);
-    if (!$cache || !isset($cache['timestamp'])) {
+    if (!$cache || !isset($cache['timestamp']) || !isset($cache['insight'])) {
         return null;
     }
     

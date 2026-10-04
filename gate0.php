@@ -105,7 +105,10 @@ const GATE0_TRIGGERS = [
 
 /* ── 1. TAMBAH USULAN PRA-PKS ────────────────────────────── */
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'create') {
-    if (!$canEdit) {
+    $csrfToken = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
+    if (!verifyCsrfToken($csrfToken)) {
+        $errors[] = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
+    } elseif (!$canEdit) {
         $errors[] = 'Anda tidak memiliki hak akses untuk menambah usulan.';
     } else {
         $nomorUsulan    = trim($_POST['nomor_usulan'] ?? '');
@@ -178,6 +181,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
 
         if ($nomorUsulan === '' || $calonMitra === '' || $judulRencana === '') {
             $errors[] = 'Nomor Usulan, Calon Mitra, dan Judul Rencana wajib diisi.';
+        } elseif ($mulai && $selesai && $selesai < $mulai) {
+            // Bug 9: Validasi perkiraan_selesai >= perkiraan_mulai
+            $errors[] = 'Perkiraan tanggal selesai tidak boleh lebih awal dari perkiraan tanggal mulai.';
         } else {
             try {
                 $stmt = $pdo->prepare('INSERT INTO pra_pks (
@@ -209,7 +215,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
 
 /* ── 2. KEPUTUSAN PIMPINAN ────────────────────────────────── */
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'decision') {
-    if (!$canDecide) {
+    $csrfToken = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
+    if (!verifyCsrfToken($csrfToken)) {
+        $errors[] = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
+    } elseif (!$canDecide) {
         $errors[] = 'Hanya pimpinan atau admin yang berhak memberikan keputusan Gate 0.';
     } else {
         $idUsulan = (int)($_POST['usulan_id'] ?? 0);
@@ -219,20 +228,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
         if ($idUsulan <= 0 || !in_array($statusPersetujuan, ['Disetujui Pimpinan', 'Dikembalikan untuk Revisi', 'Ditolak Pimpinan'], true)) {
             $errors[] = 'Data keputusan tidak valid.';
         } else {
-            // BUG-G0-12: Prevent decision status change if proposal is already promoted to PKS
-            $chkP = $pdo->prepare('SELECT is_promoted_to_pks, nomor_usulan FROM pra_pks WHERE id = ?');
-            $chkP->execute([$idUsulan]);
-            $rowP = $chkP->fetch();
-            if (!$rowP) {
-                $errors[] = 'Usulan tidak ditemukan.';
-            } elseif (!empty($rowP['is_promoted_to_pks'])) {
-                $errors[] = 'Usulan ' . $rowP['nomor_usulan'] . ' telah dipromosikan menjadi PKS aktif. Keputusan pimpinan tidak dapat diubah kembali.';
-            } else {
-                $stmt = $pdo->prepare('UPDATE pra_pks SET status_persetujuan = ?, catatan_pimpinan = ?, tanggal_persetujuan = CURDATE(), pimpinan_id = ? WHERE id = ?');
-                $stmt->execute([$statusPersetujuan, $catatanPimpinan ?: null, $user['id'], $idUsulan]);
-                // BUG-G0-13: Audit log on decision
-                logAudit(0, $user['id'], 'GATE0_DECISION', "Keputusan Gate 0 untuk usulan {$rowP['nomor_usulan']}: {$statusPersetujuan}");
-                $success = 'Keputusan dan disposisi pimpinan untuk usulan <strong>' . htmlspecialchars($rowP['nomor_usulan']) . '</strong> berhasil disimpan.';
+            // BUG-G0-12 & Bug 18: Prevent decision status change if proposal is already promoted to PKS, wrap in try/catch
+            try {
+                $chkP = $pdo->prepare('SELECT is_promoted_to_pks, nomor_usulan FROM pra_pks WHERE id = ?');
+                $chkP->execute([$idUsulan]);
+                $rowP = $chkP->fetch();
+                if (!$rowP) {
+                    $errors[] = 'Usulan tidak ditemukan.';
+                } elseif (!empty($rowP['is_promoted_to_pks'])) {
+                    $errors[] = 'Usulan ' . $rowP['nomor_usulan'] . ' telah dipromosikan menjadi PKS aktif. Keputusan pimpinan tidak dapat diubah kembali.';
+                } else {
+                    $stmt = $pdo->prepare('UPDATE pra_pks SET status_persetujuan = ?, catatan_pimpinan = ?, tanggal_persetujuan = CURDATE(), pimpinan_id = ? WHERE id = ?');
+                    $stmt->execute([$statusPersetujuan, $catatanPimpinan ?: null, $user['id'], $idUsulan]);
+                    // BUG-G0-13: Audit log on decision
+                    logAudit(0, $user['id'], 'GATE0_DECISION', "Keputusan Gate 0 untuk usulan {$rowP['nomor_usulan']}: {$statusPersetujuan}");
+                    $success = 'Keputusan dan disposisi pimpinan untuk usulan <strong>' . htmlspecialchars($rowP['nomor_usulan']) . '</strong> berhasil disimpan.';
+                }
+            } catch (Throwable $e) {
+                $errors[] = 'Gagal menyimpan keputusan pimpinan: ' . $e->getMessage();
             }
         }
     }
@@ -240,7 +253,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
 
 /* ── 3. PROMOSI OTOMATIS KE PKS AKTIF ────────────────────── */
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'promote') {
-    if (!$canEdit) {
+    $csrfToken = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
+    if (!verifyCsrfToken($csrfToken)) {
+        $errors[] = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
+    } elseif (!$canEdit) {
         $errors[] = 'Akses ditolak.';
     } else {
         $idUsulan = (int)($_POST['usulan_id'] ?? 0);
@@ -296,6 +312,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                 if (mb_strlen($rkJudul) > 255) {
                     $rkJudul = mb_substr($rkJudul, 0, 252) . '...';
                 }
+
+                // Bug 20: Clamp work plan duration so tanggal_selesai does not exceed $selesaiPks
+                $rkSelesai = date('Y-m-d', strtotime($mulaiPks . ' +1 year'));
+                if ($rkSelesai > $selesaiPks) {
+                    $rkSelesai = $selesaiPks;
+                }
+
                 $stmtRK = $pdo->prepare('INSERT INTO rencana_kerja (
                     mitra_id, judul_rencana, ruang_lingkup, maksud_tujuan, tanggal_mulai, tanggal_selesai, status, alasan_persetujuan
                 ) VALUES (?, ?, ?, ?, ?, ?, \'Disetujui\', ?)');
@@ -305,7 +328,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                     $pra['ruang_lingkup'],
                     $pra['tujuan_singkat'],
                     $mulaiPks,
-                    date('Y-m-d', strtotime($mulaiPks . ' +1 year')),
+                    $rkSelesai,
                     'Disetujui otomatis melalui kelayakan Gate 0'
                 ]);
 
@@ -437,7 +460,62 @@ function parseGate0Upload(string $tmpPath, string $origName): array {
             }
         }
         $rows = [];
-        $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml');
+        // Bug 3: Parse sheet targets dynamically from xl/workbook.xml and relationships rather than hardcoding xl/worksheets/sheet1.xml
+        $sheetTarget = '';
+        $relsContent = $zip->getFromName('xl/_rels/workbook.xml.rels');
+        $relMap = [];
+        if ($relsContent) {
+            preg_match_all('/<Relationship[^>]+>/i', $relsContent, $rm);
+            foreach ($rm[0] as $tag) {
+                preg_match('/Id=\"([^\"]+)\"/i', $tag, $mId);
+                preg_match('/Target=\"([^\"]+)\"/i', $tag, $mTgt);
+                if (!empty($mId[1]) && !empty($mTgt[1])) {
+                    $t = ltrim($mTgt[1], '/');
+                    if (!str_starts_with($t, 'xl/')) $t = 'xl/' . $t;
+                    $relMap[$mId[1]] = $t;
+                }
+            }
+        }
+        $wbContent = $zip->getFromName('xl/workbook.xml');
+        if ($wbContent) {
+            $cleanWb = cleanXmlString($wbContent);
+            $wbXml = @simplexml_load_string($cleanWb);
+            if ($wbXml !== false && isset($wbXml->sheets->sheet)) {
+                foreach ($wbXml->sheets->sheet as $s) {
+                    $rId = (string)($s['id'] ?? '');
+                    if (!$rId) {
+                        foreach ($s->attributes() as $k => $v) {
+                            if (str_ends_with(strtolower($k), 'id')) {
+                                $rId = (string)$v;
+                                break;
+                            }
+                        }
+                    }
+                    if ($rId && isset($relMap[$rId])) {
+                        $sheetTarget = $relMap[$rId];
+                        break;
+                    }
+                }
+            }
+            if (!$sheetTarget) {
+                preg_match_all('/<[^>]*sheet[^>]+>/i', $wbContent, $sm);
+                foreach ($sm[0] as $tag) {
+                    preg_match('/(?:r:id|\bid)=\"([^\"]+)\"/i', $tag, $mRid);
+                    if (!empty($mRid[1]) && isset($relMap[$mRid[1]])) {
+                        $sheetTarget = $relMap[$mRid[1]];
+                        break;
+                    }
+                }
+            }
+        }
+        if (!$sheetTarget) {
+            $sheetTarget = 'xl/worksheets/sheet1.xml';
+        }
+        $sheetXml = $zip->getFromName($sheetTarget);
+        if (!$sheetXml && $sheetTarget !== 'xl/worksheets/sheet1.xml') {
+            $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml');
+        }
+
         if ($sheetXml) {
             $xml = @simplexml_load_string(cleanXmlString($sheetXml));
             if ($xml !== false && isset($xml->sheetData->row)) {
@@ -503,7 +581,10 @@ function parseGate0Upload(string $tmpPath, string $origName): array {
 
 /* ── 5. IMPORT EXCEL (.xlsx) & CSV ────────────────────────── */
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'import_csv') {
-    if (!$canEdit) {
+    $csrfToken = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
+    if (!verifyCsrfToken($csrfToken)) {
+        $errors[] = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
+    } elseif (!$canEdit) {
         $errors[] = 'Akses ditolak.';
     } elseif (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
         $errors[] = 'Pilih file Excel (.xlsx) atau CSV yang valid.';
@@ -744,7 +825,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                 }
 
                 foreach ($dataRows as $row) {
-                    if (empty($row[0])) continue;
+                    // Bug 19: In horizontal import, do not skip rows where column A is empty if colMap maps required fields on other columns
+                    if (empty(array_filter($row, fn($v) => trim((string)$v) !== ''))) continue;
 
                     // BUG-G0-08: Fix $getVal fallback in horizontal import for column indices
                     $getVal = function($keys, $def = '') use ($row, $colMap) {
@@ -1329,6 +1411,7 @@ require __DIR__ . '/includes/header.php';
                                 <?php if (!$u['is_promoted_to_pks']): ?>
                                     <?php if ($canEdit): ?>
                                     <form method="post" style="display:inline;" onsubmit="return confirm('Promosikan usulan ini menjadi PKS aktif dengan Rencana Kerja?');">
+                                        <?= csrfField() ?>
                                         <input type="hidden" name="action" value="promote">
                                         <input type="hidden" name="usulan_id" value="<?= $u['id'] ?>">
                                         <button type="submit" class="btn btn-success btn-sm" style="font-size:11px;padding:3px 7px;">🚀 Jadi PKS</button>
@@ -1357,6 +1440,7 @@ require __DIR__ . '/includes/header.php';
         <button type="button" onclick="closeAllGate0Modals()" style="background:none;border:none;font-size:20px;cursor:pointer;">&times;</button>
     </div>
     <form method="post">
+        <?= csrfField() ?>
         <input type="hidden" name="action" value="create">
 
         <h3 style="font-size:14px;color:#1e40af;margin:10px 0 8px;">A. Identitas Usulan Kerja Sama</h3>
@@ -1453,6 +1537,7 @@ require __DIR__ . '/includes/header.php';
         <button type="button" onclick="closeAllGate0Modals()" style="background:none;border:none;font-size:20px;cursor:pointer;">&times;</button>
     </div>
     <form method="post">
+        <?= csrfField() ?>
         <input type="hidden" name="action" value="decision">
         <input type="hidden" name="usulan_id" id="decUsulanId">
         <div style="margin-bottom:12px;font-size:13px;">
@@ -1484,6 +1569,7 @@ require __DIR__ . '/includes/header.php';
         <button type="button" onclick="closeAllGate0Modals()" style="background:none;border:none;font-size:20px;cursor:pointer;">&times;</button>
     </div>
     <form method="post" enctype="multipart/form-data">
+        <?= csrfField() ?>
         <input type="hidden" name="action" value="import_csv">
         <p style="font-size:13px;" class="muted">
             Gunakan format Excel (.xlsx) atau CSV sesuai template yang disediakan pada tombol di kanan atas.
@@ -1520,6 +1606,11 @@ function openDecisionModal(id, no, mitra) {
     document.getElementById('decUsulanId').value = id;
     document.getElementById('decUsulanNo').textContent = no;
     document.getElementById('decCalonMitra').textContent = mitra;
+    // Bug 26: In openDecisionModal(), clear/reset catatan_pimpinan textarea and status_persetujuan select on open
+    var statusSelect = document.querySelector('#decisionModal select[name="status_persetujuan"]');
+    if (statusSelect) statusSelect.selectedIndex = 0;
+    var catatanText = document.querySelector('#decisionModal textarea[name="catatan_pimpinan"]');
+    if (catatanText) catatanText.value = '';
     openGate0Modal('decisionModal');
 }
 </script>

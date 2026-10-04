@@ -356,9 +356,11 @@ a:hover { text-decoration: underline; }
 .gauge-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
 
 /* Horizontal bar */
+.hbar-track { height: 6px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+.hbar-fill { height: 100%; border-radius: 4px; transition: width .5s ease; }
 .hbar-item { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .hbar-item .hbar-label { width: 110px; font-size: 12px; color: var(--text-muted); text-align: right; flex-shrink: 0; }
-.hbar-item .hbar-track { flex: 1; height: 18px; background: #e9ecef; border-radius: 4px; overflow: hidden; }
+.hbar-item .hbar-track { flex: 1; height: 18px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
 .hbar-item .hbar-fill { height: 100%; border-radius: 4px; transition: width .5s ease; }
 .hbar-item .hbar-val { width: 32px; font-size: 12px; font-weight: 700; text-align: right; }
 
@@ -504,6 +506,10 @@ tr:hover td { background: #fafbfc; }
 .btn-primary:hover { background: #1d4ed8; }
 .btn-outline { background: #fff; border: 1px solid var(--border); color: var(--text); }
 .btn-outline:hover { background: #f1f5f9; }
+.btn-success { background: #16a34a; color: #fff; }
+.btn-success:hover { background: #15803d; }
+.btn-warning { background: #ca8a04; color: #fff; }
+.btn-warning:hover { background: #a16207; }
 .btn-sm { padding: 5px 10px; font-size: 12px; }
 
 /* ---------- Indikator blocks ---------- */
@@ -557,8 +563,81 @@ tr:hover td { background: #fafbfc; }
     .action-card { flex: 1 1 calc(50% - 16px); min-width: 240px; }
     .hero-instansi { display: none; }
 }
+/* Mobile navigation toggle button & drawer */
+.mobile-nav-toggle {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    width: 36px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    cursor: pointer;
+    padding: 7px;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+.mobile-nav-toggle:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+.mobile-nav-toggle span {
+    display: block;
+    width: 100%;
+    height: 2px;
+    background: #fff;
+    border-radius: 2px;
+}
+.mobile-nav-backdrop {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 9998;
+    backdrop-filter: blur(2px);
+}
+.mobile-nav-backdrop.active {
+    display: block;
+}
+.sidebar-header-mobile {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+.sidebar-close-mobile {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 22px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 4px;
+}
+
 @media (max-width: 768px) {
+    .mobile-nav-toggle { display: flex; }
     .sidebar { display: none; }
+    .sidebar.mobile-open {
+        display: flex !important;
+        flex-direction: column;
+        position: fixed !important;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 260px;
+        max-width: 80vw;
+        z-index: 9999;
+        box-shadow: 4px 0 24px rgba(0,0,0,0.5);
+    }
+    .sidebar.mobile-open .sidebar-header-mobile {
+        display: flex;
+    }
     .app-content { margin-left: 0; }
     .page-body { margin-left: 0; padding-bottom: 40px; }
     .app-footer { margin-left: 0; }
@@ -568,7 +647,8 @@ tr:hover td { background: #fafbfc; }
     .dash-tables { grid-template-columns: 1fr; }
     .dash-tables.dash-tables-2col { grid-template-columns: 1fr; }
     .action-card { flex: 1 1 100%; }
-    .app-hero { flex-direction: column; align-items: flex-start; gap: 12px; padding-left: 28px; }
+    .app-hero { flex-direction: column; align-items: flex-start; gap: 12px; padding-left: 18px; }
+    .hero-left { display: flex; align-items: center; gap: 12px; width: 100%; }
     .hero-title { font-size: 20px; }
     .header-user { align-self: flex-end; }
     .ai-toast { width: calc(100vw - 32px); right: 16px; bottom: 56px; }

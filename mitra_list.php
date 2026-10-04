@@ -5,6 +5,13 @@ requireLogin();
 
 $pdo = getDB();
 $all = getAllMitraSummary($pdo);
+// Urutkan Pilot Utama terlebih dahulu (P01..P13), disusul Cadangan (C01..C05)
+usort($all, function($a, $b) {
+    $pA = ($a['mitra']['portofolio'] === 'Pilot Utama' || $a['mitra']['portofolio'] === 'PILOT') ? 0 : 1;
+    $pB = ($b['mitra']['portofolio'] === 'Pilot Utama' || $b['mitra']['portofolio'] === 'PILOT') ? 0 : 1;
+    if ($pA !== $pB) return $pA <=> $pB;
+    return strnatcasecmp($a['mitra']['kode'], $b['mitra']['kode']);
+});
 $user = currentUser();
 
 $pageTitle = 'Daftar Naskah';

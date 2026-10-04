@@ -40,6 +40,15 @@ function currentUser(bool $forceRefresh = false): ?array {
         return null;
     }
 
+    // Idle session timeout check (30 minutes = 1800 seconds)
+    if (!empty($_SESSION['last_activity']) && (time() - (int)$_SESSION['last_activity'] > 1800)) {
+        doLogout();
+        $hasChecked = true;
+        $cachedUser = null;
+        return null;
+    }
+    $_SESSION['last_activity'] = time();
+
     // BUG-08: Re-check user status from DB to ensure session is still valid/active.
     // If user is inactive or deleted, log them out immediately.
     try {
@@ -65,9 +74,10 @@ function currentUser(bool $forceRefresh = false): ?array {
         $hasChecked = true;
         return $cachedUser;
     } catch (Throwable $e) {
+        error_log('currentUser DB verification failed: ' . $e->getMessage());
         $hasChecked = true;
-        $cachedUser = $_SESSION['user'];
-        return $cachedUser;
+        $cachedUser = null;
+        return null;
     }
 }
 
@@ -148,6 +158,7 @@ function attemptLogin(string $username, string $password): bool {
         session_regenerate_id(true);
         unset($user['password_hash']);
         $_SESSION['user'] = $user;
+        $_SESSION['last_activity'] = time();
         currentUser(true);
         logAudit(null, (int)$user['id'], 'LOGIN', 'Login berhasil');
         return true;

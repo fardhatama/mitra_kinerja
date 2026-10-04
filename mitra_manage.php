@@ -5,6 +5,7 @@ requireRole(['admin', 'pemeriksa', 'pengampu']);
 
 $pdo = getDB();
 $user = currentUser();
+$userRole = $user['role'] ?? 'pemeriksa';
 $id = (int)($_GET['id'] ?? 0);
 $errors = [];
 $success = '';
@@ -64,9 +65,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                         $stmtU = $pdo->prepare('UPDATE mitra_kinerja SET file_naskah = ? WHERE id = ?');
                         $stmtU->execute([$savedPath, $targetMitraId]);
 
-                        // Sinkronkan otomatis ke Baseline Elemen 1 (Identitas naskah)
-                        $stmtB = $pdo->prepare("UPDATE baseline_elemen SET link_sumber_bukti = ?, status = 'TERVERIFIKASI' WHERE mitra_id = ? AND nomor_elemen = 1");
-                        $stmtB->execute([$savedPath, $targetMitraId]);
+                        // Bug 5: Verifikasi baseline_status !== 'TERVERIFIKASI / DIKUNCI' sebelum menimpa elemen 1 (kecuali admin)
+                        $isBaselineLocked = (($targetMitra['baseline_status'] ?? '') === 'TERVERIFIKASI / DIKUNCI');
+                        if (!$isBaselineLocked || $userRole === 'admin') {
+                            $stmtB = $pdo->prepare("UPDATE baseline_elemen SET link_sumber_bukti = ?, status = 'TERVERIFIKASI' WHERE mitra_id = ? AND nomor_elemen = 1");
+                            $stmtB->execute([$savedPath, $targetMitraId]);
+                        }
 
                         logAudit($targetMitraId, $user['id'], 'UPLOAD_SCAN', 'Upload scan naskah PDF: ' . $kodeMitra);
                         $success = 'Berkas scan naskah PDF untuk ' . $kodeMitra . ' berhasil diunggah dan disinkronkan ke Identitas Baseline.';
@@ -119,6 +123,8 @@ if ($id > 0) {
 
             if ($judulRk === '') {
                 $errors[] = 'Judul Rencana Kerja wajib diisi.';
+            } elseif ($selesaiRk < $mulaiRk) {
+                $errors[] = 'Tanggal selesai rencana kerja harus sama atau setelah tanggal mulai.';
             } else {
                 try {
                     $stmtR = $pdo->prepare('INSERT INTO rencana_kerja (mitra_id, judul_rencana, ruang_lingkup, tanggal_mulai, tanggal_selesai, status) VALUES (?, ?, ?, ?, ?, ?)');
@@ -224,10 +230,49 @@ if ($id > 0) {
 
                 $stmtU = $pdo->prepare('UPDATE mitra_kinerja SET nama_mitra=?, judul=?, portofolio=?, bidang=?, jenis=?, pks_induk_id=?, tanggal_mulai=?, tanggal_berakhir=?, status_tanggal=?, cutoff_date=?, sumber_baseline=?, pic_internal=?, pic_mitra=?, evaluasi_per_tahun=?, file_naskah=?, foto_kerjasama=? WHERE id=?');
                 $stmtU->execute([$namaMitra, $judul, $portofolio, $bidang, $jenis, $pksIndukId, $mulai, $berakhir, $statusTgl, $cutoff, $sumber, $picInternal, $picMitra, $evaluasiPerTahun, $fileNaskah, $fotoKerjasama, $id]);
-                // Bug 5.6: Hanya perbarui status baseline elemen 1 ke TERVERIFIKASI jika berkas baru benar-benar diunggah
+
+                // Bug 3: Sinkronkan/hitung ulang siklus_monev agar milestone sesuai durasi/tanggal kontrak baru
+                $keb = hitungKebutuhanScorecard($mulai, $berakhir, $evaluasiPerTahun);
+                if (!empty($keb['milestones'])) {
+                    $stmtCurSM = $pdo->prepare('SELECT * FROM siklus_monev WHERE mitra_id = ?');
+                    $stmtCurSM->execute([$id]);
+                    $currentMilestones = $stmtCurSM->fetchAll(PDO::FETCH_ASSOC);
+                    $curMap = [];
+                    foreach ($currentMilestones as $cm) {
+                        $curMap[(int)$cm['siklus_ke']] = $cm;
+                    }
+
+                    $validSiklusKe = [];
+                    foreach ($keb['milestones'] as $ms) {
+                        $ske = (int)$ms['siklus_ke'];
+                        $validSiklusKe[] = $ske;
+                        $isPast = !empty($ms['is_past']);
+                        if (isset($curMap[$ske])) {
+                            $curr = $curMap[$ske];
+                            $isCompleted = in_array(strtolower(trim($curr['status_siklus'] ?? '')), ['selesai', 'selesai evaluasi'], true);
+                            $newStatus = $isCompleted ? 'Selesai' : ($isPast ? 'Perlu Penilaian Segera' : ($curr['status_siklus'] === 'Sedang Dinilai' ? 'Sedang Dinilai' : 'Menunggu'));
+                            $stmtUpdSM = $pdo->prepare('UPDATE siklus_monev SET nama_siklus = ?, tanggal_target_evaluasi = ?, status_siklus = ? WHERE id = ?');
+                            $stmtUpdSM->execute([$ms['nama'], $ms['target_tgl'], $newStatus, $curr['id']]);
+                        } else {
+                            $statusSiklus = $isPast ? 'Perlu Penilaian Segera' : 'Menunggu';
+                            $stmtInsSM = $pdo->prepare('INSERT INTO siklus_monev (mitra_id, siklus_ke, nama_siklus, tanggal_target_evaluasi, status_siklus) VALUES (?, ?, ?, ?, ?)');
+                            $stmtInsSM->execute([$id, $ske, $ms['nama'], $ms['target_tgl'], $statusSiklus]);
+                        }
+                    }
+                    if (!empty($validSiklusKe)) {
+                        $inPlaceholders = implode(',', array_fill(0, count($validSiklusKe), '?'));
+                        $stmtDelSM = $pdo->prepare("DELETE FROM siklus_monev WHERE mitra_id = ? AND siklus_ke NOT IN ($inPlaceholders) AND status_siklus NOT IN ('Selesai', 'selesai evaluasi')");
+                        $stmtDelSM->execute(array_merge([$id], $validSiklusKe));
+                    }
+                }
+
+                // Bug 15: Hanya perbarui status baseline elemen 1 jika tidak dikunci (atau jika user adalah admin)
                 if ($newFileUploaded && $fileNaskah) {
-                    $stmtB = $pdo->prepare("UPDATE baseline_elemen SET link_sumber_bukti = ?, status = 'TERVERIFIKASI' WHERE mitra_id = ? AND nomor_elemen = 1");
-                    $stmtB->execute([$fileNaskah, $id]);
+                    $isBaselineLocked = (($mitra['baseline_status'] ?? '') === 'TERVERIFIKASI / DIKUNCI');
+                    if (!$isBaselineLocked || $userRole === 'admin') {
+                        $stmtB = $pdo->prepare("UPDATE baseline_elemen SET link_sumber_bukti = ?, status = 'TERVERIFIKASI' WHERE mitra_id = ? AND nomor_elemen = 1");
+                        $stmtB->execute([$fileNaskah, $id]);
+                    }
                 }
                 syncStatusScorecard($pdo, $id);
                 logAudit($id, $user['id'], 'UPDATE_MITRA', 'Data naskah ' . $mitra['kode'] . ' diperbarui');
@@ -431,23 +476,43 @@ if ($id > 0) {
 <?php exit; }
 
 /* ── LISTING + TAMBAH (tanpa ?id=) ─────────────────── */
+$userRole = $user['role'] ?? 'pemeriksa';
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
     $csrfToken = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
     if (!verifyCsrfToken($csrfToken)) {
         $errors[] = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
     } else {
         $kode       = strtoupper(trim($_POST['kode'] ?? ''));
-    $portofolio = $_POST['portofolio'] ?? 'Pilot Utama';
-    $namaMitra  = trim($_POST['nama_mitra'] ?? '');
-    $judul      = trim($_POST['judul'] ?? '');
-    $bidang     = $_POST['bidang'] ?? 'AHU';
-    $jenis      = $_POST['jenis'] ?? 'PKS';
-    $mulai      = $_POST['tanggal_mulai'] ?: null;
-    $berakhir   = $_POST['tanggal_berakhir'] ?: null;
-    $statusTgl  = $_POST['status_tanggal'] ?? 'BELUM TERVERIFIKASI';
-    $evaluasiPerTahun = !empty($_POST['evaluasi_per_tahun']) ? (int)$_POST['evaluasi_per_tahun'] : 4;
-    $picInternal = trim($_POST['pic_internal'] ?? '');
-    $picMitra    = trim($_POST['pic_mitra'] ?? '');
+        $portofolio = $_POST['portofolio'] ?? 'Pilot Utama';
+        $namaMitra  = trim($_POST['nama_mitra'] ?? '');
+        $judul      = trim($_POST['judul'] ?? '');
+        $bidang     = $_POST['bidang'] ?? 'AHU';
+        $jenis      = $_POST['jenis'] ?? 'PKS';
+        $mulai      = $_POST['tanggal_mulai'] ?: null;
+        $berakhir   = $_POST['tanggal_berakhir'] ?: null;
+        $statusTgl  = $_POST['status_tanggal'] ?? 'BELUM TERVERIFIKASI';
+        $evaluasiPerTahun = !empty($_POST['evaluasi_per_tahun']) ? (int)$_POST['evaluasi_per_tahun'] : 4;
+        $picInternal = trim($_POST['pic_internal'] ?? '');
+        $picMitra    = trim($_POST['pic_mitra'] ?? '');
+
+        // Bug 9: Validasi enum values pada pembuatan mitra baru
+        $validPortofolio = ['Pilot Utama', 'Cadangan'];
+        $validJenis = ['PKS', 'MoU'];
+        $validBidang = ['AHU', 'KI', 'P3H', 'PPL', 'Keuangan', 'Humas', 'SDM'];
+        $validStatusTanggal = ['TERVERIFIKASI', 'BELUM TERVERIFIKASI'];
+
+        if (!in_array($portofolio, $validPortofolio, true)) {
+            $portofolio = 'Pilot Utama';
+        }
+        if (!in_array($jenis, $validJenis, true)) {
+            $jenis = 'PKS';
+        }
+        if (!in_array($bidang, $validBidang, true)) {
+            $bidang = 'AHU';
+        }
+        if (!in_array($statusTgl, $validStatusTanggal, true)) {
+            $statusTgl = 'BELUM TERVERIFIKASI';
+        }
 
     // Upload Scan Naskah PDF jika disertakan
     $fileNaskah = null;
@@ -477,8 +542,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
             // Bug 10.4: Set default cutoff_date (tanggal mulai atau hari ini) agar EWS Masa Berlaku berfungsi
             $cutoff = !empty($_POST['cutoff_date']) ? $_POST['cutoff_date'] : ($mulai ?: date('Y-m-d'));
 
-            $stmt = $pdo->prepare('INSERT INTO mitra_kinerja (kode, portofolio, nama_mitra, judul, bidang, jenis, pks_induk_id, tanggal_mulai, tanggal_berakhir, status_tanggal, cutoff_date, evaluasi_per_tahun, pic_internal, pic_mitra, file_naskah) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-            $stmt->execute([$kode, $portofolio, $namaMitra, $judul, $bidang, $jenis, $pksInduk, $mulai, $berakhir, $statusTgl, $cutoff, $evaluasiPerTahun, $picInternal, $picMitra, $fileNaskah]);
+            // Bug 19: Inisialisasi baseline_status ke 'DALAM PROSES' jika berkas scan naskah diunggah (karena elemen 1 terverifikasi)
+            $baselineStatusInit = !empty($fileNaskah) ? 'DALAM PROSES' : 'BELUM DIISI';
+
+            $stmt = $pdo->prepare('INSERT INTO mitra_kinerja (kode, portofolio, nama_mitra, judul, bidang, jenis, pks_induk_id, tanggal_mulai, tanggal_berakhir, status_tanggal, cutoff_date, evaluasi_per_tahun, pic_internal, pic_mitra, file_naskah, baseline_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+            $stmt->execute([$kode, $portofolio, $namaMitra, $judul, $bidang, $jenis, $pksInduk, $mulai, $berakhir, $statusTgl, $cutoff, $evaluasiPerTahun, $picInternal, $picMitra, $fileNaskah, $baselineStatusInit]);
             $mid = $pdo->lastInsertId();
 
             // Simpan Rencana Kerja Tahunan Awal jika diisi
@@ -561,7 +629,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
     }
 }
 
-$all = $pdo->query('SELECT id,kode,portofolio,nama_mitra,judul,bidang,jenis,file_naskah,tanggal_mulai,tanggal_berakhir,status_tanggal,status_scorecard FROM mitra_kinerja ORDER BY kode')->fetchAll();
+$all = $pdo->query('SELECT id,kode,portofolio,nama_mitra,judul,bidang,jenis,file_naskah,tanggal_mulai,tanggal_berakhir,status_tanggal,status_scorecard,pemeriksa_id,pic_internal,baseline_status FROM mitra_kinerja ORDER BY kode')->fetchAll();
 $pageTitle = 'Manajemen Naskah';
 require __DIR__ . '/includes/header.php';
 ?>

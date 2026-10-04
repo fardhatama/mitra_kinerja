@@ -100,9 +100,10 @@ require __DIR__ . '/includes/header.php';
                 <td><span class="badge badge-secondary" style="font-size:11px;max-width:180px;white-space:normal;display:inline-block;line-height:1.25;text-align:left;"><?= h($s['posisi_portofolio']) ?></span></td>
                 <td>
                     <?php 
-                    $rekHead = rtrim(explode("\n", trim($s['rekomendasi'] ?? '-'))[0], "\r") ?: '-';
+                    $rekHead = rtrim(explode("\n", trim($s['rekomendasi'] ?? '-'))[0], "
+") ?: '-';
                     ?>
-                    <span class="badge badge-warning" style="font-size:11px;max-width:210px;white-space:normal;display:inline-block;line-height:1.25;text-align:left;" title="<?= h($s['rekomendasi']) ?>">
+                    <span class="badge badge-<?= warnaRekomendasi($s['rekomendasi']) ?>" style="font-size:11px;max-width:210px;white-space:normal;display:inline-block;line-height:1.25;text-align:left;" title="<?= h($s['rekomendasi']) ?>">
                         <?= h(singkat($rekHead, 45)) ?>
                     </span>
                 </td>
@@ -142,15 +143,23 @@ function applyFilters() {
         var matchB = !b || tr.dataset.bidang === b;
         var matchK = !k || tr.dataset.kategori === k;
 
-        // Mendukung posisi portofolio deskriptif / hasil audit V3
-        var matchPos = !pos || tr.dataset.posisi === pos;
-        if (pos && !matchPos) {
-            var pUpper = (tr.dataset.posisi || '').toUpperCase();
-            if (pos === 'BERDAMPAK' && (pUpper.indexOf('DAMPAK') !== -1 || pUpper.indexOf('BERDAMPAK') !== -1) && pUpper.indexOf('BELUM') === -1 && pUpper.indexOf('TIDAK') === -1) matchPos = true;
-            else if (pos === 'OUTCOME TERBENTUK' && pUpper.indexOf('OUTCOME') !== -1 && pUpper.indexOf('BELUM') === -1 && pUpper.indexOf('TIDAK') === -1) matchPos = true;
-            else if (pos === 'OUTPUT TERSEDIA' && pUpper.indexOf('OUTPUT') !== -1 && pUpper.indexOf('BELUM') === -1 && pUpper.indexOf('TIDAK') === -1) matchPos = true;
-            else if (pos === 'AKTIF' && ((pUpper.indexOf('AKTIF') !== -1 && pUpper.indexOf('TIDAK') === -1 && pUpper.indexOf('BELUM') === -1) || (pUpper.indexOf('IMPLEMENTASI') !== -1 && pUpper.indexOf('BELUM') === -1 && pUpper.indexOf('TIDAK') === -1 && pUpper.indexOf('MASA IMPLEMENTASI AWAL') === -1))) matchPos = true;
-            else if (pos === 'BELUM DAPAT DITENTUKAN' && (pUpper.indexOf('BELUM') !== -1 || pUpper.indexOf('MASA IMPLEMENTASI') !== -1 || pUpper.indexOf('TIDAK') !== -1)) matchPos = true;
+        // Mendukung posisi portofolio deskriptif / hasil audit V3 secara mutually exclusive
+        var matchPos = !pos;
+        if (pos) {
+            var pUpper = (tr.dataset.posisi || '').toUpperCase().trim();
+            var resolvedPos = 'BELUM DAPAT DITENTUKAN';
+            if (pUpper && pUpper !== '-' && pUpper.indexOf('BELUM') === -1 && pUpper.indexOf('MASA IMPLEMENTASI AWAL') === -1 && pUpper.indexOf('TIDAK') === -1) {
+                if (pUpper.indexOf('BERDAMPAK') !== -1 || pUpper.indexOf('DAMPAK') !== -1) {
+                    resolvedPos = 'BERDAMPAK';
+                } else if (pUpper.indexOf('OUTCOME') !== -1) {
+                    resolvedPos = 'OUTCOME TERBENTUK';
+                } else if (pUpper.indexOf('OUTPUT') !== -1) {
+                    resolvedPos = 'OUTPUT TERSEDIA';
+                } else if (pUpper.indexOf('AKTIF') !== -1 || pUpper.indexOf('IMPLEMENTASI') !== -1) {
+                    resolvedPos = 'AKTIF';
+                }
+            }
+            matchPos = (resolvedPos === pos);
         }
 
         // Cek kecocokan rekomendasi berdasarkan clean keyword

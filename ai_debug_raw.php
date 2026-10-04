@@ -19,7 +19,7 @@ $result = [
 ];
 $result['success'] = ($result['gemini']['success'] || $result['openrouter']['success'] || $result['groq']['success']);
 
-echo json_encode($result, JSON_PRETTY_PRINT);
+echo json_encode($result, JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE);
 
 function testGemini(): array {
     $r = ['configured' => false, 'success' => false];
@@ -50,7 +50,8 @@ function testGemini(): array {
     ]);
     $response = curl_exec($ch);
     $r['http_code'] = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $r['curl_error'] = curl_error($ch);
+    $curlErr = curl_error($ch);
+    $r['curl_error'] = !empty($curlErr) ? $curlErr : null;
     curl_close($ch);
     
     if ($r['http_code'] === 200) {
@@ -60,11 +61,11 @@ function testGemini(): array {
             $r['ai_response'] = $data['candidates'][0]['content']['parts'][0]['text'];
         } else {
             $r['error'] = 'No text in response';
-            $r['response'] = substr($response, 0, 300);
+            $r['response'] = mb_substr((string)$response, 0, 500, 'UTF-8');
         }
     } else {
-        $r['error'] = 'HTTP ' . $r['http_code'];
-        $r['response'] = substr($response, 0, 500);
+        $r['error'] = !empty($r['curl_error']) ? ('cURL Error: ' . $r['curl_error']) : ('HTTP ' . $r['http_code']);
+        $r['response'] = mb_substr((string)$response, 0, 500, 'UTF-8');
     }
     
     return $r;
@@ -102,7 +103,8 @@ function testGroq(): array {
     ]);
     $response = curl_exec($ch);
     $r['http_code'] = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $r['curl_error'] = curl_error($ch);
+    $curlErr = curl_error($ch);
+    $r['curl_error'] = !empty($curlErr) ? $curlErr : null;
     curl_close($ch);
     
     if ($r['http_code'] === 200) {
@@ -112,11 +114,11 @@ function testGroq(): array {
             $r['ai_response'] = $data['choices'][0]['message']['content'];
         } else {
             $r['error'] = 'No text in response';
-            $r['response'] = substr($response, 0, 300);
+            $r['response'] = mb_substr((string)$response, 0, 500, 'UTF-8');
         }
     } else {
-        $r['error'] = 'HTTP ' . $r['http_code'];
-        $r['response'] = substr($response, 0, 500);
+        $r['error'] = !empty($r['curl_error']) ? ('cURL Error: ' . $r['curl_error']) : ('HTTP ' . $r['http_code']);
+        $r['response'] = mb_substr((string)$response, 0, 500, 'UTF-8');
     }
     
     return $r;
@@ -156,7 +158,8 @@ function testOpenRouter(): array {
     ]);
     $response = curl_exec($ch);
     $r['http_code'] = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $r['curl_error'] = curl_error($ch);
+    $curlErr = curl_error($ch);
+    $r['curl_error'] = !empty($curlErr) ? $curlErr : null;
     curl_close($ch);
     
     if ($r['http_code'] === 200) {
@@ -166,11 +169,11 @@ function testOpenRouter(): array {
             $r['ai_response'] = $data['choices'][0]['message']['content'];
         } else {
             $r['error'] = 'No text in response';
-            $r['response'] = substr($response, 0, 300);
+            $r['response'] = mb_substr((string)$response, 0, 500, 'UTF-8');
         }
     } else {
-        $r['error'] = 'HTTP ' . $r['http_code'];
-        $r['response'] = substr($response, 0, 500);
+        $r['error'] = !empty($r['curl_error']) ? ('cURL Error: ' . $r['curl_error']) : ('HTTP ' . $r['http_code']);
+        $r['response'] = mb_substr((string)$response, 0, 500, 'UTF-8');
     }
     
     return $r;

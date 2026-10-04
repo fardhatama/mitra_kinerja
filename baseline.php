@@ -19,25 +19,68 @@ $success = '';
 /* ── DEFINISI 12 ELEMEN BASELINE FIX (DEFINED IN INCLUDES/FUNCTIONS.PHP) ─────── */
 $b12Defs = BASELINE_12_DEFS;
 
-/* ── POST HANDLERS ───────────────────────────────────────── */
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
-    $action = $_POST['action'] ?? '';
-    $targetId = (int)($_POST['mitra_id'] ?? $id);
-
-    // Ambil data mitra terkait
-    $targetMitra = null;
-    $isTargetLocked = false;
-    if ($targetId > 0) {
-        $stmt = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
-        $stmt->execute([$targetId]);
-        $targetMitra = $stmt->fetch();
-        if ($targetMitra) {
-            $isTargetLocked = ($targetMitra['baseline_status'] === 'TERVERIFIKASI / DIKUNCI');
+function parseBaselinePicFakta(?string $fakta, ?string $rawSummary): array {
+    $res = ['nama' => '', 'jabatan' => '', 'unit' => '', 'kontak' => '', 'sk' => ''];
+    if ($fakta) {
+        $lines = explode("\n", $fakta);
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (preg_match('/^(?:PIC(?:\s*Internal|\s*Mitra)?):\s*(.*)$/i', $line, $m)) {
+                $v = trim($m[1]);
+                if ($v !== '-' && $v !== '') $res['nama'] = $v;
+            } elseif (preg_match('/^Jabatan:\s*(.*)$/i', $line, $m)) {
+                $v = trim($m[1]);
+                if ($v !== '-' && $v !== '') $res['jabatan'] = $v;
+            } elseif (preg_match('/^(?:Unit|Instansi):\s*(.*)$/i', $line, $m)) {
+                $v = trim($m[1]);
+                if ($v !== '-' && $v !== '') $res['unit'] = $v;
+            } elseif (preg_match('/^Kontak:\s*(.*)$/i', $line, $m)) {
+                $v = trim($m[1]);
+                if ($v !== '-' && $v !== '') $res['kontak'] = $v;
+            } elseif (preg_match('/^(?:Dasar Penetapan\/SK|Dasar Penunjukan|Keterangan|SK):\s*(.*)$/i', $line, $m)) {
+                $v = trim($m[1]);
+                if ($v !== '-' && $v !== '') $res['sk'] = $v;
+            }
         }
     }
+    if (empty($res['nama']) && $rawSummary) {
+        $clean = preg_replace('/\s*-\s*(HP\/WA|Kontak|Telp):.*$/i', '', $rawSummary);
+        if (preg_match('/^(.*?)\s*\((.*?)\)$/', $clean, $m)) {
+            $res['nama'] = trim($m[1]);
+            if (empty($res['jabatan'])) $res['jabatan'] = trim($m[2]);
+        } else {
+            $res['nama'] = trim($clean);
+        }
+    }
+    if (empty($res['kontak']) && $rawSummary && preg_match('/(?:HP\/WA|Kontak|Telp):\s*([^\s,;]+)/i', $rawSummary, $m)) {
+        $res['kontak'] = trim($m[1]);
+    }
+    return $res;
+}
 
-    // 0. Import Data Baseline (12 Elemen) dari Berkas Spreadsheet (.xlsx)
-    if ($action === 'import_baseline') {
+/* ── POST HANDLERS ───────────────────────────────────────── */
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    $csrfToken = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
+    if (!verifyCsrfToken($csrfToken)) {
+        $errors[] = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
+    } else {
+        $action = $_POST['action'] ?? '';
+        $targetId = (int)($_POST['mitra_id'] ?? $id);
+
+        // Ambil data mitra terkait
+        $targetMitra = null;
+        $isTargetLocked = false;
+        if ($targetId > 0) {
+            $stmt = $pdo->prepare('SELECT * FROM mitra_kinerja WHERE id = ?');
+            $stmt->execute([$targetId]);
+            $targetMitra = $stmt->fetch();
+            if ($targetMitra) {
+                $isTargetLocked = ($targetMitra['baseline_status'] === 'TERVERIFIKASI / DIKUNCI');
+            }
+        }
+
+        // 0. Import Data Baseline (12 Elemen) dari Berkas Spreadsheet (.xlsx)
+        if ($action === 'import_baseline') {
         if (!$targetMitra) {
             $errors[] = 'Data mitra tidak ditemukan.';
         } elseif (!$canEdit) {
@@ -115,15 +158,27 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                         // Baca metadata pemeriksa & cut-off jika ada
                         $pemeriksaVal = trim((string)($baseRows[5][8] ?? $baseRows[5][7] ?? $baseRows[5][3] ?? ''));
                         $cutoffVal = trim((string)($baseRows[8][8] ?? $baseRows[8][7] ?? $baseRows[8][2] ?? ''));
+                        // Bug 10: Dukungan format tanggal teks berbahasa Indonesia
                         if (!empty($cutoffVal) && preg_match('/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/', $cutoffVal, $mCut)) {
                             $cutoffDate = sprintf('%04d-%02d-%02d', (int)$mCut[1], (int)$mCut[2], (int)$mCut[3]);
                         } elseif (!empty($cutoffVal) && preg_match('/(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/', $cutoffVal, $mCut)) {
                             $cutoffDate = sprintf('%04d-%02d-%02d', (int)$mCut[3], (int)$mCut[2], (int)$mCut[1]);
+                        } elseif (!empty($cutoffVal) && ($textCutoff = parseIndonesianDateText($cutoffVal))) {
+                            $cutoffDate = $textCutoff;
                         } elseif (is_numeric($cutoffVal) && (int)$cutoffVal > 30000) {
                             $cutoffDate = gmdate('Y-m-d', ((int)$cutoffVal - 25569) * 86400);
                         } else {
                             $cutoffDate = null;
                         }
+
+                        // Bug 24: Filter out placeholder text ('nama pemeriksa', '-', etc.)
+                        $isPemeriksaPlaceholder = (
+                            empty($pemeriksaVal)
+                            || $pemeriksaVal === '-'
+                            || $pemeriksaVal === '--'
+                            || str_starts_with($pemeriksaVal, '[')
+                            || preg_match('/^(?:nama\s+pemeriksa|\(?nama\s+verifikator\)?|\(?nama\s+pejabat\)?|isi\s+nama.*|-)$/i', $pemeriksaVal)
+                        );
 
                         $updatedBaseline = 0;
                         $fileNaskahExtracted = null;
@@ -199,10 +254,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                                 $updateSqlParts[] = "baseline_locked_by = ?";
                                 $updateParams[] = $user['id'];
                             } else {
+                                // Bug 15: Clear baseline_locked_at and baseline_locked_by to NULL
                                 $updateSqlParts[] = "baseline_status = 'DALAM PROSES'";
+                                $updateSqlParts[] = "baseline_locked_at = NULL";
+                                $updateSqlParts[] = "baseline_locked_by = NULL";
                             }
 
-                            if (!empty($pemeriksaVal) && !str_starts_with($pemeriksaVal, '[')) {
+                            if (!empty($pemeriksaVal) && !$isPemeriksaPlaceholder) {
                                 $updateSqlParts[] = "baseline_pemeriksa = ?";
                                 $updateParams[] = $pemeriksaVal;
                             }
@@ -228,8 +286,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                                     $picInternalFound = '';
                                     $picMitraFound = '';
                                     foreach ($picRows as $pRow) {
-                                        $label = strtolower(trim($pRow[1] ?? ''));
-                                        $val = trim($pRow[2] ?? '');
+                                        $label = strtolower(trim((string)($pRow[1] ?? '')));
+                                        $val = trim((string)($pRow[2] ?? ''));
+                                        $val3 = trim((string)($pRow[3] ?? ''));
+                                        // Bug 23: Support column 3 PIC reading for Portofolio workbooks (C01-C04)
+                                        if (($val === '' || $val === '-' || $val === ':') && !empty($val3)) {
+                                            $val = $val3;
+                                        } elseif (!empty($val3) && (str_contains(strtolower($val), 'pic') || $val === ':')) {
+                                            $val = $val3;
+                                        }
                                         // BUG-BL-06: Do not let "Nama Mitra" label overwrite pic_mitra with organization name
                                         if (str_contains($label, 'pic mitra') || str_contains($label, 'focal point mitra') || (str_contains($label, 'pic') && str_contains($label, 'mitra'))) {
                                             if (!empty($val)) $picMitraFound = $val;
@@ -263,8 +328,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
     }
 
-    // Detail Handlers untuk ID tertentu
-    elseif ($id > 0) {
+    // Detail Handlers untuk ID tertentu (Bug 2: check $id > 0 || $targetId > 0)
+    elseif ($id > 0 || $targetId > 0) {
+        if ($id <= 0 && $targetId > 0) {
+            $id = $targetId;
+        }
         $mitra = $targetMitra;
         $isLocked = $isTargetLocked;
 
@@ -305,27 +373,41 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                     $fakta = trim($_POST["fakta_{$num}"] ?? '');
                     $bukti = trim($_POST["bukti_{$num}"] ?? '');
 
-                    // BUG-BL-08: In Element 9 textarea, handle decode/encode safely on form save
+                    // Bug 13: In manual save_baseline, sync Element 1 link to mitra_kinerja.file_naskah if a valid file/link is present
+                    if ($num === 1 && !empty($bukti)) {
+                        $isValidNaskah = filter_var($bukti, FILTER_VALIDATE_URL) !== false
+                            || str_starts_with($bukti, 'public/')
+                            || str_starts_with($bukti, 'uploads/')
+                            || (bool)preg_match('/^[\w\.\-\/]+\.pdf$/i', $bukti);
+                        if ($isValidNaskah) {
+                            $stmtSync = $pdo->prepare('UPDATE mitra_kinerja SET file_naskah = ? WHERE id = ?');
+                            $stmtSync->execute([$bukti, $id]);
+                        }
+                    }
+
+                    // BUG-BL-08, Bug 12, Bug 29: In Element 9 textarea, handle decode/encode safely on form save
                     if ($num === 9 && !empty($bukti)) {
                         $isJson = str_starts_with($bukti, '[') && str_ends_with($bukti, ']') && ($testDec = json_decode($bukti, true)) && is_array($testDec);
-                        $candidates = $isJson ? array_values(array_filter(array_map('trim', $testDec))) : array_values(array_filter(array_map('trim', preg_split('/[
-\n;]+/', $bukti))));
-                        
-                        $allPathsOrUrls = !empty($candidates);
-                        foreach ($candidates as $c) {
-                            $isPathOrUrl = filter_var($c, FILTER_VALIDATE_URL) !== false
-                                || str_starts_with($c, 'public/')
-                                || str_starts_with($c, 'uploads/')
-                                || (bool)preg_match('/\.(pdf|docx?|xlsx?|pptx?|png|jpe?g|txt)$/i', $c);
-                            if (!$isPathOrUrl) {
-                                $allPathsOrUrls = false;
-                                break;
+                        $rawCandidates = $isJson ? $testDec : preg_split('/[
+\n;]+/', $bukti);
+                        $candidates = [];
+                        foreach ($rawCandidates as $c) {
+                            if (!is_string($c)) continue;
+                            $tc = trim($c);
+                            if ($tc === '' || $tc === '-' || $tc === 'null') continue;
+                            $isPathOrUrl = filter_var($tc, FILTER_VALIDATE_URL) !== false
+                                || str_starts_with($tc, 'public/')
+                                || str_starts_with($tc, 'uploads/')
+                                || (bool)preg_match('/^[\w\.\-\/]+\.(pdf|docx?|xlsx?|pptx?|png|jpe?g|txt)$/i', $tc);
+                            if ($isPathOrUrl) {
+                                $candidates[] = $tc;
                             }
                         }
-                        if ($allPathsOrUrls) {
+                        $candidates = array_values(array_unique($candidates));
+                        if (!empty($candidates)) {
                             $bukti = json_encode($candidates, JSON_UNESCAPED_UNICODE);
                         } else {
-                            $bukti = implode("\n", $candidates);
+                            $bukti = '';
                         }
                     }
 
@@ -424,8 +506,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                     $oldLinks = $stmtOld->fetchColumn() ?: '';
                     if (!empty($oldLinks)) {
                         $dec = json_decode($oldLinks, true);
-                        if (is_array($dec)) $savedPaths = $dec;
-                        else $savedPaths = array_filter(explode(';', $oldLinks));
+                        $rawOld = is_array($dec) ? $dec : explode(';', $oldLinks);
+                        foreach ($rawOld as $ro) {
+                            if (!is_string($ro)) continue;
+                            $tro = trim($ro);
+                            if ($tro === '' || $tro === '-' || $tro === 'null') continue;
+                            // Bug 12: validate that existing items are valid file paths/URLs before saving
+                            $isValid = filter_var($tro, FILTER_VALIDATE_URL) !== false
+                                || str_starts_with($tro, 'public/')
+                                || str_starts_with($tro, 'uploads/')
+                                || (bool)preg_match('/^[\w\.\-\/]+\.(pdf|docx?|xlsx?|pptx?|png|jpe?g|txt)$/i', $tro);
+                            if ($isValid) {
+                                $savedPaths[] = $tro;
+                            }
+                        }
                     }
 
                     $fileCount = count($_FILES['pdf_files']['name']);
@@ -449,9 +543,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                         }
                     }
 
-                    // BUG-BL-03: Fix multi-file PDF upload so success message is only shown if new files were actually uploaded
+                    // BUG-BL-03, Bug 12, Bug 29: Filter out empty strings, whitespace, and non-path notes
                     if ($newUploadedCount > 0) {
-                        $jsonVal = json_encode(array_values(array_unique($savedPaths)), JSON_UNESCAPED_UNICODE);
+                        $cleanSaved = [];
+                        foreach ($savedPaths as $sp) {
+                            if (!is_string($sp)) continue;
+                            $tsp = trim($sp);
+                            if ($tsp === '' || $tsp === '-' || $tsp === 'null') continue;
+                            $isValid = filter_var($tsp, FILTER_VALIDATE_URL) !== false
+                                || str_starts_with($tsp, 'public/')
+                                || str_starts_with($tsp, 'uploads/')
+                                || (bool)preg_match('/^[\w\.\-\/]+\.(pdf|docx?|xlsx?|pptx?|png|jpe?g|txt)$/i', $tsp);
+                            if ($isValid) {
+                                $cleanSaved[] = $tsp;
+                            }
+                        }
+                        $jsonVal = json_encode(array_values(array_unique($cleanSaved)), JSON_UNESCAPED_UNICODE);
                         $stmtU = $pdo->prepare('UPDATE baseline_elemen SET link_sumber_bukti = ?, status = \'TERVERIFIKASI\' WHERE mitra_id = ? AND nomor_elemen = 9');
                         $stmtU->execute([$jsonVal, $id]);
                         logAudit($id, $user['id'], 'UPLOAD_BASELINE_PDF', 'Upload multiple dokumen tindak lanjut ' . $mitra['kode'] . " ({$newUploadedCount} berkas baru)");
@@ -511,6 +618,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             if ($namaPic === '') {
                 $errors[] = 'Nama PIC wajib diisi.';
             } else {
+                // Bug 11: Do not overwrite existing Jabatan, Unit, Kontak, SK with '-' if left empty on save
+                $stmtCurEl = $pdo->prepare('SELECT fakta_pemeriksaan FROM baseline_elemen WHERE mitra_id = ? AND nomor_elemen = ?');
+                $stmtCurEl->execute([$id, $picType === 'internal' ? 7 : 8]);
+                $curFakta = $stmtCurEl->fetchColumn() ?: '';
+                $curParsed = parseBaselinePicFakta($curFakta, $picType === 'internal' ? ($mitra['pic_internal'] ?? '') : ($mitra['pic_mitra'] ?? ''));
+
+                if ($jabatanPic === '' && !empty($curParsed['jabatan'])) $jabatanPic = $curParsed['jabatan'];
+                if ($unitPic === '' && !empty($curParsed['unit'])) $unitPic = $curParsed['unit'];
+                if ($kontakPic === '' && !empty($curParsed['kontak'])) $kontakPic = $curParsed['kontak'];
+                if ($skPic === '' && !empty($curParsed['sk'])) $skPic = $curParsed['sk'];
+
                 // BUG-BL-10: Prevent compounding duplicate suffixes on PIC updates
                 $cleanNamaPic = preg_replace('/\s*-\s*(HP\/WA|Kontak|Telp):.*$/i', '', $namaPic);
                 if ($jabatanPic) {
@@ -542,6 +660,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             }
         }
     }
+}
 }
 }
 
@@ -596,6 +715,9 @@ if ($id > 0) {
         if ($st === 'TERVERIFIKASI') $countVerified++;
         if ($st !== 'BELUM DIISI') $countFilled++;
     }
+
+    $picInternalParsed = parseBaselinePicFakta($elemenData[7]['fakta_pemeriksaan'] ?? '', $mitra['pic_internal'] ?? '');
+    $picMitraParsed = parseBaselinePicFakta($elemenData[8]['fakta_pemeriksaan'] ?? '', $mitra['pic_mitra'] ?? '');
 
     $isLocked = ($mitra['baseline_status'] === 'TERVERIFIKASI / DIKUNCI');
     $pageTitle = 'Baseline FIX — ' . $mitra['kode'];
@@ -758,6 +880,7 @@ if ($id > 0) {
         </div>
         <?php if ($isAdmin): ?>
         <form method="post" style="margin:0;" onsubmit="return confirm('Buka kunci Baseline FIX ini untuk melakukan perbaikan administratif?');">
+            <?= csrfField() ?>
             <input type="hidden" name="action" value="unlock_baseline">
             <button type="submit" class="btn btn-outline btn-sm" style="font-size:11px;background:#fff;">🔓 Buka Kunci (Admin)</button>
         </form>
@@ -774,6 +897,7 @@ if ($id > 0) {
         </div>
         <?php if ($canEdit && $countFilled >= 12): ?>
         <form method="post" style="margin:0;" onsubmit="return confirm('Kunci Baseline FIX ini? Setelah dikunci, data kondisi awal akan menjadi titik pembanding permanen.');">
+            <?= csrfField() ?>
             <input type="hidden" name="action" value="lock_baseline">
             <button type="submit" class="btn btn-success btn-sm" style="font-size:11px;">🔒 Kunci Baseline (Finalisasi)</button>
         </form>
@@ -805,6 +929,7 @@ if ($id > 0) {
 
     <!-- Main Verification Form -->
     <form method="post">
+        <?= csrfField() ?>
         <input type="hidden" name="action" value="save_baseline">
 
         <!-- Card A: Kontrol Identitas & Cut-off -->
@@ -926,7 +1051,7 @@ if ($id > 0) {
                                     <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
                                         <?php 
                                             $pdfPath = $el['link_sumber_bukti'] ?: ($mitra['file_naskah'] ?? '');
-                                            if ($pdfPath && (file_exists(__DIR__ . '/' . $pdfPath) || preg_match('/^https?:\/\//i', $pdfPath))): 
+                                            if ($pdfPath && (file_exists(__DIR__ . '/' . ltrim($pdfPath, '/')) || preg_match('/^https?:\/\//i', $pdfPath) || str_starts_with($pdfPath, 'public/uploads/') || str_starts_with($pdfPath, 'uploads/'))): 
                                         ?>
                                             <a href="<?= h($pdfPath) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📄 Lihat PDF</a>
                                         <?php endif; ?>
@@ -939,7 +1064,7 @@ if ($id > 0) {
                                     <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
                                         <?php 
                                             $subPath = $el['link_sumber_bukti'] ?? '';
-                                            if ($subPath && (file_exists(__DIR__ . '/' . $subPath) || preg_match('/^https?:\/\//i', $subPath))): 
+                                            if ($subPath && (file_exists(__DIR__ . '/' . ltrim($subPath, '/')) || preg_match('/^https?:\/\//i', $subPath) || str_starts_with($subPath, 'public/uploads/') || str_starts_with($subPath, 'uploads/'))): 
                                         ?>
                                             <a href="<?= h($subPath) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📄 Lihat PDF</a>
                                         <?php endif; ?>
@@ -1015,7 +1140,7 @@ if ($id > 0) {
                                                 📂 Buka Tindak Lanjut &rarr;
                                             </a>
                                         <?php else: ?>
-                                            <a href="tindak_lanjut.php" target="_blank" class="btn btn-outline btn-sm" style="font-size:10px;color:#64748b;padding:2px 5px;">
+                                            <a href="tindak_lanjut.php?mitra_id=<?= $id ?>" target="_blank" class="btn btn-outline btn-sm" style="font-size:10px;color:#64748b;padding:2px 5px;">
                                                 + Tambah Kegiatan
                                             </a>
                                         <?php endif; ?>
@@ -1023,7 +1148,7 @@ if ($id > 0) {
 
                                 <?php elseif ($num === 12): // HAMBATAN: fitur upload file pdf ?>
                                     <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
-                                        <?php if (!empty($el['link_sumber_bukti']) && (preg_match('/^https?:\/\//i', $el['link_sumber_bukti']) || file_exists(__DIR__ . '/' . $el['link_sumber_bukti']))): ?>
+                                        <?php if (!empty($el['link_sumber_bukti']) && (preg_match('/^https?:\/\//i', $el['link_sumber_bukti']) || file_exists(__DIR__ . '/' . ltrim($el['link_sumber_bukti'], '/')) || str_starts_with($el['link_sumber_bukti'], 'public/uploads/') || str_starts_with($el['link_sumber_bukti'], 'uploads/'))): ?>
                                             <a href="<?= h($el['link_sumber_bukti']) ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="font-size:10.5px;padding:3px 7px;">📄 Lihat PDF</a>
                                         <?php endif; ?>
                                         <?php if (!$isLocked && $canEdit): ?>
@@ -1058,6 +1183,7 @@ if ($id > 0) {
                 <button type="button" onclick="document.getElementById('modalUploadSingle').style.display='none'" style="background:none;border:none;font-size:18px;cursor:pointer;">&times;</button>
             </div>
             <form method="post" enctype="multipart/form-data">
+                <?= csrfField() ?>
                 <input type="hidden" name="action" value="upload_baseline_pdf">
                 <input type="hidden" id="modalSingleElemen" name="elemen_nomor" value="1">
                 <div class="field" style="margin-bottom:16px;">
@@ -1084,6 +1210,7 @@ if ($id > 0) {
                 Anda dapat memilih satu atau beberapa file PDF sekaligus. Sistem mendukung dokumen berukuran besar hingga 25 MB tanpa perlu menggabungkan secara manual.
             </p>
             <form method="post" enctype="multipart/form-data">
+                <?= csrfField() ?>
                 <input type="hidden" name="action" value="upload_baseline_pdf">
                 <input type="hidden" name="elemen_nomor" value="9">
                 <div class="field" style="margin-bottom:16px;">
@@ -1107,6 +1234,7 @@ if ($id > 0) {
                 <button type="button" onclick="document.getElementById('modalUpdatePic').style.display='none'" style="background:none;border:none;font-size:18px;cursor:pointer;">&times;</button>
             </div>
             <form method="post">
+                <?= csrfField() ?>
                 <input type="hidden" name="action" value="update_pic">
                 <input type="hidden" id="modalPicType" name="pic_type" value="internal">
                 <div class="field" style="margin-bottom:12px;">
@@ -1148,6 +1276,7 @@ if ($id > 0) {
             </div>
 
             <form method="post" enctype="multipart/form-data">
+                <?= csrfField() ?>
                 <input type="hidden" name="action" value="import_baseline">
                 <input type="hidden" name="mitra_id" id="modalImportMitraId" value="<?= $id ?>">
 
@@ -1200,27 +1329,27 @@ if ($id > 0) {
 
     function openPicModal(type) {
         document.getElementById('modalPicType').value = type;
-        document.getElementById('picNama').value = '';
-        document.getElementById('picJabatan').value = '';
-        document.getElementById('picUnit').value = '';
-        document.getElementById('picKontak').value = '';
-        document.getElementById('picSk').value = '';
+        var picInternalData = <?= json_encode($picInternalParsed, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+        var picMitraData = <?= json_encode($picMitraParsed, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+        var d = (type === 'internal') ? picInternalData : picMitraData;
 
         if (type === 'internal') {
             document.getElementById('modalPicTitle').innerText = 'Update Data PIC Internal (Kanwil Kepri)';
             document.getElementById('lblNamaPic').innerText = 'Nama PIC Internal *';
             document.getElementById('lblUnitPic').innerText = 'Divisi / Subbagian Internal';
             document.getElementById('lblSkPic').innerText = 'Dasar Penunjukan (Nomor SK / Nota Dinas)';
-            // BUG-BL-07: Use json_encode instead of addslashes
-            document.getElementById('picNama').value = <?= json_encode((string)($mitra['pic_internal'] ?? '')) ?>;
         } else {
             document.getElementById('modalPicTitle').innerText = 'Update Data PIC Mitra Kerja Sama';
             document.getElementById('lblNamaPic').innerText = 'Nama PIC Mitra *';
             document.getElementById('lblUnitPic').innerText = 'Instansi / Lembaga Mitra';
             document.getElementById('lblSkPic').innerText = 'Surat Tugas / Konfirmasi Resmi Mitra';
-            // BUG-BL-07: Use json_encode instead of addslashes
-            document.getElementById('picNama').value = <?= json_encode((string)($mitra['pic_mitra'] ?? '')) ?>;
         }
+        document.getElementById('picNama').value = d.nama || '';
+        document.getElementById('picJabatan').value = d.jabatan || '';
+        document.getElementById('picUnit').value = d.unit || '';
+        document.getElementById('picKontak').value = d.kontak || '';
+        document.getElementById('picSk').value = d.sk || '';
+
         document.getElementById('modalUpdatePic').style.display = 'block';
     }
 
@@ -1370,8 +1499,8 @@ require __DIR__ . '/includes/header.php';
                     <div style="font-size:11.5px;font-weight:600;margin-bottom:2px;">
                         <?= $b['terverifikasi'] ?> / 12 Terverifikasi
                     </div>
-                    <div class="hbar-track" style="width:90px;height:6px;display:inline-block;">
-                        <div class="hbar-fill" style="width:<?= $b['persentase'] ?>%;background:<?= $b['is_locked'] ? '#16a34a' : '#ca8a04' ?>;"></div>
+                    <div class="hbar-track" style="width:90px;height:6px;display:inline-block;background:#e2e8f0;border-radius:4px;overflow:hidden;">
+                        <div class="hbar-fill" style="width:<?= $b['persentase'] ?>%;height:100%;border-radius:4px;background:<?= $b['is_locked'] ? '#16a34a' : '#ca8a04' ?>;"></div>
                     </div>
                 </td>
                 <td>
@@ -1398,6 +1527,7 @@ require __DIR__ . '/includes/header.php';
         </div>
 
         <form method="post" enctype="multipart/form-data">
+            <?= csrfField() ?>
             <input type="hidden" name="action" value="import_baseline">
             <input type="hidden" name="mitra_id" id="modalImportMitraId" value="0">
 

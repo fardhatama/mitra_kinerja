@@ -221,6 +221,9 @@ function hitungPosisiPortofolio(array $indikatorRows): string {
 
 /** Menentukan rekomendasi tindak lanjut berdasarkan skor, risiko, dan sisa hari. */
 function hitungRekomendasi(float $nilai, string $warningStatus, string $posisiPortofolio, ?int $sisaHari = null): string {
+    if ($nilai <= 0 && $posisiPortofolio === 'BELUM DAPAT DITENTUKAN') {
+        return 'BELUM DITENTUKAN';
+    }
     if ($sisaHari !== null && $sisaHari <= 90 && $nilai >= 75) {
         return 'PERPANJANG';
     }
@@ -257,12 +260,15 @@ function ekstrakKeywordRekomendasi(?string $teks): string {
         return 'BELUM DITENTUKAN';
     }
 
-    // Uji kata kunci pada headline (PERCEPAT/BENTUK/AKTIFKAN sebelum LANJUT untuk mencegah collision)
-    // Cek frasa negatif/penghentian terlebih dahulu agar tidak salah mendeteksi LANJUT / PERPANJANG
-    if (str_contains($upperFirst, 'HENTIKAN') || str_contains($upperFirst, 'HENTI')
-        || str_contains($upperFirst, 'TIDAK DILANJUT') || str_contains($upperFirst, 'TIDAK DIPERPANJANG')
-        || str_contains($upperFirst, 'TIDAK LANJUT') || str_contains($upperFirst, 'TIDAK PERPANJANG')
-        || str_contains($upperFirst, 'JANGAN')) {
+    $isNegative = function(string $s): bool {
+        return (bool)preg_match('/\b(HENTIKAN|HENTI|JANGAN|TIDAK\s+MEMENUHI\s+SYARAT)\b/i', $s)
+            || (bool)preg_match('/\bTIDAK\b.{0,40}?\b(DI)?LANJUT/is', $s)
+            || (bool)preg_match('/\bTIDAK\b.{0,40}?\b(DI)?PERPANJANG/is', $s)
+            || (bool)preg_match('/\bBUKAN\b.{0,40}?\b(DI)?LANJUT/is', $s);
+    };
+
+    // Uji kata kunci pada headline (cek frasa negatif terlebih dahulu agar tidak salah mendeteksi LANJUT / PERPANJANG)
+    if ($isNegative($upperFirst)) {
         return 'HENTIKAN';
     }
     if (str_contains($upperFirst, 'PERPANJANG')) {
@@ -280,10 +286,7 @@ function ekstrakKeywordRekomendasi(?string $teks): string {
 
     // Jika belum ditemukan di headline, periksa teks keseluruhan tanpa terhalang 'belum' di rincian temuan
     $upper = strtoupper(trim($teks));
-    if (str_contains($upper, 'HENTIKAN') || str_contains($upper, 'HENTI')
-        || str_contains($upper, 'TIDAK DILANJUT') || str_contains($upper, 'TIDAK DIPERPANJANG')
-        || str_contains($upper, 'TIDAK LANJUT') || str_contains($upper, 'TIDAK PERPANJANG')
-        || str_contains($upper, 'JANGAN')) {
+    if ($isNegative($upper)) {
         return 'HENTIKAN';
     }
     if (str_contains($upper, 'PERPANJANG')) {
@@ -447,6 +450,8 @@ function hitungKebutuhanScorecard(?string $tanggalMulai, ?string $tanggalBerakhi
     $today->setTime(0, 0, 0);
     $todayTs = $today->getTimestamp();
     $milestones = [];
+    $overdueList = [];
+    $hasOverdue = false;
     $warning1Bulan = false;
     $hariMenujuEvaluasi = null;
     $targetEvaluasiTerdekat = null;
@@ -458,6 +463,17 @@ function hitungKebutuhanScorecard(?string $tanggalMulai, ?string $tanggalBerakhi
 
         $targetStr = $targetDate->format('Y-m-d');
         $diffDays = (int)round((strtotime($targetStr) - $todayTs) / 86400);
+        $isOverdue = ($diffDays < 0);
+
+        if ($isOverdue) {
+            $hasOverdue = true;
+            $overdueList[] = [
+                'siklus_ke'     => $i,
+                'nama'          => $i === 1 ? 'SC-1: Baseline / Awal' : 'SC-' . $i . ': Evaluasi Tahap ' . $i,
+                'target_tgl'    => $targetStr,
+                'sisa_hari'     => $diffDays,
+            ];
+        }
 
         $milestones[] = [
             'siklus_ke'   => $i,
@@ -466,6 +482,7 @@ function hitungKebutuhanScorecard(?string $tanggalMulai, ?string $tanggalBerakhi
             'sisa_hari'   => $diffDays,
             'is_due_soon' => ($diffDays >= 0 && $diffDays <= 30),
             'is_past'     => ($diffDays < 0),
+            'is_overdue'  => $isOverdue,
         ];
 
         // Hanya milestone aktif/mendatang (diffDays >= 0) yang menjadi target evaluasi terdekat & memicu warning
@@ -491,6 +508,8 @@ function hitungKebutuhanScorecard(?string $tanggalMulai, ?string $tanggalBerakhi
         'durasi_bulan'             => $durasiBulan,
         'evaluasi_per_tahun'       => $evaluasiPerTahun,
         'warning_1_bulan'          => $warning1Bulan,
+        'has_overdue'              => $hasOverdue,
+        'overdue_milestones'       => $overdueList,
         'hari_menuju_evaluasi'     => $hariMenujuEvaluasi,
         'target_evaluasi_terdekat' => $targetEvaluasiTerdekat,
         'milestones'               => $milestones,
@@ -619,6 +638,18 @@ function warnaWarning(string $status): string {
     };
 }
 
+/** Warna badge untuk rekomendasi. */
+function warnaRekomendasi(?string $rekomendasi): string {
+    $key = ekstrakKeywordRekomendasi($rekomendasi);
+    return match ($key) {
+        'LANJUT', 'REPLIKASI' => 'success',
+        'PERPANJANG', 'PERBAIKI' => 'warning',
+        'HENTIKAN' => 'danger',
+        'BELUM DITENTUKAN' => 'secondary',
+        default => 'secondary',
+    };
+}
+
 function formatTanggal(?string $tgl): string {
     if (!$tgl || $tgl === '0000-00-00' || $tgl === '0000-00-00 00:00:00' || str_starts_with($tgl, '0000-00-00')) {
         return '-';
@@ -639,6 +670,49 @@ function formatTanggalPanjang(?string $tgl): string {
     return (int)date('d', $t) . ' ' . $bulanPanjang[(int)date('n', $t)] . ' ' . date('Y', $t);
 }
 
+/**
+ * Mengurai string tanggal berbahasa Indonesia (misal: '28 Agustus 2026', '27-Sep-2026') menjadi format 'YYYY-MM-DD'.
+ */
+function parseIndonesianDateText(?string $val): ?string {
+    if (!$val) return null;
+    $val = trim($val);
+    if ($val === '' || $val === '-') return null;
+
+    // YYYY-MM-DD
+    if (preg_match('/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/', $val, $m)) {
+        return sprintf('%04d-%02d-%02d', (int)$m[1], (int)$m[2], (int)$m[3]);
+    }
+    // DD-MM-YYYY (numeric)
+    if (preg_match('/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/', $val, $m)) {
+        return sprintf('%04d-%02d-%02d', (int)$m[3], (int)$m[2], (int)$m[1]);
+    }
+    // Textual month: '28 Agustus 2026', '27-Sep-2026', '01 Jan 2025', etc.
+    if (preg_match('/(\d{1,2})\s*[-\/\s]\s*([a-zA-Z]+)\s*[-\/\s]\s*(\d{4})/', $val, $m)) {
+        $day = (int)$m[1];
+        $monthStr = strtolower(trim($m[2]));
+        $year = (int)$m[3];
+
+        $monthMap = [
+            'jan' => 1, 'januari' => 1, 'january' => 1,
+            'feb' => 2, 'februari' => 2, 'february' => 2,
+            'mar' => 3, 'maret' => 3, 'march' => 3,
+            'apr' => 4, 'april' => 4,
+            'mei' => 5, 'may' => 5,
+            'jun' => 6, 'juni' => 6, 'june' => 6,
+            'jul' => 7, 'juli' => 7, 'july' => 7,
+            'agu' => 8, 'agt' => 8, 'ags' => 8, 'agustus' => 8, 'aug' => 8, 'august' => 8,
+            'sep' => 9, 'sept' => 9, 'september' => 9,
+            'okt' => 10, 'oct' => 10, 'oktober' => 10, 'october' => 10,
+            'nov' => 11, 'nop' => 11, 'november' => 11, 'nopember' => 11,
+            'des' => 12, 'dec' => 12, 'desember' => 12, 'december' => 12,
+        ];
+        if (isset($monthMap[$monthStr])) {
+            return sprintf('%04d-%02d-%02d', $year, $monthMap[$monthStr], $day);
+        }
+    }
+    return null;
+}
+
 function h(?string $s): string {
     return htmlspecialchars($s ?? '', ENT_QUOTES, 'UTF-8');
 }
@@ -652,16 +726,19 @@ function singkat(?string $teks, int $panjang, string $akhiran = '…'): string {
     return strlen($teks) > $panjang ? substr($teks, 0, max(1, $panjang - 1)) . $akhiran : $teks;
 }
 
-/** Verifikasi file PDF asli melalui magic header %PDF (mencegah file palsu/script). */
+/** Verifikasi file PDF asli melalui magic header %PDF- dalam 1024 byte pertama (per ISO 32000-1). */
 function isPdfValid(string $filePath): bool {
-    if (!file_exists($filePath) || filesize($filePath) < 4) {
+    if (!file_exists($filePath) || filesize($filePath) < 5) {
         return false;
     }
     $h = @fopen($filePath, 'rb');
     if (!$h) return false;
-    $bytes = fread($h, 4);
+    $bytes = fread($h, 1024);
     fclose($h);
-    return str_starts_with($bytes, '%PDF');
+    if ($bytes === false || strlen($bytes) < 5) {
+        return false;
+    }
+    return str_contains($bytes, '%PDF-');
 }
 
 /** Verifikasi integritas file gambar (JPG, PNG, WebP) melalui getimagesize. */
@@ -722,14 +799,31 @@ function formatLinkSumberBukti(?string $raw): string {
         $decoded = json_decode($raw, true);
         if (is_array($decoded)) {
             $html = '<div style="display:flex;flex-direction:column;gap:3px;">';
+            $validCount = 0;
             foreach ($decoded as $idx => $f) {
-                if (!is_string($f)) continue;
+                if (!is_string($f) || trim($f) === '') continue;
+                $f = trim($f);
+                // Sanitize: only allow http://, https://, or relative paths starting with public/uploads/
+                $isAllowed = preg_match('/^https?:\/\//i', $f) || str_starts_with($f, 'public/uploads/');
+                if (!$isAllowed) {
+                    continue;
+                }
+                $validCount++;
                 $leaf = basename($f);
-                $html .= '<a href="' . h($f) . '" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;">📄 Berkas ' . ($idx + 1) . ' (' . h(singkat($leaf, 20)) . ')</a>';
+                $html .= '<a href="' . h($f) . '" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;">📄 Berkas ' . $validCount . ' (' . h(singkat($leaf, 20)) . ')</a>';
             }
             $html .= '</div>';
-            return $html;
+            if ($validCount > 0) {
+                return $html;
+            }
+            return '<span class="muted">-</span>';
         }
+    }
+
+    // Berkas lokal yang diunggah (misal public/uploads/... atau uploads/...)
+    if (str_starts_with($raw, 'public/uploads/') || str_starts_with($raw, 'uploads/') || (preg_match('/^[\w\.\-\/]+\.pdf$/i', $raw) && !str_contains($raw, ' '))) {
+        $leaf = basename($raw);
+        return '<a href="' . h($raw) . '" target="_blank" rel="noopener noreferrer" class="badge badge-primary" style="font-size:10.5px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;">📄 Berkas (' . h(singkat($leaf, 24)) . ') &rarr;</a>';
     }
 
     // Jika diawali http:// atau https://

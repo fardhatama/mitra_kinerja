@@ -66,8 +66,9 @@ require __DIR__ . '/includes/header.php';
                 <td><span class="badge badge-<?= warnaKategori($s['kategori']) ?>"><?= h($s['kategori']) ?></span></td>
                 <td><span class="badge badge-secondary" style="font-size:11px;white-space:normal;max-width:180px;display:inline-block;"><?= h($s['posisi_portofolio']) ?></span></td>
                 <td>
-                    <?php $rekHead = rtrim(explode("\n", trim($s['rekomendasi'] ?? '-'))[0], "\r") ?: '-'; ?>
-                    <span class="badge badge-warning" style="font-size:10.5px;max-width:160px;white-space:normal;display:inline-block;line-height:1.2;text-align:left;" title="<?= h($s['rekomendasi']) ?>">
+                    <?php $rekHead = rtrim(explode("\n", trim($s['rekomendasi'] ?? '-'))[0], "
+") ?: '-'; ?>
+                    <span class="badge badge-<?= warnaRekomendasi($s['rekomendasi']) ?>" style="font-size:10.5px;max-width:160px;white-space:normal;display:inline-block;line-height:1.2;text-align:left;" title="<?= h($s['rekomendasi']) ?>">
                         <?= h(singkat($rekHead, 45)) ?>
                     </span>
                 </td>
@@ -96,10 +97,12 @@ require __DIR__ . '/includes/header.php';
                 <td><strong><?= $label ?></strong> (<?= h($kode) ?>)</td>
                 <td><?= is_float($val) && $val != (int)$val ? number_format($val, 1) : $val ?> / <?= $maxScore ?></td>
                 <td>
-                    <div class="hbar-track" style="display:inline-block;vertical-align:middle;width:120px;height:14px;">
-                        <div class="hbar-fill" style="width:<?= $pct ?>%;background:linear-gradient(90deg,#2563eb,#60a5fa);"></div>
+                    <div class="hbar-item" style="margin-bottom:0;display:inline-flex;align-items:center;">
+                        <div class="hbar-track" style="display:inline-block;vertical-align:middle;width:120px;height:14px;background:#e2e8f0;border-radius:4px;overflow:hidden;flex:none;">
+                            <div class="hbar-fill" style="width:<?= $pct ?>%;height:100%;background:linear-gradient(90deg,#2563eb,#60a5fa);border-radius:4px;"></div>
+                        </div>
+                        <span style="margin-left:8px;font-weight:600;font-size:12px;"><?= $pct ?>%</span>
                     </div>
-                    <span style="margin-left:8px;font-weight:600;font-size:12px;"><?= $pct ?>%</span>
                 </td>
             </tr>
         <?php endforeach; ?>
@@ -139,9 +142,10 @@ require __DIR__ . '/includes/header.php';
             <td style="border:none !important;width:50%;text-align:center;font-size:11pt !important;vertical-align:top;background:none !important;">
                 <div>Mengetahui,</div>
                 <div style="font-weight:700;">Koordinator Tim Efektif</div>
+                <div style="font-size:9.5pt;">Kepala Bagian Tata Usaha dan Umum</div>
                 <div style="height:70px;"></div>
-                <div style="font-weight:700;text-decoration:underline;">Kepala Bagian Tata Usaha &amp; Umum</div>
-                <div style="font-size:9.5pt;">Kanwil Kementerian Hukum Kepulauan Riau</div>
+                <div style="font-weight:700;text-decoration:underline;">ROSDIANA EVLIN WALEWANGKO, S.H., M.H.</div>
+                <div style="font-size:9.5pt;">NIP. 19820518 200604 2 001</div>
             </td>
             <td style="border:none !important;width:50%;text-align:center;font-size:11pt !important;vertical-align:top;background:none !important;">
                 <div>Tanjungpinang, <?= formatTanggalPanjang(date('Y-m-d')) ?></div>

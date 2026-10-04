@@ -23,12 +23,44 @@ $user = currentUser();
 $userRole = $user['role'] ?? 'admin';
 
 $dueSoonMonev = [];
+$overdueMonev = [];
 foreach ($all as $s) {
     if (!empty($s['monev']['warning_1_bulan'])) {
         $dueSoonMonev[] = $s;
     }
+    if (!empty($s['monev']['has_overdue'])) {
+        $overdueMonev[] = $s;
+    }
 }
 ?>
+
+<?php if (!empty($overdueMonev)): ?>
+<div class="alert alert-danger" style="margin-bottom:20px;border-left:4px solid #dc2626;background:#fef2f2;color:#991b1b;">
+    <div style="font-weight:700;font-size:14px;margin-bottom:4px;color:#b91c1c;">
+        🚨 Jadwal Evaluasi Terlewat (Terlewat / Overdue)
+    </div>
+    <div style="font-size:13px;line-height:1.5;">
+        Terdapat <strong><?= count($overdueMonev) ?> kerja sama</strong> yang memiliki tahapan evaluasi melewati batas waktu dan belum diselesaikan. Harap segera lakukan penuntasan evaluasi:
+    </div>
+    <div style="font-size:13px;margin-top:8px;">
+        <ul style="margin:4px 0 0 18px;padding:0;">
+            <?php foreach ($overdueMonev as $od): 
+                $odMilestones = $od['monev']['overdue_milestones'] ?? [];
+            ?>
+            <?php foreach ($odMilestones as $oms): ?>
+            <li style="margin-bottom:4px;">
+                <strong><?= h($od['mitra']['kode']) ?></strong> &mdash; <?= h($od['mitra']['nama_mitra']) ?> &bull; 
+                Siklus: <span class="badge badge-danger" style="font-size:10px;font-weight:600;"><?= h($oms['nama']) ?></span> &bull;
+                Target: <strong><?= formatTanggal($oms['target_tgl']) ?></strong> 
+                (<span style="color:#b91c1c;font-weight:600;">Terlewat <?= abs($oms['sisa_hari']) ?> hari lalu</span>) &bull;
+                <a href="mitra_edit.php?id=<?= $od['mitra']['id'] ?>" style="color:#dc2626;text-decoration:underline;font-weight:600;">Buka Penilaian &rarr;</a>
+            </li>
+            <?php endforeach; ?>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php if ($userRole === 'pengampu' || $userRole === 'pic' || !empty($dueSoonMonev)): ?>
 <div class="alert alert-warning" style="margin-bottom:20px;border-left:4px solid #ea580c;background:#fff7ed;color:#9a3412;">

@@ -55,7 +55,12 @@ if ($user) {
 <?php if ($user): ?>
 <div class="app-layout">
 <div class="app-layout-main">
+    <div class="mobile-nav-backdrop" id="mobileNavBackdrop" onclick="toggleMobileNav()"></div>
     <aside class="sidebar">
+        <div class="sidebar-header-mobile">
+            <span style="font-weight:700;font-size:14px;color:#fff;">Menu Navigasi</span>
+            <button type="button" class="sidebar-close-mobile" onclick="toggleMobileNav()" aria-label="Tutup Menu">&times;</button>
+        </div>
         <nav class="sidebar-nav">
             <?php foreach ($navItems as $nav): ?>
             <a href="<?= $nav['page'] ?>.php" class="<?= $currentPage === $nav['page'] ? 'active' : '' ?>">
@@ -73,6 +78,11 @@ if ($user) {
     <div class="app-content">
         <header class="app-hero">
             <div class="hero-left">
+                <button type="button" class="mobile-nav-toggle" id="mobileNavToggle" aria-label="Buka Menu Navigasi" onclick="toggleMobileNav()">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
                 <div class="hero-logo-block">
                     <div class="hero-logo-badge">
                         <img src="public/img/logo-hukum.png" alt="Logo Hukum">
@@ -94,10 +104,21 @@ if ($user) {
                         <div class="user-name"><?= h($user['nama']) ?></div>
                         <div class="user-role"><?= h(ucfirst($user['role'])) ?></div>
                     </div>
-                    <a href="logout.php" class="btn-logout">▾</a>
+                    <form method="POST" action="logout.php" style="display:inline;margin:0;padding:0;" onsubmit="return confirm('Apakah Anda yakin ingin keluar dari akun?');">
+                        <?= csrfField() ?>
+                        <button type="submit" class="btn-logout" title="Keluar / Logout" style="background:none;border:none;cursor:pointer;font:inherit;line-height:inherit;display:inline-flex;align-items:center;">▾</button>
+                    </form>
                 </div>
             </div>
         </header>
+        <script>
+        function toggleMobileNav() {
+            var sidebar = document.querySelector('.sidebar');
+            var backdrop = document.getElementById('mobileNavBackdrop');
+            if (sidebar) sidebar.classList.toggle('mobile-open');
+            if (backdrop) backdrop.classList.toggle('active');
+        }
+        </script>
         <div class="page-body">
 <?php else: ?>
 <div class="page-body">

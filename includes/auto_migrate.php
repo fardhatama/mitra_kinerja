@@ -44,8 +44,11 @@ function ensureDatabaseSchema(PDO $pdo): void {
                     $sqlDump = file_get_contents($dumpPath);
                     if (!empty($sqlDump)) {
                         $pdo->exec("SET FOREIGN_KEY_CHECKS=0");
-                        $pdo->exec($sqlDump);
-                        $pdo->exec("SET FOREIGN_KEY_CHECKS=1");
+                        try {
+                            $pdo->exec($sqlDump);
+                        } finally {
+                            $pdo->exec("SET FOREIGN_KEY_CHECKS=1");
+                        }
                         return; // Selesai bootstrap lengkap
                     }
                 }
