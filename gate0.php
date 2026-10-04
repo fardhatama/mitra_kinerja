@@ -426,9 +426,34 @@ function parseGate0Date($val): ?string {
         $ts = ((float)$str - 25569) * 86400;
         return gmdate('Y-m-d', (int)round($ts));
     }
+    if (!function_exists('parseIndonesianDateText') && file_exists(__DIR__ . '/includes/functions.php')) {
+        require_once __DIR__ . '/includes/functions.php';
+    }
     if (function_exists('parseIndonesianDateText')) {
         $indo = parseIndonesianDateText($str);
         if ($indo !== null) return $indo;
+    }
+    if (preg_match('/(\d{1,2})\s*[-\/\s]\s*([a-zA-Z]+)\s*[-\/\s]\s*(\d{4})/', $str, $m)) {
+        $day = (int)$m[1];
+        $monthStr = strtolower(trim($m[2]));
+        $year = (int)$m[3];
+        $monthMap = [
+            'jan' => 1, 'januari' => 1, 'january' => 1,
+            'feb' => 2, 'februari' => 2, 'february' => 2,
+            'mar' => 3, 'maret' => 3, 'march' => 3,
+            'apr' => 4, 'april' => 4,
+            'mei' => 5, 'may' => 5,
+            'jun' => 6, 'juni' => 6, 'june' => 6,
+            'jul' => 7, 'juli' => 7, 'july' => 7,
+            'agu' => 8, 'agt' => 8, 'ags' => 8, 'agustus' => 8, 'aug' => 8, 'august' => 8,
+            'sep' => 9, 'sept' => 9, 'september' => 9,
+            'okt' => 10, 'oct' => 10, 'oktober' => 10, 'october' => 10,
+            'nov' => 11, 'nop' => 11, 'november' => 11, 'nopember' => 11,
+            'des' => 12, 'dec' => 12, 'desember' => 12, 'december' => 12,
+        ];
+        if (isset($monthMap[$monthStr])) {
+            return sprintf('%04d-%02d-%02d', $year, $monthMap[$monthStr], $day);
+        }
     }
     if (preg_match('/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/', $str, $m)) {
         return sprintf('%04d-%02d-%02d', $m[1], $m[2], $m[3]);
@@ -874,7 +899,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                     $hasQCols = isset($colMap['q1_tusi_kewenangan']) || isset($colMap['q1_jawab']);
                     if ($hasQCols) {
                         for ($q = 1; $q <= 18; $q++) {
-                            // BUG-G0-10, BUG-G0-19: Do not fabricate 'YA' answers or 'Dokumen terverifikasi' for unreviewed questions
+                            // BUG-G0-10, BUG-G0-19: Do not fabricate 'YA' answers or 'Dokumen terverifikasi' for unreviewed/unanswered questions; default to 'Belum ada data uji' matching vertical import
                             $valRaw = $getVal(["q{$q}_jawab", "q{$q}_tusi_kewenangan", "q{$q}_sasaran_kinerja", "q{$q}_batas_kewenangan", "q{$q}_kebutuhan_nyata", "q{$q}_kejelasan_manfaat", "q{$q}_output_outcome", "q{$q}_daya_ungkit", "q{$q}_legalitas_mitra", "q{$q}_kapasitas_mitra", "q{$q}_integritas_reputasi", "q{$q}_peran_kontribusi", "q{$q}_focal_point", "q{$q}_kesiapan_sdm_anggaran", "q{$q}_indikator_awal", "q{$q}_manajemen_risiko", "q{$q}_tindak_lanjut_pascattd", "q{$q}_keberlanjutan_manfaat", "q{$q}_mitigasi_hambatan"], '');
                             if ($valRaw === '') {
                                 $qAns = 'BELUM DITELAAH';
@@ -883,7 +908,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                                 $qAns = strtoupper($valRaw) === 'YA' ? 'YA' : (strtoupper($valRaw) === 'TIDAK' ? 'TIDAK' : 'BELUM DITELAAH');
                                 $defaultBukti = $qAns === 'YA' ? 'Dokumen terverifikasi' : 'Belum ada data uji';
                             }
-                            $qBukti = $getVal(["q{$q}_bukti"], $defaultBukti);
+                            $rawBukti = $getVal(["q{$q}_bukti"], '');
+                            $qBukti = $rawBukti !== '' ? $rawBukti : $defaultBukti;
                             $pertanyaanUji["q{$q}"] = ['jawab' => $qAns, 'bukti' => $qBukti];
                             if ($qAns !== 'YA') {
                                 if ($q <= 3) $kSummary['K1'] = 'TIDAK';

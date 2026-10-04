@@ -134,7 +134,7 @@ function getMitraSummary(PDO $pdo, array $mitra, bool $forceRecalculate = false)
     }
 
     $calculatedPosisi = hitungPosisiPortofolio($indikatorRows);
-    if ($forceRecalculate || !isset($mitra['posisi_portofolio']) || $mitra['posisi_portofolio'] === '') {
+    if ($ringkasan['dapat_dinilai_n'] === 0 || $forceRecalculate || !isset($mitra['posisi_portofolio']) || $mitra['posisi_portofolio'] === '') {
         $posisiPortofolio = $calculatedPosisi;
     } else {
         $posisiPortofolio = $mitra['posisi_portofolio'];

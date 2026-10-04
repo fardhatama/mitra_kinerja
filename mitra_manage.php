@@ -156,8 +156,8 @@ if ($id > 0) {
             if ($pksIndukId === $id) {
                 $pksIndukId = null;
             }
-            $mulai      = $_POST['tanggal_mulai'] ?: null;
-            $berakhir   = $_POST['tanggal_berakhir'] ?: null;
+            $mulai      = !empty(trim($_POST['tanggal_mulai'] ?? '')) ? trim($_POST['tanggal_mulai']) : null;
+            $berakhir   = !empty(trim($_POST['tanggal_berakhir'] ?? '')) ? trim($_POST['tanggal_berakhir']) : null;
             $statusTgl  = $_POST['status_tanggal'] ?? $mitra['status_tanggal'];
             $cutoff     = !empty($_POST['cutoff_date']) ? $_POST['cutoff_date'] : ($mitra['cutoff_date'] ?: ($mitra['tanggal_mulai'] ?: date('Y-m-d')));
             $sumber     = trim($_POST['sumber_baseline'] ?? '');
@@ -225,7 +225,7 @@ if ($id > 0) {
         if ($namaMitra === '') {
             $errors[] = 'Nama Mitra wajib diisi.';
         }
-        if (!empty($mulai) && !empty($berakhir) && $berakhir < $mulai) {
+        if (!empty($mulai) && !empty($berakhir) && (strtotime($berakhir) < strtotime($mulai) || $berakhir < $mulai)) {
             $errors[] = 'Tanggal berakhir tidak boleh lebih awal dari tanggal mulai.';
         }
         if (empty($errors)) {
@@ -492,8 +492,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
         $judul      = trim($_POST['judul'] ?? '');
         $bidang     = $_POST['bidang'] ?? 'AHU';
         $jenis      = $_POST['jenis'] ?? 'PKS';
-        $mulai      = $_POST['tanggal_mulai'] ?: null;
-        $berakhir   = $_POST['tanggal_berakhir'] ?: null;
+        $mulai      = !empty(trim($_POST['tanggal_mulai'] ?? '')) ? trim($_POST['tanggal_mulai']) : null;
+        $berakhir   = !empty(trim($_POST['tanggal_berakhir'] ?? '')) ? trim($_POST['tanggal_berakhir']) : null;
         $statusTgl  = $_POST['status_tanggal'] ?? 'BELUM TERVERIFIKASI';
         $evaluasiPerTahun = min(12, max(1, !empty($_POST['evaluasi_per_tahun']) ? (int)$_POST['evaluasi_per_tahun'] : 4));
         $picInternal = trim($_POST['pic_internal'] ?? '');
@@ -539,7 +539,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
     if ($kode === '' || $namaMitra === '') {
         $errors[] = 'Kode dan Nama Mitra wajib diisi.';
     }
-    if (!empty($mulai) && !empty($berakhir) && $berakhir < $mulai) {
+    if (!empty($mulai) && !empty($berakhir) && (strtotime($berakhir) < strtotime($mulai) || $berakhir < $mulai)) {
         $errors[] = 'Tanggal berakhir tidak boleh lebih awal dari tanggal mulai.';
     }
     if (empty($errors)) {

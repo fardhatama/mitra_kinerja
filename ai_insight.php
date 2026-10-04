@@ -9,7 +9,13 @@
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/data.php';
 require_once __DIR__ . '/includes/ai_service.php';
-requireLogin();
+
+if (!currentUser()) {
+    http_response_code(401);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['success' => false, 'error' => 'UNAUTHENTICATED']);
+    exit;
+}
 
 $user = currentUser();
 

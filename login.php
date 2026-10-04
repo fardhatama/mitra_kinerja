@@ -11,9 +11,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $lockoutTime = 60; // 60 detik lockout
     $maxAttempts = 5;  // 5 kali percobaan
 
-    // Dapatkan alamat IP klien
+    // Dapatkan alamat IP klien (hanya percaya HTTP_X_FORWARDED_FOR jika REMOTE_ADDR ada di daftar trusted proxy)
     $clientIp = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
-    if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+    $trustedProxies = defined('TRUSTED_PROXIES') && is_array(TRUSTED_PROXIES)
+        ? TRUSTED_PROXIES
+        : (defined('TRUSTED_PROXIES') && is_string(TRUSTED_PROXIES) ? array_map('trim', explode(',', TRUSTED_PROXIES)) : []);
+
+    if (in_array($clientIp, $trustedProxies, true) && !empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
         $fwd = trim(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0]);
         if (filter_var($fwd, FILTER_VALIDATE_IP)) {
             $clientIp = $fwd;
@@ -42,22 +46,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $lastSuccessTime = $stmtSuccess->fetchColumn() ?: null;
         }
 
+        $escapedIp = addcslashes($clientIp, '%_\\');
+
         if ($username !== '') {
+            $escapedUsername = addcslashes($username, '%_\\');
             $stmt = $pdo->prepare("
                 SELECT COUNT(*) AS failed_count, MAX(UNIX_TIMESTAMP(created_at)) AS last_failed
                 FROM audit_log
                 WHERE aksi = 'LOGIN_FAILED'
                   AND created_at >= NOW() - INTERVAL 5 MINUTE
+                  AND (? IS NULL OR created_at > ?)
                   AND (
-                      (detail LIKE ? AND (? IS NULL OR created_at > ?))
+                      detail LIKE ?
                       OR detail LIKE ?
                   )
             ");
             $stmt->execute([
-                '%Username: ' . $username . '%',
                 $lastSuccessTime,
                 $lastSuccessTime,
-                '%IP: ' . $clientIp . '%'
+                '%Username: ' . $escapedUsername . '%',
+                '%IP: ' . $escapedIp . '%'
             ]);
         } else {
             $stmt = $pdo->prepare("
@@ -67,7 +75,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                   AND created_at >= NOW() - INTERVAL 5 MINUTE
                   AND detail LIKE ?
             ");
-            $stmt->execute(['%IP: ' . $clientIp . '%']);
+            $stmt->execute(['%IP: ' . $escapedIp . '%']);
         }
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($row) {
@@ -95,8 +103,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             header('Location: dashboard.php');
             exit;
         } else {
-            // Catat kegagalan ke audit_log (menyimpan Username dan IP)
-            logAudit(null, null, 'LOGIN_FAILED', 'Username: ' . $username . ' | IP: ' . $clientIp);
+            // Catat kegagalan ke audit_log (menyimpan Username dan IP, sanitasi delimiter untuk mencegah log injection)
+            $safeLogUser = str_replace(["\x0d", "\x0a"], '', str_replace([' | ', '|'], [' ', '_'], $username));
+            logAudit(null, null, 'LOGIN_FAILED', 'Username: ' . $safeLogUser . ' | IP: ' . $clientIp);
             $attempts = max((int)($_SESSION['login_attempts'] ?? 0), $dbAttempts) + 1;
             if ($attempts >= $maxAttempts) {
                 $_SESSION['login_lockout'] = time() + $lockoutTime;

@@ -142,10 +142,8 @@ function initSearchableDropdowns() {
             select.value = val;
             input.value = label;
             wrap.classList.remove('open');
+            // When option is selected or cleared, reset customValidity so form submission is not blocked
             input.setCustomValidity('');
-            if (isRequired && !val) {
-                input.setCustomValidity('Harap pilih salah satu naskah.');
-            }
             var event = new Event('change', { bubbles: true });
             select.dispatchEvent(event);
         }
@@ -163,11 +161,8 @@ function initSearchableDropdowns() {
                     var event = new Event('change', { bubbles: true });
                     select.dispatchEvent(event);
                 }
-                if (isRequired) {
-                    input.setCustomValidity('Harap pilih salah satu naskah.');
-                } else {
-                    input.setCustomValidity('');
-                }
+                // When input is cleared or optional, ensure customValidity is reset to '' so form submission is not blocked
+                input.setCustomValidity('');
             } else if (!curVal || input.value.trim().toLowerCase() !== curText.toLowerCase()) {
                 // Bug 21: If user types a custom query and does not select an option, do not silently submit stale previous selection; clear or validate.
                 var matched = null;
@@ -181,7 +176,7 @@ function initSearchableDropdowns() {
                 } else {
                     select.value = '';
                     if (isRequired) {
-                        input.setCustomValidity('Harap pilih opsi yang valid dari daftar.');
+                        input.setCustomValidity('Harap pilih salah satu naskah.');
                     } else {
                         input.setCustomValidity('');
                     }
@@ -213,7 +208,11 @@ function initSearchableDropdowns() {
             var cur = select.options[select.selectedIndex];
             var curVal = cur ? cur.value : '';
             var curText = (cur && curVal) ? cur.textContent.trim() : '';
-            if (input.value.trim().toLowerCase() !== curText.toLowerCase()) {
+            if (input.value.trim() === '') {
+                // When input is cleared or optional, ensure customValidity is reset to '' so form submission is not blocked
+                select.value = '';
+                input.setCustomValidity('');
+            } else if (input.value.trim().toLowerCase() !== curText.toLowerCase()) {
                 // Bug 21: Invalidate / clear stale selection immediately when query changes
                 select.value = '';
                 if (isRequired) {

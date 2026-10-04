@@ -665,7 +665,7 @@ require __DIR__ . '/includes/header.php';
 
                     <!-- 2. BASELINE: TEMPLATE EXCEL -->
                     <td style="padding:12px 14px;text-align:center;vertical-align:middle;">
-                        <?php if ($hasBaseline): ?>
+                        <?php if ($hasBaseline && !$isAdmin): ?>
                             <button type="button" class="btn btn-sm" disabled style="font-size:10.5px;padding:4px 8px;color:#94a3b8;background:#f8fafc;border:1px solid #e2e8f0;cursor:not-allowed;" title="Data Baseline sudah terisi / terkunci. Unduh template dinonaktifkan.">
                                 <span>🔒</span> Terkunci
                             </button>

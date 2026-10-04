@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.7] - 2026-10-04
+
+### Fixed
+- **Penguatan Menyeluruh Loop 5: Hardening Router Server, Sanitasi Kueri Login, dan Konsistensi Impor (v2.4.7):**
+  - **Server Router & Proteksi Direktori Sensitif (`router.php`):**
+    - Mengamankan perutean berkas pada Windows dan server internal agar kebal terhadap variasi huruf kapital (case-insensitive) dan pemisah garis miring terbalik (`\`).
+    - Menambahkan blokir menyeluruh terhadap jalur *path traversal* (`/../` atau `%2e%2e`).
+    - Memasukkan direktori sensitif `/backups/`, `/.git/`, `/scripts/`, dan `/docs/` ke dalam daftar blokir akses langsung peramban (HTTP 403 Forbidden).
+  - **Keamanan Login & Penanganan Kueri Audit (`login.php`):**
+    - Menghilangkan kepercayaan buta pada header `HTTP_X_FORWARDED_FOR` yang dapat dimanipulasi klien, menggunakan alamat IP jaringan langsung (`REMOTE_ADDR`) untuk mencegah pemalsuan identitas dan *lockout bypass*.
+    - Melakukan *escaping* karakter *wildcard* SQL `LIKE` (`%` dan `_`) pada nama pengguna guna mencegah penyatuan percobaan login lintas akun.
+    - Membersihkan karakter pemisah (`|`, baris baru) pada nama pengguna saat pencatatan kegagalan login untuk mencegah eksploitasi penguncian IP sewenang-wenang.
+  - **Layanan AI dan Diagnostik API (`includes/ai_service.php`, `ai_debug_raw.php`, `ai_insight.php`):**
+    - Mengembalikan skema otentikasi standar `Authorization: Bearer ` pada panggilan API cadangan OpenRouter dan Groq.
+    - Menanggapi permintaan tidak terotentikasi pada `ai_insight.php` dan `ai_debug_raw.php` dengan status HTTP 401 JSON (`{"success":false,"error":"UNAUTHENTICATED"}`) alih-alih pengalihan HTML 302 yang merusak parsing JSON peramban.
+  - **Integritas Data dan Pengelolaan Mitra (`includes/data.php`, `mitra_manage.php`):**
+    - Mencegah naskah yang belum dinilai (`dapat_dinilai_n === 0` atau `BELUM DAPAT DITENTUKAN`) menampilkan rekomendasi 'PERBAIKI' usang dari data dasar; memastikan rekomendasi tetap 'BELUM DITENTUKAN'.
+    - Menambahkan validasi batas rentang tanggal naskah (`tanggal_berakhir >= tanggal_mulai`) pada formulir naskah kerja sama di `mitra_manage.php`.
+    - Membatasi frekuensi evaluasi per tahun (`evaluasi_per_tahun`) pada rentang aman 1 s.d. 12 di tingkat server.
+  - **Gate 0, Baseline, dan Impor Naskah (`gate0.php`, `baseline.php`, `import.php`, `public/js/searchable_dropdown.js`):**
+    - Mengintegrasikan fungsi pengenal tanggal bahasa Indonesia (`parseIndonesianDateText`) pada penguraian berkas Excel/CSV Gate 0 agar tanggal tidak terhapus menjadi NULL.
+    - Menyelaraskan bukti pertanyaan Gate 0 yang belum diperiksa menjadi 'Belum ada data uji' pada impor horizontal (menghilangkan fabrikasi bukti palsu).
+    - Mempertahankan catatan bukti arsip fisik non-URL pada Elemen 9 Baseline saat formulir disimpan manual.
+    - Membuka akses tombol impor Baseline bagi akun Administrator pada naskah yang terkunci di `import.php`.
+    - Memastikan perhitungan nilai Scorecard diturunkan secara deterministik dari skor dan bobot, menghilangkan nilai nol formula palsu pada indikator kosong.
+    - Memperbaiki penanganan validasi kustom pada `searchable_dropdown.js` agar pemilihan opsional yang dikosongkan tidak mengunci pengiriman formulir.
+
 ## [2.4.6] - 2026-10-04
 
 ### Fixed

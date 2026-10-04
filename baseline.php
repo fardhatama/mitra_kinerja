@@ -408,8 +408,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                         if (!empty($candidates)) {
                             $bukti = json_encode($candidates, JSON_UNESCAPED_UNICODE);
                         } else {
-                            // BUG-BL-11: Preserve raw text notes cleanly if not a path/URL
-                            $bukti = $isJson ? '' : trim($bukti);
+                            // BUG-BL-11: Preserve valid non-URL proof notes (e.g. archive references) cleanly without erasing to empty string
+                            if ($isJson && is_array($testDec)) {
+                                $textNotes = array_values(array_filter(array_map('trim', $testDec), function ($c) {
+                                    return is_string($c) && $c !== '' && $c !== '-' && $c !== 'null';
+                                }));
+                                $bukti = !empty($textNotes) ? implode("\n", $textNotes) : '';
+                            } else {
+                                $trimBukti = trim($bukti);
+                                $bukti = ($trimBukti === '-' || $trimBukti === 'null') ? '' : $trimBukti;
+                            }
                         }
                     }
 
