@@ -140,6 +140,7 @@ function ensureDatabaseSchema(PDO $pdo): void {
                 catatan_monev               TEXT NULL,
                 nilai_siklus                DECIMAL(6,2) NULL,
                 created_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_mitra_siklus (mitra_id, siklus_ke),
                 FOREIGN KEY (mitra_id) REFERENCES mitra_kinerja(id) ON DELETE CASCADE,
                 FOREIGN KEY (rencana_kerja_id) REFERENCES rencana_kerja(id) ON DELETE SET NULL
             ) ENGINE=InnoDB;
@@ -168,6 +169,14 @@ function ensureDatabaseSchema(PDO $pdo): void {
                 if (!isset($colsMkMap[$cName])) {
                     try { $pdo->exec($sqlAlter); } catch (Throwable $e) {}
                 }
+            }
+        } catch (Throwable $e) {}
+
+        // Siklus monev unique index check
+        try {
+            $indicesSm = $pdo->query("SHOW INDEX FROM siklus_monev WHERE Key_name = 'uq_mitra_siklus'")->fetchAll();
+            if (empty($indicesSm)) {
+                $pdo->exec("ALTER TABLE siklus_monev ADD UNIQUE KEY uq_mitra_siklus (mitra_id, siklus_ke)");
             }
         } catch (Throwable $e) {}
 

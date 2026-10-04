@@ -190,10 +190,32 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         // Bug 2: Reset validasi status to 'BELUM' jika sebelumnya berstatus 'PERLU PERBAIKAN' (revisi baru dari pemeriksa)
         resetValidasiJikaPerluPerbaikan($pdo, $id);
 
-        // Bug 4: Update active siklus_monev record when assessment is submitted and saved
-        $stmtActiveSM = $pdo->prepare("SELECT id FROM siklus_monev WHERE mitra_id = ? AND status_siklus != 'Selesai' ORDER BY siklus_ke ASC LIMIT 1");
-        $stmtActiveSM->execute([$id]);
-        $activeSMId = $stmtActiveSM->fetchColumn();
+        // Bug 4: Update active siklus_monev record only when corresponding to active review cycle or explicitly targeted
+        // Prevents successive saves from draining future milestones
+        $targetSMId = !empty($_POST['target_siklus_id']) ? (int)$_POST['target_siklus_id'] : (!empty($_POST['siklus_monev_id']) ? (int)$_POST['siklus_monev_id'] : (!empty($_POST['siklus_id']) ? (int)$_POST['siklus_id'] : null));
+        $activeSMId = null;
+
+        if ($targetSMId) {
+            $stmtCheck = $pdo->prepare('SELECT id FROM siklus_monev WHERE id = ? AND mitra_id = ?');
+            $stmtCheck->execute([$targetSMId, $id]);
+            $activeSMId = $stmtCheck->fetchColumn() ?: null;
+        }
+
+        if (!$activeSMId) {
+            // Hanya targetkan milestone yang berstatus aktif penilaian ('Sedang Dinilai' atau 'Perlu Penilaian Segera')
+            $stmtActiveSM = $pdo->prepare("SELECT id FROM siklus_monev WHERE mitra_id = ? AND status_siklus IN ('Sedang Dinilai', 'Perlu Penilaian Segera') ORDER BY siklus_ke ASC LIMIT 1");
+            $stmtActiveSM->execute([$id]);
+            $activeSMId = $stmtActiveSM->fetchColumn() ?: null;
+        }
+
+        if (!$activeSMId) {
+            // Jika siklus aktif telah diselesaikan pada tanggal review ini (misal simpan berturut-turut), perbarui skornya tanpa mengorbankan milestone berikutnya
+            $tglCheck = ($_POST['tanggal_review'] ?? '') !== '' ? $_POST['tanggal_review'] : date('Y-m-d');
+            $stmtRecentSM = $pdo->prepare("SELECT id FROM siklus_monev WHERE mitra_id = ? AND status_siklus = 'Selesai' AND tanggal_realisasi_evaluasi = ? ORDER BY siklus_ke DESC LIMIT 1");
+            $stmtRecentSM->execute([$id, $tglCheck]);
+            $activeSMId = $stmtRecentSM->fetchColumn() ?: null;
+        }
+
         if ($activeSMId) {
             $stmtInd = $pdo->prepare('SELECT * FROM indikator_skor WHERE mitra_id = ?');
             $stmtInd->execute([$id]);
@@ -201,8 +223,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $rInd = ringkasanIndikator($indRows);
             $nilaiBerjalan = $rInd['nilai_berjalan'];
 
+            $tglRealisasi = ($_POST['tanggal_review'] ?? '') !== '' ? $_POST['tanggal_review'] : date('Y-m-d');
             $stmtUpdSM = $pdo->prepare("UPDATE siklus_monev SET status_siklus = 'Selesai', nilai_siklus = ?, tanggal_realisasi_evaluasi = ? WHERE id = ?");
-            $stmtUpdSM->execute([round($nilaiBerjalan, 2), date('Y-m-d'), $activeSMId]);
+            $stmtUpdSM->execute([round($nilaiBerjalan, 2), $tglRealisasi, $activeSMId]);
         }
 
         // Bug 2.1: Call syncStatusScorecard inside the try-catch block before or alongside commit
@@ -312,6 +335,18 @@ require __DIR__ . '/includes/header.php';
 <form method="post">
 <?= csrfField() ?>
 <input type="hidden" name="status_tanggal" value="<?= h($mitra['status_tanggal']) ?>">
+<?php
+// Target siklus aktif saat ini
+$formActiveSMId = null;
+try {
+    $stmtFormSM = $pdo->prepare("SELECT id FROM siklus_monev WHERE mitra_id = ? AND status_siklus IN ('Sedang Dinilai', 'Perlu Penilaian Segera') ORDER BY siklus_ke ASC LIMIT 1");
+    $stmtFormSM->execute([$id]);
+    $formActiveSMId = $stmtFormSM->fetchColumn() ?: null;
+} catch (Throwable $e) {}
+?>
+<?php if ($formActiveSMId): ?>
+<input type="hidden" name="target_siklus_id" value="<?= (int)$formActiveSMId ?>">
+<?php endif; ?>
 
 <div class="card">
     <h2>Identitas Kerja Sama</h2>

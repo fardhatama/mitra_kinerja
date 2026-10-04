@@ -100,8 +100,7 @@ require __DIR__ . '/includes/header.php';
                 <td><span class="badge badge-secondary" style="font-size:11px;max-width:180px;white-space:normal;display:inline-block;line-height:1.25;text-align:left;"><?= h($s['posisi_portofolio']) ?></span></td>
                 <td>
                     <?php 
-                    $rekHead = rtrim(explode("\n", trim($s['rekomendasi'] ?? '-'))[0], "
-") ?: '-';
+                    $rekHead = trim(explode("\n", trim($s['rekomendasi'] ?? '-'))[0]) ?: '-';
                     ?>
                     <span class="badge badge-<?= warnaRekomendasi($s['rekomendasi']) ?>" style="font-size:11px;max-width:210px;white-space:normal;display:inline-block;line-height:1.25;text-align:left;" title="<?= h($s['rekomendasi']) ?>">
                         <?= h(singkat($rekHead, 45)) ?>

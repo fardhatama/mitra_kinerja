@@ -152,8 +152,8 @@ DROP TABLE IF EXISTS `intervensi_usulan`;
 CREATE TABLE `intervensi_usulan` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `mitra_id` int(11) NOT NULL,
-  `uraian_kendala` text DEFAULT NULL,
   `upaya_dilakukan` text DEFAULT NULL,
+  `uraian_kendala` text DEFAULT NULL,
   `keputusan_diminta` text DEFAULT NULL,
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),

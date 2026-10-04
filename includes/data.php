@@ -151,7 +151,9 @@ function getMitraSummary(PDO $pdo, array $mitra, bool $forceRecalculate = false)
     $calculatedRekomendasi = ($ringkasan['dapat_dinilai_n'] === 0 || $ringkasan['nilai_berjalan'] <= 0 || $posisiPortofolio === 'BELUM DAPAT DITENTUKAN')
         ? 'BELUM DITENTUKAN'
         : hitungRekomendasi($ringkasan['nilai_berjalan'], $warning['status'], $posisiPortofolio, $sisaHari);
-    if ($forceRecalculate || !isset($mitra['rekomendasi']) || $mitra['rekomendasi'] === '') {
+    if ($ringkasan['dapat_dinilai_n'] === 0 || $posisiPortofolio === 'BELUM DAPAT DITENTUKAN') {
+        $rekomendasi = 'BELUM DITENTUKAN';
+    } elseif ($forceRecalculate || !isset($mitra['rekomendasi']) || $mitra['rekomendasi'] === '') {
         $rekomendasi = $calculatedRekomendasi;
     } else {
         $rekomendasi = $mitra['rekomendasi'];
@@ -393,11 +395,11 @@ function getDashboardStats(array $all): array {
         if ($scoreToUse !== null) {
             $totalNilai += $scoreToUse;
             $nilaiCount++;
-        }
 
-        foreach ($s['indikator'] as $ind) {
-            if ($ind['nilai'] !== null && isset($aspekScores[$ind['kode_indikator']])) {
-                $aspekScores[$ind['kode_indikator']][] = (float)$ind['nilai'];
+            foreach ($s['indikator'] as $ind) {
+                if ($ind['nilai'] !== null && isset($aspekScores[$ind['kode_indikator']])) {
+                    $aspekScores[$ind['kode_indikator']][] = (float)$ind['nilai'];
+                }
             }
         }
     }

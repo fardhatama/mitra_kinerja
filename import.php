@@ -330,17 +330,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                             $statusPem = 'BUKTI CUKUP';
                         }
 
-                        // Bug 22: In scorecard import, if status is not evaluable (e.g. BDN or Belum Memadai), force $skor = null and $nilai = null to prevent 'HAPUS SKOR' validation error
+                        // Bug 22, BUG-IM-10: In scorecard import, compute $nilai deterministically from $skor and $bobot; do not use raw formula cell value if $skor is null
                         if (!in_array($statusPem, ['BUKTI MEMADAI', 'BUKTI CUKUP'], true)) {
                             $skor = null;
                             $nilai = null;
                         } else {
                             $skor = is_numeric($rawSkor) ? max(0, min(4, (int)$rawSkor)) : null;
-                            if (is_numeric($rawNilai)) {
-                                $nilai = round((float)$rawNilai, 2);
-                            } else {
-                                $nilai = $skor !== null ? round(($skor / 4.0) * $bobot, 2) : null;
-                            }
+                            $nilai = $skor !== null ? round(($skor / 4.0) * $bobot, 2) : null;
                         }
 
                         $descCandidate = $isPenilaianLayout ? trim(($row[1] ?? '') . "\nCara periksa: " . ($row[3] ?? '')) : trim($row[2] ?? '');
@@ -682,7 +678,7 @@ require __DIR__ . '/includes/header.php';
 
                     <!-- 3. BASELINE: AKSI IMPORT -->
                     <td style="padding:12px 14px;text-align:center;vertical-align:middle;border-right:1px solid #f1f5f9;">
-                        <?php if ($hasBaseline): ?>
+                        <?php if ($hasBaseline && !$isAdmin): ?>
                             <button type="button" class="btn btn-sm" disabled style="font-size:10.5px;padding:5px 10px;color:#94a3b8;background:#f8fafc;border:1px solid #e2e8f0;cursor:not-allowed;" title="Data Baseline sudah terverifikasi dan terkunci. Import dinonaktifkan.">
                                 <span>🔒</span> Terkunci
                             </button>

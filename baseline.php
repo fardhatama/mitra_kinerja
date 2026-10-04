@@ -385,9 +385,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                         }
                     }
 
-                    // BUG-BL-08, Bug 12, Bug 29: In Element 9 textarea, handle decode/encode safely on form save
+                    // BUG-BL-08, Bug 12, Bug 29, BUG-BL-11: In Element 9 textarea, handle decode/encode safely on form save
                     if ($num === 9 && !empty($bukti)) {
-                        $isJson = str_starts_with($bukti, '[') && str_ends_with($bukti, ']') && ($testDec = json_decode($bukti, true)) && is_array($testDec);
+                        $testDec = json_decode($bukti, true);
+                        $isJson = str_starts_with($bukti, '[') && str_ends_with($bukti, ']') && is_array($testDec);
                         $rawCandidates = $isJson ? $testDec : preg_split('/[
 \n;]+/', $bukti);
                         $candidates = [];
@@ -407,7 +408,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                         if (!empty($candidates)) {
                             $bukti = json_encode($candidates, JSON_UNESCAPED_UNICODE);
                         } else {
-                            $bukti = '';
+                            // BUG-BL-11: Preserve raw text notes cleanly if not a path/URL
+                            $bukti = $isJson ? '' : trim($bukti);
                         }
                     }
 

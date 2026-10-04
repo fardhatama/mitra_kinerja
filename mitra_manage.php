@@ -163,7 +163,7 @@ if ($id > 0) {
             $sumber     = trim($_POST['sumber_baseline'] ?? '');
             $picInternal = trim($_POST['pic_internal'] ?? ($mitra['pic_internal'] ?? ''));
             $picMitra    = trim($_POST['pic_mitra'] ?? ($mitra['pic_mitra'] ?? ''));
-            $evaluasiPerTahun = !empty($_POST['evaluasi_per_tahun']) ? (int)$_POST['evaluasi_per_tahun'] : 4;
+            $evaluasiPerTahun = min(12, max(1, !empty($_POST['evaluasi_per_tahun']) ? (int)$_POST['evaluasi_per_tahun'] : 4));
 
         // Validasi enum values
         $validPortofolio = ['Pilot Utama', 'Cadangan'];
@@ -224,7 +224,11 @@ if ($id > 0) {
 
         if ($namaMitra === '') {
             $errors[] = 'Nama Mitra wajib diisi.';
-        } elseif (empty($errors)) {
+        }
+        if (!empty($mulai) && !empty($berakhir) && $berakhir < $mulai) {
+            $errors[] = 'Tanggal berakhir tidak boleh lebih awal dari tanggal mulai.';
+        }
+        if (empty($errors)) {
             try {
                 $pdo->beginTransaction();
 
@@ -491,7 +495,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
         $mulai      = $_POST['tanggal_mulai'] ?: null;
         $berakhir   = $_POST['tanggal_berakhir'] ?: null;
         $statusTgl  = $_POST['status_tanggal'] ?? 'BELUM TERVERIFIKASI';
-        $evaluasiPerTahun = !empty($_POST['evaluasi_per_tahun']) ? (int)$_POST['evaluasi_per_tahun'] : 4;
+        $evaluasiPerTahun = min(12, max(1, !empty($_POST['evaluasi_per_tahun']) ? (int)$_POST['evaluasi_per_tahun'] : 4));
         $picInternal = trim($_POST['pic_internal'] ?? '');
         $picMitra    = trim($_POST['pic_mitra'] ?? '');
 
@@ -534,7 +538,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
 
     if ($kode === '' || $namaMitra === '') {
         $errors[] = 'Kode dan Nama Mitra wajib diisi.';
-    } elseif (empty($errors)) {
+    }
+    if (!empty($mulai) && !empty($berakhir) && $berakhir < $mulai) {
+        $errors[] = 'Tanggal berakhir tidak boleh lebih awal dari tanggal mulai.';
+    }
+    if (empty($errors)) {
         // Bug 5.1: Bungkus pembuatan mitra multi-tabel dalam transaksi database PDO
         $pdo->beginTransaction();
         try {

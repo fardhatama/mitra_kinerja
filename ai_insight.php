@@ -24,8 +24,13 @@ if ($forceRefresh) {
     $csrfToken = $_POST['csrf_token'] 
         ?? $_SERVER['HTTP_X_CSRF_TOKEN'] 
         ?? null;
+    if (!$csrfToken && function_exists('getallheaders')) {
+        $headers = array_change_key_case(getallheaders(), CASE_LOWER);
+        $csrfToken = $headers['x-csrf-token'] ?? null;
+    }
     if (!$csrfToken) {
-        $jsonInput = json_decode(file_get_contents('php://input'), true);
+        $rawBody = file_get_contents('php://input');
+        $jsonInput = json_decode($rawBody, true);
         if (is_array($jsonInput) && isset($jsonInput['csrf_token']) && is_string($jsonInput['csrf_token'])) {
             $csrfToken = $jsonInput['csrf_token'];
         }
@@ -65,21 +70,7 @@ if (!defined('AI_ENABLED') || !AI_ENABLED) {
     exit;
 }
 
-// Cek apakah minimal SATU API key sudah dikonfigurasi
-$geminiOk = (GEMINI_API_KEY !== '' && GEMINI_API_KEY !== 'ISI_API_KEY_ANDA_DI_SINI');
-$openrouterOk = (OPENROUTER_API_KEY !== '');
-$groqOk = (GROQ_API_KEY !== '');
-
-if (!$geminiOk && !$openrouterOk && !$groqOk) {
-    echo json_encode([
-        'success' => false,
-        'error' => 'API_KEY_MISSING',
-        'message' => 'Silakan konfigurasi minimal satu API Key (Gemini, OpenRouter, atau Groq) di includes/ai_config.php'
-    ]);
-    exit;
-}
-
-// Coba ambil dari cache dulu SEBELUM query database yang berat
+// Coba ambil dari cache dulu SEBELUM query database yang berat dan sebelum cek API key
 if (!$forceRefresh) {
     $cached = getCachedInsight();
     if ($cached && isset($cached['insight'])) {
@@ -93,6 +84,20 @@ if (!$forceRefresh) {
         ]);
         exit;
     }
+}
+
+// Cek apakah minimal SATU API key sudah dikonfigurasi untuk pembuatan insight baru
+$geminiOk = (GEMINI_API_KEY !== '' && GEMINI_API_KEY !== 'ISI_API_KEY_ANDA_DI_SINI');
+$openrouterOk = (OPENROUTER_API_KEY !== '');
+$groqOk = (GROQ_API_KEY !== '');
+
+if (!$geminiOk && !$openrouterOk && !$groqOk) {
+    echo json_encode([
+        'success' => false,
+        'error' => 'API_KEY_MISSING',
+        'message' => 'Silakan konfigurasi minimal satu API Key (Gemini, OpenRouter, atau Groq) di includes/ai_config.php'
+    ]);
+    exit;
 }
 
 if (!function_exists('curl_init')) {

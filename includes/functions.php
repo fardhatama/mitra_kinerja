@@ -406,7 +406,7 @@ function hitungMasaBerlaku(?string $tanggalBerakhir, ?string $cutoffDate, ?strin
  * Contoh: 36 Bulan Durasi Berjalan / 4 = 9 Kali Target Evaluasi Rencana Kerja.
  */
 function hitungKebutuhanScorecard(?string $tanggalMulai, ?string $tanggalBerakhir, int $evaluasiPerTahun = 4): array {
-    $evaluasiPerTahun = max(1, $evaluasiPerTahun);
+    $evaluasiPerTahun = min(12, max(1, $evaluasiPerTahun));
     $fallback = [
         'total_siklus'             => 0,
         'durasi_bulan'             => 0,

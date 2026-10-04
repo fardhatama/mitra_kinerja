@@ -10,8 +10,76 @@ $error = '';
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $lockoutTime = 60; // 60 detik lockout
     $maxAttempts = 5;  // 5 kali percobaan
-    $lockUntil = (int)($_SESSION['login_lockout'] ?? 0);
-    $attempts = (int)($_SESSION['login_attempts'] ?? 0);
+
+    // Dapatkan alamat IP klien
+    $clientIp = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+        $fwd = trim(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0]);
+        if (filter_var($fwd, FILTER_VALIDATE_IP)) {
+            $clientIp = $fwd;
+        }
+    }
+
+    $rawUser = isset($_POST['username']) && is_string($_POST['username']) ? $_POST['username'] : '';
+    $rawPass = isset($_POST['password']) && is_string($_POST['password']) ? $_POST['password'] : '';
+    $username = trim($rawUser);
+    $password = $rawPass;
+
+    // Cek kegagalan login terkini di database (audit_log) dalam 5 menit terakhir
+    $dbAttempts = 0;
+    $lastFailedTime = 0;
+    try {
+        $pdo = getDB();
+        $lastSuccessTime = null;
+        if ($username !== '') {
+            $stmtSuccess = $pdo->prepare("
+                SELECT MAX(al.created_at) 
+                FROM audit_log al 
+                JOIN users u ON al.user_id = u.id 
+                WHERE al.aksi = 'LOGIN' AND u.username = ?
+            ");
+            $stmtSuccess->execute([$username]);
+            $lastSuccessTime = $stmtSuccess->fetchColumn() ?: null;
+        }
+
+        if ($username !== '') {
+            $stmt = $pdo->prepare("
+                SELECT COUNT(*) AS failed_count, MAX(UNIX_TIMESTAMP(created_at)) AS last_failed
+                FROM audit_log
+                WHERE aksi = 'LOGIN_FAILED'
+                  AND created_at >= NOW() - INTERVAL 5 MINUTE
+                  AND (
+                      (detail LIKE ? AND (? IS NULL OR created_at > ?))
+                      OR detail LIKE ?
+                  )
+            ");
+            $stmt->execute([
+                '%Username: ' . $username . '%',
+                $lastSuccessTime,
+                $lastSuccessTime,
+                '%IP: ' . $clientIp . '%'
+            ]);
+        } else {
+            $stmt = $pdo->prepare("
+                SELECT COUNT(*) AS failed_count, MAX(UNIX_TIMESTAMP(created_at)) AS last_failed
+                FROM audit_log
+                WHERE aksi = 'LOGIN_FAILED'
+                  AND created_at >= NOW() - INTERVAL 5 MINUTE
+                  AND detail LIKE ?
+            ");
+            $stmt->execute(['%IP: ' . $clientIp . '%']);
+        }
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            $dbAttempts = (int)($row['failed_count'] ?? 0);
+            $lastFailedTime = (int)($row['last_failed'] ?? 0);
+        }
+    } catch (Throwable $e) {}
+
+    // Sinergi session + DB: ambil nilai attempt dan lockout tertinggi
+    $sessionLockUntil = (int)($_SESSION['login_lockout'] ?? 0);
+    $dbLockUntil = ($dbAttempts >= $maxAttempts && $lastFailedTime > 0) ? ($lastFailedTime + $lockoutTime) : 0;
+    $lockUntil = max($sessionLockUntil, $dbLockUntil);
 
     if ($lockUntil > time()) {
         $remaining = $lockUntil - time();
@@ -20,30 +88,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $token = isset($_POST['csrf_token']) && is_string($_POST['csrf_token']) ? $_POST['csrf_token'] : null;
         if ($token === null || !verifyCsrfToken($token)) {
             $error = 'Token keamanan tidak valid atau telah kedaluwarsa. Silakan muat ulang halaman.';
+        } elseif ($username === '' || $password === '') {
+            $error = 'Username dan password wajib diisi.';
+        } elseif (attemptLogin($username, $password)) {
+            unset($_SESSION['login_attempts'], $_SESSION['login_lockout']);
+            header('Location: dashboard.php');
+            exit;
         } else {
-            $rawUser = isset($_POST['username']) && is_string($_POST['username']) ? $_POST['username'] : '';
-            $rawPass = isset($_POST['password']) && is_string($_POST['password']) ? $_POST['password'] : '';
-            $username = trim($rawUser);
-            $password = $rawPass;
-
-            if ($username === '' || $password === '') {
-                $error = 'Username dan password wajib diisi.';
-            } elseif (attemptLogin($username, $password)) {
-                unset($_SESSION['login_attempts'], $_SESSION['login_lockout']);
-                header('Location: dashboard.php');
-                exit;
+            // Catat kegagalan ke audit_log (menyimpan Username dan IP)
+            logAudit(null, null, 'LOGIN_FAILED', 'Username: ' . $username . ' | IP: ' . $clientIp);
+            $attempts = max((int)($_SESSION['login_attempts'] ?? 0), $dbAttempts) + 1;
+            if ($attempts >= $maxAttempts) {
+                $_SESSION['login_lockout'] = time() + $lockoutTime;
+                $_SESSION['login_attempts'] = 0;
+                $error = "Terlalu banyak percobaan login gagal. Akun dikunci sementara selama {$lockoutTime} detik.";
             } else {
-                $attempts++;
-                if ($attempts >= $maxAttempts) {
-                    $_SESSION['login_lockout'] = time() + $lockoutTime;
-                    $_SESSION['login_attempts'] = 0;
-                    $error = "Terlalu banyak percobaan login gagal. Akun dikunci sementara selama {$lockoutTime} detik.";
-                } else {
-                    $_SESSION['login_attempts'] = $attempts;
-                    $sisa = $maxAttempts - $attempts;
-                    $error = "Username atau password salah. (Sisa percobaan: {$sisa})";
-                }
-                logAudit(null, null, 'LOGIN_FAILED', 'Username: ' . $username);
+                $_SESSION['login_attempts'] = $attempts;
+                $sisa = $maxAttempts - $attempts;
+                $error = "Username atau password salah. (Sisa percobaan: {$sisa})";
             }
         }
     }

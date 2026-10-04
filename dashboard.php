@@ -397,6 +397,7 @@ foreach ($all as $s) {
 <?php if (defined('AI_ENABLED') && AI_ENABLED): ?>
 <!-- AI Floating Toast -->
 <div id="aiToast" class="ai-toast" style="display:none">
+    <input type="hidden" id="aiCsrfToken" value="<?= htmlspecialchars(csrfToken(), ENT_QUOTES, 'UTF-8') ?>">
     <div class="ai-toast-header">
         <div class="ai-header-left">
             <span class="ai-sparkle">✨</span>
@@ -469,7 +470,15 @@ function refreshAI(){
 }
 function fetchInsight(force){
     var opts = { headers:{'Accept':'application/json'} };
-    if(force){ opts.method='POST'; }
+    if(force){
+        opts.method = 'POST';
+        var csrfEl = document.getElementById('aiCsrfToken') || document.querySelector('input[name="csrf_token"]') || document.querySelector('meta[name="csrf-token"]');
+        var token = csrfEl ? (csrfEl.value || csrfEl.getAttribute('content') || '') : '';
+        opts.headers['X-CSRF-TOKEN'] = token;
+        var fd = new FormData();
+        fd.append('csrf_token', token);
+        opts.body = fd;
+    }
     fetch('ai_insight.php', opts)
         .then(function(r){ return r.json(); })
         .then(function(d){

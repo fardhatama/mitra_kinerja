@@ -417,7 +417,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
 }
 
 /* ── 4. HELPER PARSER EXCEL (.xlsx) & CSV ──────────────────── */
-// BUG-G0-04: Convert Excel serial date numbers to Y-m-d format
+// BUG-G0-04, Bug 1: Convert Excel serial date numbers to Y-m-d format & parse Indonesian dates
 function parseGate0Date($val): ?string {
     if (empty($val)) return null;
     $str = trim((string)$val);
@@ -425,6 +425,10 @@ function parseGate0Date($val): ?string {
     if (is_numeric($str) && (float)$str > 20000 && (float)$str < 70000) {
         $ts = ((float)$str - 25569) * 86400;
         return gmdate('Y-m-d', (int)round($ts));
+    }
+    if (function_exists('parseIndonesianDateText')) {
+        $indo = parseIndonesianDateText($str);
+        if ($indo !== null) return $indo;
     }
     if (preg_match('/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/', $str, $m)) {
         return sprintf('%04d-%02d-%02d', $m[1], $m[2], $m[3]);
@@ -870,15 +874,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                     $hasQCols = isset($colMap['q1_tusi_kewenangan']) || isset($colMap['q1_jawab']);
                     if ($hasQCols) {
                         for ($q = 1; $q <= 18; $q++) {
-                            // BUG-G0-10: Do not fabricate 'YA' answers for missing questions
+                            // BUG-G0-10, BUG-G0-19: Do not fabricate 'YA' answers or 'Dokumen terverifikasi' for unreviewed questions
                             $valRaw = $getVal(["q{$q}_jawab", "q{$q}_tusi_kewenangan", "q{$q}_sasaran_kinerja", "q{$q}_batas_kewenangan", "q{$q}_kebutuhan_nyata", "q{$q}_kejelasan_manfaat", "q{$q}_output_outcome", "q{$q}_daya_ungkit", "q{$q}_legalitas_mitra", "q{$q}_kapasitas_mitra", "q{$q}_integritas_reputasi", "q{$q}_peran_kontribusi", "q{$q}_focal_point", "q{$q}_kesiapan_sdm_anggaran", "q{$q}_indikator_awal", "q{$q}_manajemen_risiko", "q{$q}_tindak_lanjut_pascattd", "q{$q}_keberlanjutan_manfaat", "q{$q}_mitigasi_hambatan"], '');
                             if ($valRaw === '') {
                                 $qAns = 'BELUM DITELAAH';
-                                $qBukti = 'Belum ada data uji';
+                                $defaultBukti = 'Belum ada data uji';
                             } else {
                                 $qAns = strtoupper($valRaw) === 'YA' ? 'YA' : (strtoupper($valRaw) === 'TIDAK' ? 'TIDAK' : 'BELUM DITELAAH');
-                                $qBukti = $getVal(["q{$q}_bukti"], 'Dokumen terverifikasi');
+                                $defaultBukti = $qAns === 'YA' ? 'Dokumen terverifikasi' : 'Belum ada data uji';
                             }
+                            $qBukti = $getVal(["q{$q}_bukti"], $defaultBukti);
                             $pertanyaanUji["q{$q}"] = ['jawab' => $qAns, 'bukti' => $qBukti];
                             if ($qAns !== 'YA') {
                                 if ($q <= 3) $kSummary['K1'] = 'TIDAK';

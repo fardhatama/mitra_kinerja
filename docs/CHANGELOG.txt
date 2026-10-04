@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.6] - 2026-10-04
+
+### Fixed
+- **Penguatan Menyeluruh Loop 4: Penanganan Cacat Integritas, Resolusi Sheet, dan Keamanan Server (v2.4.6):**
+  - **Layanan AI dan Dasbor (`ai_insight.php`, `dashboard.php`, `router.php`):**
+    - Memindahkan pemeriksaan cache sebelum validasi API key pada `ai_insight.php` sehingga wawasan yang tersimpan dapat disajikan tanpa kunci eksternal aktif.
+    - Menambahkan pengiriman token CSRF pada pemanggilan `fetchInsight(force)` di `dashboard.php` agar pembaruan paksa tidak tertolak HTTP 403.
+    - Menambahkan `router.php` untuk server PHP internal guna memblokir akses langsung peramban ke direktori sensitif (`/cache/`, `/config/`, `/database/`, `/includes/`).
+  - **Logika Agregasi dan Rekomendasi Kinerja (`includes/data.php`, `portofolio.php`, `laporan.php`):**
+    - Mencegah penimpaan rekomendasi 'PERBAIKI' usang pada kemitraan yang belum dinilai (`dapat_dinilai_n === 0`).
+    - Menyelaraskan kohort penyebut pada kalkulasi rata-rata aspek indikator sehingga jumlah rata-rata aspek tepat sama dengan nilai rata-rata komposit pada pengukur dasbor (33.3).
+    - Membersihkan karakter carriage return (`
+`) pada penguraian tajuk rekomendasi di tampilan portofolio dan laporan.
+  - **Manajemen Naskah dan Evaluasi Siklus (`mitra_edit.php`, `mitra_manage.php`, `includes/functions.php`, `database/schema.sql`):**
+    - Memperbaiki logika penyelesaian jadwal evaluasi berkala (`siklus_monev`) pada `mitra_edit.php` agar penyimpanan berulang tidak menghabiskan dan menandai siklus masa depan sebagai selesai secara prematur.
+    - Menambahkan validasi batas tanggal naskah (`tanggal_berakhir >= tanggal_mulai`) pada formulir buat dan ubah kemitraan di `mitra_manage.php`.
+    - Membatasi frekuensi evaluasi per tahun (`evaluasi_per_tahun` di rentang 1 s.d. 12) untuk mencegah kehabisan memori dan DoS.
+    - Menyelaraskan urutan kolom tabel `intervensi_usulan` pada `database/schema.sql` dengan dump basis data aktif.
+  - **Gate 0, Baseline, dan Impor Naskah (`gate0.php`, `baseline.php`, `import.php`, `public/js/searchable_dropdown.js`):**
+    - Mendukung penguraian format tanggal teks bahasa Indonesia (misal "10 Agustus 2026") pada impor formulir Gate 0.
+    - Menghilangkan fabrikasi bukti "Dokumen terverifikasi" pada pertanyaan kriteria Gate 0 yang belum diperiksa.
+    - Mempertahankan catatan bukti teks fisik pada Elemen 9 Baseline saat formulir disimpan manual.
+    - Mengaktifkan akses tombol impor Baseline bagi administrator pada naskah yang berstatus terkunci di `import.php`.
+    - Menghitung nilai skor pada impor Scorecard secara deterministik dan mencegah nilai nol palsu pada indikator yang belum dinilai.
+    - Memperbaiki validasi kustom pada dropdown pencarian agar formulir dengan pilihan opsional tidak terblokir saat dikosongkan.
+
 ## [2.4.5] - 2026-10-04
 
 ### Fixed

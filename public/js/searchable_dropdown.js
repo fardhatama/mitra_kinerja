@@ -160,9 +160,13 @@ function initSearchableDropdowns() {
             if (input.value.trim() === '') {
                 if (select.value !== '') {
                     select.value = '';
-                    if (isRequired) input.setCustomValidity('Harap pilih salah satu naskah.');
                     var event = new Event('change', { bubbles: true });
                     select.dispatchEvent(event);
+                }
+                if (isRequired) {
+                    input.setCustomValidity('Harap pilih salah satu naskah.');
+                } else {
+                    input.setCustomValidity('');
                 }
             } else if (!curVal || input.value.trim().toLowerCase() !== curText.toLowerCase()) {
                 // Bug 21: If user types a custom query and does not select an option, do not silently submit stale previous selection; clear or validate.
@@ -176,7 +180,11 @@ function initSearchableDropdowns() {
                     chooseOption(matched.value, matched.textContent.trim());
                 } else {
                     select.value = '';
-                    input.setCustomValidity('Harap pilih opsi yang valid dari daftar.');
+                    if (isRequired) {
+                        input.setCustomValidity('Harap pilih opsi yang valid dari daftar.');
+                    } else {
+                        input.setCustomValidity('');
+                    }
                     var event = new Event('change', { bubbles: true });
                     select.dispatchEvent(event);
                 }
@@ -208,7 +216,11 @@ function initSearchableDropdowns() {
             if (input.value.trim().toLowerCase() !== curText.toLowerCase()) {
                 // Bug 21: Invalidate / clear stale selection immediately when query changes
                 select.value = '';
-                input.setCustomValidity('Harap pilih salah satu naskah.');
+                if (isRequired) {
+                    input.setCustomValidity('Harap pilih salah satu naskah.');
+                } else {
+                    input.setCustomValidity('');
+                }
             } else {
                 input.setCustomValidity('');
             }
