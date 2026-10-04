@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.9] - 2026-10-04
+
+### Fixed
+- **Penyelarasan Siklus Evaluasi Historis Berbasis Baseline 28 Agustus 2026 (v2.4.9):**
+  - **Penyelarasan Tonggak Evaluasi Pra-Baseline (`siklus_monev`):** Menandai seluruh 23 tonggak evaluasi historis triwulanan yang jatuh tempo sebelum cut-off audit resmi (`tanggal_target_evaluasi <= '2026-08-31'`) sebagai `Selesai` (*Tercakup dalam evaluasi baseline final 28 Agustus 2026*), menghilangkan peringatan usang "Terlewat 380 hari lalu" dari tahun 2025.
+  - **Fokus Radar Dasbor pada Siklus Aktif Mutakhir:** Dasbor kini secara bersih dan proporsional hanya menampilkan 4 kerja sama dengan siklus evaluasi pasca-baseline (September 2026) yang memerlukan tindak lanjut, serta 2 kerja sama mendatang di bulan Oktober 2026 (P03 dalam 2 hari dan P05 dalam 16 hari).
+  - **Pembaruan Basis Data Dump Bersih:** Memperbarui `database/mitra_kinerja_dump.sql` mencerminkan status tonggak evaluasi yang telah diselaraskan.
+
 ## [2.4.8] - 2026-10-04
 
 ### Fixed
