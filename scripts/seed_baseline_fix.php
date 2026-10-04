@@ -141,7 +141,7 @@ $p04Data = [
     ]
 ];
 
-$allMitra = $pdo->query('SELECT id, kode, nama_mitra, jenis FROM mitra_kinerja')->fetchAll();
+$allMitra = $pdo->query("SELECT id, kode, nama_mitra, jenis, baseline_status FROM mitra_kinerja WHERE baseline_status != 'TERVERIFIKASI / DIKUNCI'")->fetchAll();
 
 foreach ($allMitra as $m) {
     $mid = (int)$m['id'];

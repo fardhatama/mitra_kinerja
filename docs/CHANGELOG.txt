@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.8] - 2026-10-04
+
+### Fixed
+- **Rekonsiliasi Penuh Paritas 1:1 Basis Data Berbasis Dokumen Referensi Resmi (`docs/`) (v2.4.8):**
+  - **Baseline 12 Elemen (`baseline_elemen` & `mitra_kinerja`):**
+    - Mencapai paritas 100,00% (1.500 / 1.500 sel terverifikasi) terhadap buku kerja resmi `FINAL_BASELINE_MITRA_KINERJA_AUDIT_FINAL_28_AGUSTUS_2026.xlsx`.
+    - Memulihkan dan mengunci seluruh elemen faktual, sumber bukti, dan catatan penguji untuk 15 lembar mitra, serta menginisialisasi naskah perluasan (P11–P13) dalam status `DALAM PROSES`.
+  - **Scorecard 7 Indikator Result-Chain (`indikator_skor` & `mitra_kinerja`):**
+    - Mencapai paritas 100,00% terhadap paket buku kerja evaluasi 27 September 2026 (P01–P10) dan portofolio pengayaan (C01–C05).
+    - Menghilangkan 100% artefak mojibake encoding karakter (`ù` / `û`) pada seluruh tabel indikator.
+    - Menyelaraskan seluruh 126 deskripsi indikator ke standar resmi Result-Chain V3.
+  - **Gate 0 dan Hubungan Naskah Payung (`pra_pks` & `mitra_kinerja`):**
+    - Menyelaraskan status rekomendasi `PRA-2026-002` (Singapore Academy of Law) menjadi `Perlu Penyempurnaan` sesuai formulir resmi Gate 0 LAN PKN I.
+    - Menetapkan pejabat penandatangan `pimpinan_id = 5` (*Pimpinan Wilayah*) pada seluruh usulan yang telah disetujui pimpinan.
+    - Memverifikasi tanggal naskah C04 (UNRIKA) menjadi `2025-11-18` s.d. `2030-11-17` (`TERVERIFIKASI`).
+    - Menautkan perjanjian turunan P11 ke MoU induk P06 (UMRAH) dan P12 ke MoU induk P08 (Polibatam).
+  - **Buku Kas Operasional & Penjadwalan Monev (`tindak_lanjut`, `rencana_kerja`, `siklus_monev`, `early_warning`, `intervensi_pimpinan`, `validasi`):**
+    - Menyelaraskan buku kas tindak lanjut menjadi 35 rekaman dengan 24 tautan bukti aktif (Google Drive dan registrasi DJKI).
+    - Memperbaiki anomali tanggal rencana kerja P01 dan P03 serta melengkapi rencana operasional untuk seluruh 18 naskah (total 37 rencana kerja).
+    - Menyinkronkan 324 tonggak evaluasi berkala triwulanan (`siklus_monev`) sesuai durasi kontrak masing-masing naskah.
+    - Memadukan 72 rekaman Early Warning (4 dimensi $\times$ 18 mitra) dan 90 rekaman uji intervensi pimpinan (5 pemicu $\times$ 18 mitra) sesuai fakta lapangan.
+    - Memperbarui berkas dump basis data bersih di `database/mitra_kinerja_dump.sql` (333 KB).
+
 ## [2.4.7] - 2026-10-04
 
 ### Fixed
