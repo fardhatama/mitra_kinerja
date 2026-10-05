@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-10-04
+
+### Added
+- **Penerbitan Laporan Audit Komprehensif Sistem & Paritas Basis Data 1:1 (`docs/LAPORAN_REKONSILIASI_DAN_AUDIT_SISTEM_v2.5.0.md`):**
+  - Dokumentasi resmi penjaminan mutu dan kesiapan peluncuran sistem tata kelola kemitraan strategis Mitra Kinerja (PKN I 2026).
+  - Rekapitulasi menyeluruh atas 351 temuan audit yang telah diremediasi, 51/51 pengujian otomatis lulus 100%, 33/33 berkas PHP lulus sintaksis 8.4, dan 1.500/1.500 sel basis data terverifikasi 100% cocok dengan dokumen resmi.
+
 ## [2.4.9] - 2026-10-04
 
 ### Fixed

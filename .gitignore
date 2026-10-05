@@ -21,3 +21,4 @@ __pycache__/
 # Large Documentation Archives & Media Files
 docs/*
 !docs/CHANGELOG.txt
+!docs/*.md

@@ -86,5 +86,5 @@ echo.
 :: 4. Auto Open Browser
 start http://localhost:%PORT%/login.php
 
-:: 5. Run PHP Server binding to 0.0.0.0 (all interfaces)
-php -S 0.0.0.0:%PORT%
+:: 5. Run PHP Server binding to 0.0.0.0 (all interfaces) with router
+php -S 0.0.0.0:%PORT% router.php
