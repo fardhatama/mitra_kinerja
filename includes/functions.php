@@ -16,6 +16,32 @@ const BOBOT_INDIKATOR = [
     'I1' => 10, 'I2' => 15, 'I3' => 15, 'I4' => 20, 'I5' => 20, 'I6' => 10, 'I7' => 10,
 ];
 
+/**
+ * Standar Nama Resmi Indikator Kinerja (Kolom A Excel Penilaian)
+ */
+const INDIKATOR_NAMA = [
+    'I1' => 'Kejelasan Pengelolaan & Rencana Tindak Lanjut',
+    'I2' => 'Implementasi / Tindak Lanjut',
+    'I3' => 'Output',
+    'I4' => 'Outcome',
+    'I5' => 'Kontribusi / Dampak',
+    'I6' => 'Evidence & Data',
+    'I7' => 'Risiko & Keberlanjutan',
+];
+
+/**
+ * Standar Resmi Pertanyaan "Apa yang Dinilai" (Kolom C Excel Penilaian)
+ */
+const INDIKATOR_APA_YANG_DINILAI = [
+    'I1' => 'Apakah pelaksanaan kerja sama telah memiliki penanggung jawab yang jelas, rencana tindak lanjut yang dapat dilaksanakan, dan mekanisme koordinasi untuk memastikan tindak lanjut tersebut berjalan?',
+    'I2' => 'Apakah kerja sama telah ditindaklanjuti melalui kegiatan atau langkah implementasi yang relevan dan dapat dibuktikan?',
+    'I3' => 'Apakah implementasi menghasilkan hasil langsung/produk yang seharusnya dicapai?',
+    'I4' => 'Apakah output menghasilkan perubahan atau manfaat bagi sasaran, proses, layanan, atau organisasi?',
+    'I5' => 'Apakah hasil kerja sama memberikan kontribusi yang dapat dijelaskan terhadap kinerja organisasi dan/atau pelayanan hukum?',
+    'I6' => 'Apakah kondisi, pelaksanaan, dan hasil kerja sama didukung data/evidence yang dapat dipercaya dan ditelusuri?',
+    'I7' => 'Apakah risiko pelaksanaan dikendalikan dan terdapat kondisi yang mendukung keberlanjutan manfaat kerja sama?',
+];
+
 if (!defined('BASELINE_12_DEFS')) {
     define('BASELINE_12_DEFS', [
         1 => [

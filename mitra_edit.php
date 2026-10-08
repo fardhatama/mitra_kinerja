@@ -618,13 +618,17 @@ $monev = $summary['monev'];
 ?>
 <div class="indikator-block">
     <div class="indikator-head">
-        <div><span class="kode"><?= h($kode) ?></span><span class="bobot">Bobot <?= (int)$row['bobot'] ?>%</span></div>
+        <div>
+            <span class="kode"><?= h($kode) ?> &mdash; <?= h(INDIKATOR_NAMA[$kode] ?? 'Indikator ' . $kode) ?></span>
+            <span class="bobot">Bobot <?= (int)$row['bobot'] ?>%</span>
+        </div>
         <span class="cek-pill badge-<?= $cekColor ?>"><?= h($cek) ?></span>
     </div>
     <div class="indikator-body">
+        <?php $apaYangDinilai = INDIKATOR_APA_YANG_DINILAI[$kode] ?? ($row['deskripsi'] ?? ''); ?>
         <div class="field" style="margin: 10px 0;">
             <label>Apa yang Dinilai</label>
-            <input type="text" value="<?= h($row['deskripsi']) ?>" readonly disabled style="background:#f8fafc;font-weight:500;">
+            <textarea readonly disabled rows="2" style="background:#f8fafc;color:#1e293b;font-weight:500;resize:none;min-height:52px;line-height:1.45;"><?= h($apaYangDinilai) ?></textarea>
         </div>
         <div class="field" style="margin: 10px 0;">
             <label>Kondisi Baseline</label>

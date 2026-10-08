@@ -158,8 +158,7 @@ def run_audit():
                 db_skor_val = int(d_row['skor']) if d_row and d_row['skor'] is not None else None
                 db_nilai_val = round(float(d_row['nilai']), 2) if d_row and d_row['nilai'] is not None else None
 
-                title_only = c1.split('. ', 1)[-1].strip()
-                exp_desc = f"{title_only}\nCara periksa: {wb_apa_dinilai}"
+                exp_desc = wb_apa_dinilai
 
                 diffs = []
                 if d_row['bobot'] != wb_bobot:

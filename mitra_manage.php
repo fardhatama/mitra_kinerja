@@ -589,7 +589,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && empty($_POST['action'])) {
                 ['I7', 'Risiko & Keberlanjutan', 10],
             ];
             foreach ($v2Defaults as $ind) {
-                $desc = $ind[1] . "\nCara periksa: Evaluasi berkala siklus monev";
+                $desc = INDIKATOR_APA_YANG_DINILAI[$ind[0]] ?? $ind[1];
                 $pdo->prepare('INSERT INTO indikator_skor (mitra_id, kode_indikator, deskripsi, bobot, referensi_baseline, status_pemeriksaan) VALUES (?, ?, ?, ?, \'Baseline awal\', \'BELUM DITELAAH\')')
                     ->execute([$mid, $ind[0], $desc, $ind[2]]);
             }

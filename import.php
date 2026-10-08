@@ -339,15 +339,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
                             $nilai = $skor !== null ? round(($skor / 4.0) * $bobot, 2) : null;
                         }
 
-                        $descCandidate = $isPenilaianLayout ? trim(($row[1] ?? '') . "\nCara periksa: " . ($row[3] ?? '')) : trim($row[2] ?? '');
-                        $deskripsi = (!empty($descCandidate) && strlen($descCandidate) > 5) ? $descCandidate : ($stdDescriptions[$kodeInd] ?? "Indikator $kodeInd");
+                        $descCandidate = $isPenilaianLayout ? trim($row[3] ?? '') : trim($row[2] ?? '');
+                        $deskripsi = (!empty($descCandidate) && strlen($descCandidate) > 5) ? $descCandidate : (INDIKATOR_APA_YANG_DINILAI[$kodeInd] ?? "Indikator $kodeInd");
 
                         // Cek apakah indikator sudah ada
                         $stmtCheck = $pdo->prepare('SELECT id FROM indikator_skor WHERE mitra_id = ? AND kode_indikator = ?');
                         $stmtCheck->execute([$targetId, $kodeInd]);
                         if ($stmtCheck->fetch()) {
-                            $stmtU = $pdo->prepare('UPDATE indikator_skor SET bobot = ?, status_pemeriksaan = ?, kondisi_baseline = ?, kondisi_saat_ini = ?, temuan_bukti = COALESCE(NULLIF(?, \'\'), temuan_bukti), skor = ?, alasan_skor = ?, catatan_tindak_lanjut = ?, nilai = ?, referensi_baseline = ? WHERE mitra_id = ? AND kode_indikator = ?');
-                            $stmtU->execute([$bobot, $statusPem, $kondisiBaseline, $kondisi, $evidenceLoc, $skor, $alasanSkor, $catatanTl, $nilai, $kondisiBaseline, $targetId, $kodeInd]);
+                            $stmtU = $pdo->prepare('UPDATE indikator_skor SET deskripsi = ?, bobot = ?, status_pemeriksaan = ?, kondisi_baseline = ?, kondisi_saat_ini = ?, temuan_bukti = COALESCE(NULLIF(?, \'\'), temuan_bukti), skor = ?, alasan_skor = ?, catatan_tindak_lanjut = ?, nilai = ?, referensi_baseline = ? WHERE mitra_id = ? AND kode_indikator = ?');
+                            $stmtU->execute([$deskripsi, $bobot, $statusPem, $kondisiBaseline, $kondisi, $evidenceLoc, $skor, $alasanSkor, $catatanTl, $nilai, $kondisiBaseline, $targetId, $kodeInd]);
                         } else {
                             $stmtI = $pdo->prepare('INSERT INTO indikator_skor (mitra_id, kode_indikator, deskripsi, bobot, referensi_baseline, kondisi_baseline, status_pemeriksaan, kondisi_saat_ini, temuan_bukti, skor, alasan_skor, catatan_tindak_lanjut, nilai) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
                             $stmtI->execute([$targetId, $kodeInd, $deskripsi, $bobot, $kondisiBaseline, $kondisiBaseline, $statusPem, $kondisi, $evidenceLoc, $skor, $alasanSkor, $catatanTl, $nilai]);

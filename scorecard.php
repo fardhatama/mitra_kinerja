@@ -244,17 +244,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && in_array(($_POST['action'] 
                                         $stmtU->execute([$bobot, $statusPem, $kondisiBaseline, $kondisi, $skor, $alasanSkor, $catatanTl, $nilai, $kondisiBaseline, $targetId, $kodeInd]);
                                     }
                                 } else {
-                                    // Bug 7.3: Do not overwrite deskripsi with generic "Indikator $kodeInd" if a valid description already exists
-                                    $stdDeskripsi = [
-                                        'I1' => 'Pengelolaan & RTL',
-                                        'I2' => 'Implementasi',
-                                        'I3' => 'Output',
-                                        'I4' => 'Outcome',
-                                        'I5' => 'Dampak',
-                                        'I6' => 'Evidence & Data',
-                                        'I7' => 'Risiko & Keberlanjutan',
-                                    ];
-                                    $deskripsiInit = $stdDeskripsi[$kodeInd] ?? "Indikator $kodeInd";
+                                    $deskripsiInit = INDIKATOR_APA_YANG_DINILAI[$kodeInd] ?? "Indikator $kodeInd";
                                     $stmtI = $pdo->prepare('INSERT INTO indikator_skor (mitra_id, kode_indikator, deskripsi, bobot, referensi_baseline, kondisi_baseline, status_pemeriksaan, kondisi_saat_ini, temuan_bukti, skor, alasan_skor, catatan_tindak_lanjut, nilai) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
                                     $stmtI->execute([$targetId, $kodeInd, $deskripsiInit, $bobot, $kondisiBaseline, $kondisiBaseline, $statusPem, $kondisi, $evidenceLoc, $skor, $alasanSkor, $catatanTl, $nilai]);
                                 }

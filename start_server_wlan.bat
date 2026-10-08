@@ -57,6 +57,10 @@ if "%WLAN_IP%"=="" (
 if "%WLAN_IP%"=="" set "WLAN_IP=127.0.0.1"
 
 set "PORT=8080"
+netstat -ano | findstr /r /c:":8080 *LISTENING" >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    set "PORT=8085"
+)
 
 echo.
 echo ============================================================

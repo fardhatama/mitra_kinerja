@@ -5,6 +5,15 @@ import sys
 import requests
 
 BASE = "http://localhost:8080"
+if len(sys.argv) > 1:
+    BASE = sys.argv[1]
+else:
+    try:
+        r_probe = requests.get("http://localhost:8085/login.php", timeout=0.5)
+        if r_probe.status_code == 200 and "Mitra Kinerja" in r_probe.text:
+            BASE = "http://localhost:8085"
+    except Exception:
+        pass
 session = requests.Session()
 
 tests_run = 0

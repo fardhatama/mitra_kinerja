@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.5.0] - 2026-10-04
+## [2.5.1] - 2026-10-08
+
+### Fixed
+- **Penyelarasan Kolom "Apa yang Dinilai" Form Penilaian Indikator (Scorecard):**
+  - **1:1 Verbatim Parity dengan Kolom C Excel Penilaian:** Menyelaraskan teks pada kolom/field *"Apa yang Dinilai"* di seluruh 7 indikator (`I1`–`I7`) pada Form Penilaian (`mitra_edit.php`) dan basis data (`indikator_skor.deskripsi`) dengan dokumen Excel resmi Scorecard.
+  - **Pemisahan Nama Indikator & Pertanyaan Telaah:** Memindahkan nama indikator resmi (`INDIKATOR_NAMA`) ke header blok kartu penilaian (`I1 — Kejelasan Pengelolaan & Rencana Tindak Lanjut`), dan menyajikan teks pertanyaan telaah murni pada kolom *"Apa yang Dinilai"* tanpa prefix redundan `"Cara periksa:"`.
+  - **Tampilan Form Multi-baris yang Nyaman Dibaca:** Mengganti elemen `<input type="text">` yang terpotong menjadi `<textarea readonly disabled rows="2">` dengan kontras tinggi (`#1e293b`), memastikan seluruh pertanyaan telaah dapat dibaca tuntas tanpa terpotong.
+  - **Sinkronisasi Otomatis Import & Engine:** Menyelaraskan mesin import Excel (`import.php`, `scorecard.php`), pembuatan mitra (`mitra_manage.php`), promosi Gate 0 (`gate0.php`), dan self-healing migrasi (`auto_migrate.php`) agar selalu menggunakan standar resmi ini.
 
 ### Added
 - **Penerbitan Laporan Audit Komprehensif Sistem & Paritas Basis Data 1:1 (`docs/LAPORAN_REKONSILIASI_DAN_AUDIT_SISTEM_v2.5.0.md`):**

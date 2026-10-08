@@ -358,6 +358,28 @@ function ensureDatabaseSchema(PDO $pdo): void {
         } catch (Throwable $e) {
             error_log('mitra_kinerja seed error: ' . $e->getMessage());
         }
+
+        // 7. SELF-HEALING: Pastikan indikator_skor.deskripsi selaras dengan kolom "Apa yang Dinilai" resmi Scorecard
+        try {
+            $chkDesc = $pdo->query("SELECT deskripsi FROM indikator_skor WHERE kode_indikator = 'I1' LIMIT 1")->fetchColumn();
+            if ($chkDesc && str_contains($chkDesc, 'Cara periksa:')) {
+                $apaYangDinilaiMap = [
+                    'I1' => 'Apakah pelaksanaan kerja sama telah memiliki penanggung jawab yang jelas, rencana tindak lanjut yang dapat dilaksanakan, dan mekanisme koordinasi untuk memastikan tindak lanjut tersebut berjalan?',
+                    'I2' => 'Apakah kerja sama telah ditindaklanjuti melalui kegiatan atau langkah implementasi yang relevan dan dapat dibuktikan?',
+                    'I3' => 'Apakah implementasi menghasilkan hasil langsung/produk yang seharusnya dicapai?',
+                    'I4' => 'Apakah output menghasilkan perubahan atau manfaat bagi sasaran, proses, layanan, atau organisasi?',
+                    'I5' => 'Apakah hasil kerja sama memberikan kontribusi yang dapat dijelaskan terhadap kinerja organisasi dan/atau pelayanan hukum?',
+                    'I6' => 'Apakah kondisi, pelaksanaan, dan hasil kerja sama didukung data/evidence yang dapat dipercaya dan ditelusuri?',
+                    'I7' => 'Apakah risiko pelaksanaan dikendalikan dan terdapat kondisi yang mendukung keberlanjutan manfaat kerja sama?',
+                ];
+                $stmtFixDesc = $pdo->prepare("UPDATE indikator_skor SET deskripsi = ? WHERE kode_indikator = ?");
+                foreach ($apaYangDinilaiMap as $kInd => $tInd) {
+                    $stmtFixDesc->execute([$tInd, $kInd]);
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('indikator_skor deskripsi alignment error: ' . $e->getMessage());
+        }
     } catch (Throwable $e) {
         error_log('ensureDatabaseSchema error: ' . $e->getMessage());
     }

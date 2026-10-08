@@ -25,13 +25,13 @@ function getMitraSummary(PDO $pdo, array $mitra, bool $forceRecalculate = false)
     // Self-healing: jika naskah belum memiliki 7 indikator standar V3 Result-Chain, inisialisasi otomatis
     if (empty($indikatorRows)) {
         $defs = [
-            ['I1', 'Pengelolaan & RTL', 10],
-            ['I2', 'Implementasi', 15],
-            ['I3', 'Output', 15],
-            ['I4', 'Outcome', 20],
-            ['I5', 'Dampak', 20],
-            ['I6', 'Evidence & Data', 10],
-            ['I7', 'Risiko & Keberlanjutan', 10],
+            ['I1', INDIKATOR_APA_YANG_DINILAI['I1'] ?? 'Pengelolaan & RTL', 10],
+            ['I2', INDIKATOR_APA_YANG_DINILAI['I2'] ?? 'Implementasi', 15],
+            ['I3', INDIKATOR_APA_YANG_DINILAI['I3'] ?? 'Output', 15],
+            ['I4', INDIKATOR_APA_YANG_DINILAI['I4'] ?? 'Outcome', 20],
+            ['I5', INDIKATOR_APA_YANG_DINILAI['I5'] ?? 'Dampak', 20],
+            ['I6', INDIKATOR_APA_YANG_DINILAI['I6'] ?? 'Evidence & Data', 10],
+            ['I7', INDIKATOR_APA_YANG_DINILAI['I7'] ?? 'Risiko & Keberlanjutan', 10],
         ];
         $stmtIns = $pdo->prepare('INSERT INTO indikator_skor (mitra_id, kode_indikator, deskripsi, bobot, referensi_baseline, status_pemeriksaan) VALUES (?, ?, ?, ?, \'Baseline awal\', \'BELUM DITELAAH\') ON DUPLICATE KEY UPDATE id=id');
         foreach ($defs as $d) {

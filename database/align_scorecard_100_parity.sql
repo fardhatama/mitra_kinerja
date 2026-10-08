@@ -3,21 +3,14 @@
 -- ========================================================
 USE mitra_kinerja;
 
--- 1. Update deskripsi for all 18 partners to authoritative Result-Chain standard
-UPDATE indikator_skor SET deskripsi = 'Kejelasan Pengelolaan & Rencana Tindak Lanjut
-Cara periksa: Apakah pelaksanaan kerja sama telah memiliki penanggung jawab yang jelas, rencana tindak lanjut yang dapat dilaksanakan, dan mekanisme koordinasi untuk memastikan tindak lanjut tersebut berjalan?' WHERE kode_indikator = 'I1';
-UPDATE indikator_skor SET deskripsi = 'Implementasi / Tindak Lanjut
-Cara periksa: Apakah kerja sama telah ditindaklanjuti melalui kegiatan atau langkah implementasi yang relevan dan dapat dibuktikan?' WHERE kode_indikator = 'I2';
-UPDATE indikator_skor SET deskripsi = 'Output
-Cara periksa: Apakah implementasi menghasilkan hasil langsung/produk yang seharusnya dicapai?' WHERE kode_indikator = 'I3';
-UPDATE indikator_skor SET deskripsi = 'Outcome
-Cara periksa: Apakah output menghasilkan perubahan atau manfaat bagi sasaran, proses, layanan, atau organisasi?' WHERE kode_indikator = 'I4';
-UPDATE indikator_skor SET deskripsi = 'Kontribusi / Dampak
-Cara periksa: Apakah hasil kerja sama memberikan kontribusi yang dapat dijelaskan terhadap kinerja organisasi dan/atau pelayanan hukum?' WHERE kode_indikator = 'I5';
-UPDATE indikator_skor SET deskripsi = 'Evidence & Data
-Cara periksa: Apakah kondisi, pelaksanaan, dan hasil kerja sama didukung data/evidence yang dapat dipercaya dan ditelusuri?' WHERE kode_indikator = 'I6';
-UPDATE indikator_skor SET deskripsi = 'Risiko & Keberlanjutan
-Cara periksa: Apakah risiko pelaksanaan dikendalikan dan terdapat kondisi yang mendukung keberlanjutan manfaat kerja sama?' WHERE kode_indikator = 'I7';
+-- 1. Update deskripsi for all 18 partners to authoritative Result-Chain standard (Kolom C Apa yang Dinilai)
+UPDATE indikator_skor SET deskripsi = 'Apakah pelaksanaan kerja sama telah memiliki penanggung jawab yang jelas, rencana tindak lanjut yang dapat dilaksanakan, dan mekanisme koordinasi untuk memastikan tindak lanjut tersebut berjalan?' WHERE kode_indikator = 'I1';
+UPDATE indikator_skor SET deskripsi = 'Apakah kerja sama telah ditindaklanjuti melalui kegiatan atau langkah implementasi yang relevan dan dapat dibuktikan?' WHERE kode_indikator = 'I2';
+UPDATE indikator_skor SET deskripsi = 'Apakah implementasi menghasilkan hasil langsung/produk yang seharusnya dicapai?' WHERE kode_indikator = 'I3';
+UPDATE indikator_skor SET deskripsi = 'Apakah output menghasilkan perubahan atau manfaat bagi sasaran, proses, layanan, atau organisasi?' WHERE kode_indikator = 'I4';
+UPDATE indikator_skor SET deskripsi = 'Apakah hasil kerja sama memberikan kontribusi yang dapat dijelaskan terhadap kinerja organisasi dan/atau pelayanan hukum?' WHERE kode_indikator = 'I5';
+UPDATE indikator_skor SET deskripsi = 'Apakah kondisi, pelaksanaan, dan hasil kerja sama didukung data/evidence yang dapat dipercaya dan ditelusuri?' WHERE kode_indikator = 'I6';
+UPDATE indikator_skor SET deskripsi = 'Apakah risiko pelaksanaan dikendalikan dan terdapat kondisi yang mendukung keberlanjutan manfaat kerja sama?' WHERE kode_indikator = 'I7';
 
 -- 2. Update MIDs 1-10 indicators and metadata from 27 September workbooks
 -- Partner MID 1: Scorecard_P01_DEKRANASDA_KEPRI_27_Sep_2026.xlsx
