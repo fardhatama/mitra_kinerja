@@ -39,17 +39,13 @@ is_port_listening() {
 if is_port_listening 3306; then
     echo "      [OK] Database MySQL sudah aktif di port 3306."
 else
-    echo "      [..] MySQL belum aktif di port 3306. Mencoba menyalakan userland mysqld..."
-    if [ -x "$HOME/.local/bin/mysqld" ] && [ -f "$HOME/.local/etc/my.cnf" ]; then
-        nohup "$HOME/.local/bin/mysqld" --defaults-file="$HOME/.local/etc/my.cnf" >/dev/null 2>&1 &
-        sleep 3
-        if is_port_listening 3306; then
-            echo "      [OK] MySQL berhasil dijalankan."
-        else
-            echo "      [WARNING] MySQL belum terdeteksi aktif di port 3306. Pastikan MySQL menyala."
-        fi
+    echo "      [..] MySQL belum aktif di port 3306. Mencoba menyalakan layanan MySQL..."
+    systemctl start mysql 2>/dev/null || systemctl start mariadb 2>/dev/null || systemctl --user start mysql-userland.service 2>/dev/null || true
+    sleep 3
+    if is_port_listening 3306; then
+        echo "      [OK] MySQL berhasil dijalankan."
     else
-        echo "      [WARNING] MySQL daemon tidak ditemukan di ~/.local/bin/mysqld. Pastikan service MySQL aktif."
+        echo "      [WARNING] MySQL belum terdeteksi aktif di port 3306. Pastikan service MySQL aktif."
     fi
 fi
 

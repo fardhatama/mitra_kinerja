@@ -105,7 +105,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             }
         }
 
-        // Handle status update (BUG-TL-04: allow re-opening completed tasks or status toggling; Bug 4: verify existence)
+        // Handle status update
         elseif ($action === 'update_status') {
             if (!$canEdit) { $errors[] = 'Tidak memiliki akses.'; }
             else {

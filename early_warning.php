@@ -107,7 +107,7 @@ foreach ($all as $s) {
 </div>
 <?php else: ?>
 
-<!-- Ringkasan (BUG-EW-02: responsive kpi-row without inline repeat(4, 1fr)) -->
+<!-- Ringkasan -->
 <div class="kpi-row" style="margin-bottom:20px;">
     <?php
     $e3Count = count(array_filter($warningData, fn($w) => $w['warning_status'] === 'E3'));

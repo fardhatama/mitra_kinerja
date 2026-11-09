@@ -36,4 +36,17 @@ vendor/
 docs/*
 !docs/.htaccess
 !docs/CHANGELOG.txt
-!docs/*.md
+
+# Server-specific systemd units
+systemd/
+
+# Internal audit, QA test suites, and reconciliation scripts
+scripts/*.py
+!scripts/make_backup.py
+scripts/*.php
+!scripts/setup_database.php
+
+# Legacy & intermediate database patch scripts
+database/align_*.sql
+database/mitra_kinerja_dump.sql
+database/seed_data_optimized.sql

@@ -1,6 +1,6 @@
 -- MySQL dump 10.13  Distrib 8.4.11, for Linux (x86_64)
 --
--- Host: localhost    Database: mitra_kinerja
+-- Host: 127.0.0.1    Database: mitra_kinerja
 -- ------------------------------------------------------
 -- Server version	8.4.11-0ubuntu0.26.04.1
 
@@ -34,7 +34,7 @@ CREATE TABLE `audit_log` (
   KEY `user_id` (`user_id`),
   CONSTRAINT `audit_log_ibfk_1` FOREIGN KEY (`mitra_id`) REFERENCES `mitra_kinerja` (`id`) ON DELETE SET NULL,
   CONSTRAINT `audit_log_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=2146 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2174 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -261,7 +261,7 @@ CREATE TABLE `pra_pks` (
   KEY `created_by` (`created_by`),
   CONSTRAINT `pra_pks_ibfk_1` FOREIGN KEY (`pimpinan_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `pra_pks_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=64 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=65 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -391,4 +391,4 @@ CREATE TABLE `validasi` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-10-30 18:01:34
+-- Dump completed on 2026-11-09  9:37:15

@@ -34,11 +34,11 @@ path relatif, dan koneksi database diatur lewat file konfigurasi terpisah yang
 tidak ikut dipindah otomatis saat naik ke production. Lihat bagian 1b untuk detail.
 
 ### Opsi A: 1-Klik Import Database Lengkap (Direkomendasikan)
-Cukup import file dump lengkap (sudah mencakup skema seluruh tabel V2.2, 18 naskah, rencana kerja, siklus monev, dan baseline):
+Cukup import file database master lengkap (sudah mencakup skema seluruh tabel, 21 naskah, rencana kerja, siklus monev, dan baseline):
 ```bash
-mysql -u root -p < database/mitra_kinerja_dump.sql
+mysql -u root -p < database/mitra_kinerja.sql
 ```
-*(Atau buka phpMyAdmin, buat/pilih database `mitra_kinerja`, lalu import `database/mitra_kinerja_dump.sql`).*
+*(Atau jalankan `setup_database.bat` pada Windows, atau buka phpMyAdmin, buat/pilih database `mitra_kinerja`, lalu import `database/mitra_kinerja.sql`).*
 
 ### Opsi B: Import Skema & Seed Terpisah
 1. Buat database dan struktur tabel:
@@ -135,12 +135,11 @@ Sistem menerapkan Role-Based Access Control (RBAC) ketat dengan 6 tingkatan hak 
 │   └── js/                       Skrip interaktivitas klien & Chart.js UMD bundle
 ├── database/
 │   ├── schema.sql                Definisi struktur tabel DDL
-│   ├── seed_data.sql             Data benih 18 naskah mitra & indikator
-│   └── mitra_kinerja_dump.sql    Snapshot lengkap basis data produksi
+│   ├── seed_data.sql             Data benih naskah mitra & indikator
+│   └── mitra_kinerja.sql         Master basis data produksi lengkap (21 mitra)
 ├── scripts/
-│   ├── live_test_suite_v2_4_2.py Suite pengujian komprehensif end-to-end
-│   ├── make_backup.py            Utilitas backup arsip otomatis & rotasi retensi 5 backup
-│   └── ...                       Skrip rekonsiliasi data dan audit paritas
+│   ├── setup_database.php        Inisialisasi database otomatis
+│   └── make_backup.py            Utilitas backup arsip otomatis & rotasi retensi 5 backup
 ├── dashboard.php                 Dashboard eksekutif (North Star KPI, grafik distribusi, AI Insight)
 ├── scorecard.php                 Matriks tabel Scorecard Result-Chain V3 (I1–I7) & aksi cepat
 ├── baseline.php                  Ledger evaluasi 12 Elemen Baseline & penguncian data
@@ -227,20 +226,5 @@ Instrumen uji kelayakan pra-penandatanganan kerja sama mencakup 18 pertanyaan st
    - Dilengkapi caching lokal, sanitasi output anti-XSS, dan halaman diagnostik konektivitas (`ai_debug.php`).
 5. **Utilitas Pencadangan & Retensi Otomatis (`scripts/make_backup.py`)**:
    - Menghasilkan arsip `.zip` proyek lengkap termasuk dump basis data MySQL.
-   - Pengecualian berkas media besar dari direktori `docs/` (`.mp4`, `.mov`, `.avi`, `.wmv`, `.pdf`) untuk menghemat kapasitas penyimpanan (dari 235 MB menjadi ~14 MB).
+   - Pengecualian berkas media besar dari direktori `docs/` (`.mp4`, `.mov`, `.avi`, `.wmv`, `.pdf`) untuk menghemat kapasitas penyimpanan.
    - Rotasi otomatis: mempertahankan 5 cadangan terbaru dan memangkas arsip lama.
-
----
-
-## 6. Verifikasi & Pengujian Sistem
-
-Sistem dilengkapi suite pengujian otomatis Python untuk memvalidasi integritas aplikasi secara end-to-end:
-```bash
-python scripts/live_test_suite_v2_4_2.py
-```
-Suite ini memverifikasi:
-- Jalur autentikasi, cookie sesi, dan validasi token CSRF.
-- Ketahanan terhadap manipulasi tipe data POST array pada PHP 8.
-- Ketercukupan 18 naskah mitra, integritas KPI dashboard, dan proteksi XSS pada AI Insight.
-- Paritas kolom Scorecard Result-Chain V3 dan penguncian baseline 12 elemen.
-- Responsivitas halaman Gate 0, Portofolio, dan form evaluasi mitra.

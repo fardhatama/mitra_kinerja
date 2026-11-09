@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', function () {
     initSearchableDropdowns();
 });
 
-// Single delegated document click listener (BUG-FA-04)
+// Delegated document click listener
 document.addEventListener('click', function (e) {
     document.querySelectorAll('.searchable-combobox-wrap.open').forEach(function (wrap) {
         if (!wrap.contains(e.target)) {
@@ -26,7 +26,7 @@ function initSearchableDropdowns() {
         if (select.dataset.searchableInitialized === 'true') return;
         select.dataset.searchableInitialized = 'true';
 
-        // BUG-TL-03: Remove HTML5 required constraint from hidden select so browser doesn't block with "not focusable"
+        // Remove HTML5 required constraint from hidden select so browser doesn't block with "not focusable"
         var isRequired = select.required;
         if (isRequired) {
             select.required = false;
@@ -76,7 +76,7 @@ function initSearchableDropdowns() {
                 var sub = opt.getAttribute('data-sub') || '';
                 var fullText = (label + ' ' + sub).toLowerCase();
 
-                // BUG-FA-02: Include empty placeholder option so selection can be cleared
+                // Include empty placeholder option so selection can be cleared
                 if (!val) {
                     if (query === '') {
                         count++;
@@ -150,7 +150,7 @@ function initSearchableDropdowns() {
 
         function closeDropdown() {
             wrap.classList.remove('open');
-            // BUG-FA-03: Handle blur/outside click smoothly without unprompted wipe
+            // Handle blur/outside click smoothly without unprompted wipe
             var cur = select.options[select.selectedIndex];
             var curVal = cur ? cur.value : '';
             var curText = (cur && curVal) ? cur.textContent.trim() : '';
@@ -164,7 +164,7 @@ function initSearchableDropdowns() {
                 // When input is cleared or optional, ensure customValidity is reset to '' so form submission is not blocked
                 input.setCustomValidity('');
             } else if (!curVal || input.value.trim().toLowerCase() !== curText.toLowerCase()) {
-                // Bug 21: If user types a custom query and does not select an option, do not silently submit stale previous selection; clear or validate.
+                // If user types a custom query and does not select an option, do not silently submit stale previous selection; clear or validate.
                 var matched = null;
                 select.querySelectorAll('option').forEach(function (opt) {
                     if (opt.value && opt.textContent.trim().toLowerCase() === input.value.trim().toLowerCase()) {
@@ -225,7 +225,7 @@ function initSearchableDropdowns() {
             }
         });
 
-        // BUG-FA-10: Close dropdown on Tab / focusout (delay prevents race condition with option click)
+        // Close dropdown on Tab / focusout (delay prevents race condition with option click)
         wrap.addEventListener('focusout', function (e) {
             if (!wrap.contains(e.relatedTarget)) {
                 setTimeout(function () {
@@ -256,7 +256,7 @@ function initSearchableDropdowns() {
                 activeIndex = (activeIndex <= 0) ? (items.length - 1) : (activeIndex - 1);
                 updateActiveItem(items);
             } else if (e.key === 'Enter') {
-                // BUG-FA-01 / Bug 7: Prevent default Enter submission; if query is empty and activeIndex === -1, keep current selection or close dropdown
+                // Prevent default Enter submission; if query is empty and activeIndex === -1, keep current selection or close dropdown
                 if (wrap.classList.contains('open')) {
                     e.preventDefault();
                     var query = (input.value || '').trim();
